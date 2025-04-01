@@ -2,17 +2,25 @@ from flask import Flask, request, jsonify
 from PIL import Image
 from io import BytesIO
 import pytesseract
-from StudyFlow.backend.image_processing import preprocess_image  # or your actual processing function
+from StudyFlow.backend.image_processing import preprocess_image  # Ensure this exists
 
 app = Flask(__name__)
 
-# Existing endpoints...
+# Define the /api/process endpoint
 @app.route("/api/process", methods=["POST"])
 def process_data():
-    # ... your code for processing OCR JSON ...
-    pass
+    try:
+        ocr_json = request.get_json()
+        if not ocr_json:
+            return jsonify({"error": "No JSON provided"}), 400
+        # Here, replace the following dummy logic with your actual processing.
+        # For demonstration, we'll assume the processing returns a result value.
+        result = 1  # Dummy result
+        return jsonify({"result": result})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-# NEW: Define the /ocr endpoint
+# Define the /ocr endpoint
 @app.route("/ocr", methods=["POST"])
 def ocr_endpoint():
     if "image" not in request.files:
@@ -20,12 +28,12 @@ def ocr_endpoint():
     try:
         file = request.files["image"]
         image = Image.open(file.stream)
-        # Process the image (you can adjust this logic)
+        # Process the image using your backend image processing function.
         processed = preprocess_image(image)
-        # Run OCR with pytesseract:
+        # Run OCR using pytesseract.
         ocr_text = pytesseract.image_to_string(processed)
-        # Optionally, build a mapping if needed
-        mapping = {}  # For now, leave this empty or build your mapping
+        # Optionally, build a mapping (this example leaves it empty).
+        mapping = {}
         return jsonify({"ocr_text": ocr_text, "mapping": mapping})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
