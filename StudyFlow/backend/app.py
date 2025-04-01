@@ -1,20 +1,36 @@
-# app.py
 from flask import Flask, request, jsonify
-from .ai_manager import triple_call_ai_api_json_final  # Import your function
+from PIL import Image
+from io import BytesIO
+import pytesseract
+from StudyFlow.backend.image_processing import preprocess_image  # or your actual processing function
 
 app = Flask(__name__)
 
+# Existing endpoints...
 @app.route("/api/process", methods=["POST"])
 def process_data():
-    # Get the JSON data sent to the endpoint
-    ocr_json = request.get_json()
-    # Process the data using your ai_manager function
-    result = triple_call_ai_api_json_final(ocr_json)
-    # Return the result as JSON
-    return jsonify({"result": result})
+    # ... your code for processing OCR JSON ...
+    pass
+
+# NEW: Define the /ocr endpoint
+@app.route("/ocr", methods=["POST"])
+def ocr_endpoint():
+    if "image" not in request.files:
+        return jsonify({"error": "No image provided"}), 400
+    try:
+        file = request.files["image"]
+        image = Image.open(file.stream)
+        # Process the image (you can adjust this logic)
+        processed = preprocess_image(image)
+        # Run OCR with pytesseract:
+        ocr_text = pytesseract.image_to_string(processed)
+        # Optionally, build a mapping if needed
+        mapping = {}  # For now, leave this empty or build your mapping
+        return jsonify({"ocr_text": ocr_text, "mapping": mapping})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
     import os
-    # Render sets the PORT; locally we default to 5000
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
