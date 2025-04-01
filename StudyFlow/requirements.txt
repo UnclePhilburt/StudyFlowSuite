@@ -1,0 +1,12 @@
+pyautogui
+pytesseract
+Pillow
+openai
+anthropic
+cohere
+opencv-python
+numpy
+python-dotenv
+tk
+Flask
+gunicorn

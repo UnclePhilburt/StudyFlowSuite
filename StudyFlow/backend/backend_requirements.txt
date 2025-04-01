@@ -1,0 +1,7 @@
+Flask
+gunicorn
+openai
+anthropic
+cohere
+python-dotenv
+Pillow
