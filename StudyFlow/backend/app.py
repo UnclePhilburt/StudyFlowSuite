@@ -7,6 +7,17 @@ from StudyFlow.config import TESSERACT_PATH  # <-- Add this line
 
 pytesseract.pytesseract.tesseract_cmd = TESSERACT_PATH  # <-- Add this line
 
+import subprocess
+from StudyFlow.logging_utils import debug_log  # Assuming you have a debug logger
+
+# Log the Tesseract version to verify it's installed
+try:
+    version_output = subprocess.check_output([TESSERACT_PATH, '--version']).decode('utf-8')
+    debug_log("✅ Tesseract version output:\n" + version_output)
+except Exception as e:
+    debug_log("❌ Failed to call Tesseract: " + str(e))
+
+
 app = Flask(__name__)
 
 # Define the /api/process endpoint
