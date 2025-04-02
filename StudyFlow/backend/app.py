@@ -3,6 +3,9 @@ from PIL import Image
 from io import BytesIO
 import pytesseract
 from StudyFlow.backend.image_processing import preprocess_image  # Ensure this exists
+from StudyFlow.config import TESSERACT_PATH  # <-- Add this line
+
+pytesseract.pytesseract.tesseract_cmd = TESSERACT_PATH  # <-- Add this line
 
 app = Flask(__name__)
 
