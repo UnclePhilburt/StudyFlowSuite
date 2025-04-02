@@ -1,28 +1,28 @@
-# Use slim Python image
 FROM python:3.9-slim
 
-# Install Tesseract OCR
+# Install Tesseract OCR and its development libraries (for extra compatibility)
 RUN apt-get update && \
-    apt-get install -y tesseract-ocr && \
+    apt-get install -y tesseract-ocr libtesseract-dev libleptonica-dev && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# ✅ Print where Tesseract is actually installed
-RUN echo "🧠 Tesseract is installed at:" && which tesseract
+# For debugging: search the entire container for the tesseract binary and print its path
+RUN find / -type f -name tesseract
 
-# Set working directory
+# Create a symlink to the tesseract binary at /usr/bin/tesseract.
+# This takes the first result of the find command.
+RUN ln -sf $(find / -type f -name tesseract | head -n 1) /usr/bin/tesseract
+
 WORKDIR /app
 
-# Copy only backend requirements first
+# Copy backend requirements and install them
 COPY StudyFlow/backend/requirements.txt /app/requirements.txt
-
-# ✅ FIXED: this was missing /app/
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
-# Copy full app
+# Copy the full project
 COPY . /app
 
-# Set ENV path — we’ll change this later once we confirm actual path
+# Set environment variable for pytesseract
 ENV TESSERACT_PATH=/usr/bin/tesseract
 
 EXPOSE 8000
