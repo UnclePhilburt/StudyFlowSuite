@@ -8,7 +8,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # ✅ Print Tesseract path to verify in logs
-RUN echo "🧠 Tesseract is at: $(which tesseract)"
+RUN echo "🧠 Tesseract is at:" && which tesseract
 
 # Set working directory
 WORKDIR /app
