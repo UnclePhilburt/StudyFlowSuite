@@ -1,29 +1,32 @@
+# Use a Python base image with apt-get support
 FROM python:3.9-slim
 
-# Install Tesseract OCR FIRST
+# Install system dependencies including Tesseract
 RUN apt-get update && \
     apt-get install -y tesseract-ocr && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Set the working directory
-WORKDIR /app
-
-# Copy requirements and install them
-COPY StudyFlow/backend/requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r /app/requirements.txt
-
-# Print version to confirm it's installed
+# Show tesseract version (you should see this in build logs)
 RUN /usr/bin/tesseract --version
 
-# Copy the rest of your code
+# Set working directory
+WORKDIR /app
+
+# Copy only requirements first to leverage Docker cache
+COPY StudyFlow/backend/requirements.txt /app/requirements.txt
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the rest of the project
 COPY . /app
 
-# Expose the backend port
-EXPOSE 8000
-
-# Set environment variable for Tesseract
+# Set environment variable for tesseract
 ENV TESSERACT_PATH=/usr/bin/tesseract
 
-# Run the backend server
+# Expose port
+EXPOSE 8000
+
+# Start the backend service
 CMD ["python", "-m", "StudyFlow.backend.app"]
