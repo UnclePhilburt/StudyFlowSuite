@@ -13,6 +13,9 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 # Update the container and install Tesseract OCR.
 RUN apt-get update && apt-get install -y tesseract-ocr && apt-get clean && rm -rf /var/lib/apt/lists/*
 
+# Print Tesseract version (this output will be visible in the build logs)
+RUN /usr/bin/tesseract --version
+
 # Copy all the project files into the container.
 COPY . /app
 
