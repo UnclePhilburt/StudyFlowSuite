@@ -1,12 +1,17 @@
+import os
 import re
 import anthropic
-from StudyFlow.config import ANTHROPIC_API_KEY
 from StudyFlow.logging_utils import debug_log
+
+# Load the Claude API key directly from the environment
+CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY")
+if CLAUDE_API_KEY is None:
+    raise ValueError("CLAUDE_API_KEY not found in environment variables. Please set it accordingly.")
 
 def get_claude_answer(ocr_json, claude_client_instance=None):
     # Create a client instance if one isn't provided.
     if claude_client_instance is None:
-        claude_client_instance = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        claude_client_instance = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
     
     prompt = (
         "Here is the OCR output in JSON format:\n" +
