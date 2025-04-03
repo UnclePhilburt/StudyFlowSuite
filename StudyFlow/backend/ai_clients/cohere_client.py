@@ -1,15 +1,16 @@
 import os
 import re
+import traceback
 import cohere
 from StudyFlow.logging_utils import debug_log
+from StudyFlow import config  # centralized config with API key
 
-# Load Cohere API key directly from environment variables
-COHERE_API_KEY = os.getenv("COHERE_API_KEY")
+# Load from centralized config or fallback
+COHERE_API_KEY = config.COHERE_API_KEY or os.getenv("COHERE_API_KEY")
 if COHERE_API_KEY is None:
-    raise ValueError("COHERE_API_KEY not found in environment variables. Please set it accordingly.")
+    raise ValueError("❌ COHERE_API_KEY not found in environment variables.")
 
 def get_cohere_answer(ocr_json, cohere_client_instance=None):
-    # Create a client instance if one isn't provided.
     if cohere_client_instance is None:
         cohere_client_instance = cohere.ClientV2(api_key=COHERE_API_KEY)
     
@@ -19,15 +20,15 @@ def get_cohere_answer(ocr_json, cohere_client_instance=None):
         "\nBased on the above, which answer option is correct? "
         "Return only the number corresponding to the correct answer with no extra text."
     )
-    debug_log("Sending prompt to Cohere: " + prompt)
+    debug_log("🟢 Sending prompt to Cohere: " + prompt)
     
     try:
         response = cohere_client_instance.chat(
             model="command-r-plus-08-2024",
             messages=[{"role": "user", "content": prompt}],
         )
-        
-        # Extract the first message from the response
+
+        # Normalize response structure
         if isinstance(response, list):
             first_message = response[0]
         elif isinstance(response, dict) and "message" in response:
@@ -37,17 +38,15 @@ def get_cohere_answer(ocr_json, cohere_client_instance=None):
         else:
             first_message = response
 
-        # Extract content from the message
         content = ""
-        if hasattr(first_message, "content") and first_message.content:
+        if hasattr(first_message, "content"):
             content = first_message.content
         elif hasattr(first_message, "message") and hasattr(first_message.message, "content"):
             content = first_message.message.content
         elif isinstance(first_message, dict):
             content = first_message.get("content", "")
-        else:
-            content = ""
         
+        # Normalize list to string
         if isinstance(content, list):
             content = " ".join(
                 item.get("text", "") if isinstance(item, dict) else str(item)
@@ -55,20 +54,23 @@ def get_cohere_answer(ocr_json, cohere_client_instance=None):
             ).strip()
         else:
             content = str(content).strip()
-        
-        debug_log("Extracted Cohere response: " + content)
-        # Try to match a response that is just a number
+
+        debug_log("📨 Extracted Cohere response: " + content)
+
+        # Match strictly a number
         match = re.fullmatch(r'\s*(\d+)\s*', content)
         if match:
             return int(match.group(1))
+
+        # Try to grab any digit fallback
+        numbers = re.findall(r'\d+', content)
+        if numbers:
+            return int(numbers[0])
         else:
-            # If not a full match, try finding any digits in the content.
-            numbers = re.findall(r'\d+', content)
-            if numbers:
-                return int(numbers[0])
-            else:
-                debug_log("Cohere response format error. Response: " + content)
-                return None
+            debug_log("❓ Cohere response format error. Raw: " + content)
+            return None
+
     except Exception as e:
-        debug_log("Cohere API error: " + str(e))
+        debug_log("🔥 Cohere API error: " + str(e))
+        debug_log("🔥 Traceback:\n" + traceback.format_exc())
         return None
