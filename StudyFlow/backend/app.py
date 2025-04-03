@@ -146,6 +146,21 @@ def select_best_ocr():
         debug_log(f"🔥 /api/select-best-ocr error: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
+        # 🪵 Endpoint for logging frontend messages to the backend
+@app.route("/api/log", methods=["POST"])
+def receive_log():
+    data = request.get_json()
+    message = data.get("message", "")
+    if message:
+        print(message)  # Always show in server logs
+        try:
+            with open("backend_log.txt", "a", encoding="utf-8") as f:
+                f.write(message + "\n")
+        except Exception as e:
+            print(f"[Logging Error] Could not write to file: {e}")
+    return jsonify({"status": "ok"}), 200
+
+
 # 🚀 Start the server when running directly
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
