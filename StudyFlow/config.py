@@ -1,41 +1,36 @@
 import os
 from dotenv import load_dotenv
 
-# Load variables from a .env file, if present
+# Optional: Load variables from a .env file (if you want to override hardcoded values)
 load_dotenv()
 
-# Sensitive API keys (do not default these in production)
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
-COHERE_API_KEY = os.getenv("COHERE_API_KEY")
+# For testing purposes, we're hardcoding API keys here.
+# Replace the following strings with your actual API keys.
+OPENAI_API_KEY = "<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>)"
+ANTHROPIC_API_KEY = "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"
+COHERE_API_KEY = "ICfqLeG3uky6PzX9XT5eyo1KCjSvW93XKQRSBaFp"
 
 # Set up OpenAI API key
-if OPENAI_API_KEY:
+try:
     import openai
     openai.api_key = OPENAI_API_KEY
-else:
-    print("Warning: OPENAI_API_KEY is not set.")
+except ImportError:
+    print("Warning: OpenAI library is not installed. Install it via 'pip install openai'.")
 
-# Set up Anthropic API key (if the anthropic library supports global assignment)
-if ANTHROPIC_API_KEY:
-    try:
-        import anthropic
-        # This is a placeholder – if anthropic requires client instantiation, adjust accordingly:
-        anthropic.api_key = ANTHROPIC_API_KEY
-    except ImportError:
-        print("Warning: Anthropics library is not installed; skipping Anthropic API configuration.")
-else:
-    print("Warning: ANTHROPIC_API_KEY is not set.")
+# Set up Anthropic API key
+try:
+    import anthropic
+    # If the library requires client instantiation, adjust accordingly.
+    anthropic.api_key = ANTHROPIC_API_KEY
+except ImportError:
+    print("Warning: Anthropic library is not installed. Install it via 'pip install anthropic'.")
 
-# Set up Cohere client if the API key is available
-if COHERE_API_KEY:
-    try:
-        import cohere
-        co = cohere.Client(COHERE_API_KEY)
-    except ImportError:
-        print("Warning: Cohere library is not installed; skipping Cohere API configuration.")
-else:
-    print("Warning: COHERE_API_KEY is not set.")
+# Set up Cohere client
+try:
+    import cohere
+    co = cohere.Client(COHERE_API_KEY)
+except ImportError:
+    print("Warning: Cohere library is not installed. Install it via 'pip install cohere'.")
 
 # Define debug-related paths
 DEBUG_DIR = os.getenv("DEBUG_DIR", "debug")
