@@ -1,10 +1,12 @@
+import os
 import openai
 import re
-from StudyFlow.config import OPENAI_API_KEY
 from StudyFlow.logging_utils import debug_log
 
-# Set the OpenAI API key
-openai.api_key = OPENAI_API_KEY
+# Load OpenAI API key directly from environment variables
+openai.api_key = os.getenv("OPENAI_API_KEY")
+if openai.api_key is None:
+    raise ValueError("OPENAI_API_KEY not found in environment variables. Please set it accordingly.")
 
 def get_openai_answer(ocr_json):
     prompt = (
