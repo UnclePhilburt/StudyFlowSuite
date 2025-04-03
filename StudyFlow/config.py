@@ -1,12 +1,41 @@
 import os
 from dotenv import load_dotenv
 
-load_dotenv()  # Load variables from a .env file, if present
+# Load variables from a .env file, if present
+load_dotenv()
 
-# Sensitive API keys (don't default these in prod)
+# Sensitive API keys (do not default these in production)
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 COHERE_API_KEY = os.getenv("COHERE_API_KEY")
+
+# Set up OpenAI API key
+if OPENAI_API_KEY:
+    import openai
+    openai.api_key = OPENAI_API_KEY
+else:
+    print("Warning: OPENAI_API_KEY is not set.")
+
+# Set up Anthropic API key (if the anthropic library supports global assignment)
+if ANTHROPIC_API_KEY:
+    try:
+        import anthropic
+        # This is a placeholder – if anthropic requires client instantiation, adjust accordingly:
+        anthropic.api_key = ANTHROPIC_API_KEY
+    except ImportError:
+        print("Warning: Anthropics library is not installed; skipping Anthropic API configuration.")
+else:
+    print("Warning: ANTHROPIC_API_KEY is not set.")
+
+# Set up Cohere client if the API key is available
+if COHERE_API_KEY:
+    try:
+        import cohere
+        co = cohere.Client(COHERE_API_KEY)
+    except ImportError:
+        print("Warning: Cohere library is not installed; skipping Cohere API configuration.")
+else:
+    print("Warning: COHERE_API_KEY is not set.")
 
 # Define debug-related paths
 DEBUG_DIR = os.getenv("DEBUG_DIR", "debug")
