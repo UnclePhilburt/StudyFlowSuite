@@ -1,7 +1,12 @@
+import os
 import re
 import cohere
-from StudyFlow.config import COHERE_API_KEY
 from StudyFlow.logging_utils import debug_log
+
+# Load Cohere API key directly from environment variables
+COHERE_API_KEY = os.getenv("COHERE_API_KEY")
+if COHERE_API_KEY is None:
+    raise ValueError("COHERE_API_KEY not found in environment variables. Please set it accordingly.")
 
 def get_cohere_answer(ocr_json, cohere_client_instance=None):
     # Create a client instance if one isn't provided.
@@ -44,7 +49,10 @@ def get_cohere_answer(ocr_json, cohere_client_instance=None):
             content = ""
         
         if isinstance(content, list):
-            content = " ".join(item.get("text", "") if isinstance(item, dict) else str(item) for item in content).strip()
+            content = " ".join(
+                item.get("text", "") if isinstance(item, dict) else str(item)
+                for item in content
+            ).strip()
         else:
             content = str(content).strip()
         
