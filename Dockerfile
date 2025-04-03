@@ -8,11 +8,13 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Debug: Find all Tesseract binaries and print their paths
-RUN echo "🔍 Tesseract binaries found:" && find / -type f -name tesseract 2>/dev/null
+RUN echo "🔍 Tesseract binaries found:" && find / -type f -name tesseract 2>/dev/null || true
 
-# Safety: Force a symlink at /usr/bin/tesseract (if not already there)
-RUN ln -sf $(find / -type f -name tesseract | head -n 1) /usr/bin/tesseract
+# Safety: Force a symlink at /usr/bin/tesseract (in case it's elsewhere)
+RUN TESS_BIN=$(find / -type f -name tesseract | head -n 1) && \
+    ln -sf "$TESS_BIN" /usr/bin/tesseract || true
 
+# Set the working directory
 WORKDIR /app
 
 # Copy backend requirements and install them
@@ -25,6 +27,8 @@ COPY . /app
 # Set environment variable so pytesseract can find the binary
 ENV TESSERACT_PATH=/usr/bin/tesseract
 
+# Expose app port
 EXPOSE 8000
 
+# Run the app
 CMD ["python", "-m", "StudyFlow.backend.app"]
