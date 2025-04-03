@@ -1,12 +1,8 @@
-import os
 import openai
 import re
+import traceback
+from StudyFlow import config  # Ensures the OpenAI key is set globally
 from StudyFlow.logging_utils import debug_log
-
-openai_api_key = os.environ.get('OPENAI_API_KEY')
-if not openai_api_key:
-    raise ValueError("OPENAI_API_KEY not found in environment variables. Please set it accordingly.")
-openai.api_key = openai_api_key
 
 def get_openai_answer(ocr_json):
     prompt = (
@@ -15,7 +11,8 @@ def get_openai_answer(ocr_json):
         "\nBased on the above, which answer option is correct? "
         "Return only the number corresponding to the correct answer with no extra text."
     )
-    debug_log("Sending prompt to OpenAI: " + prompt)
+    debug_log("🟢 Sending prompt to OpenAI: " + prompt)
+
     try:
         response = openai.ChatCompletion.create(
             model="gpt-4o",
@@ -23,13 +20,16 @@ def get_openai_answer(ocr_json):
             temperature=0.0
         )
         ai_response = response['choices'][0]['message']['content'].strip()
-        debug_log("Extracted OpenAI response: " + ai_response)
+        debug_log("📨 Extracted OpenAI response: " + ai_response)
+
         match = re.fullmatch(r'\s*(\d+)\s*', ai_response)
         if match:
             return int(match.group(1))
         else:
-            debug_log("OpenAI response format error: " + ai_response)
+            debug_log("❓ OpenAI response format error: " + ai_response)
             return None
+
     except Exception as e:
-        debug_log("OpenAI API error: " + str(e))
+        debug_log("🔥 OpenAI API error: " + str(e))
+        debug_log("🔥 Traceback:\n" + traceback.format_exc())
         return None
