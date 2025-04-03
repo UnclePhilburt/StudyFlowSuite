@@ -1,8 +1,14 @@
-# ai_manager.py
+import os
+import openai  # Ensure OpenAI is imported so its API key can be set.
 from ..ai_clients.openai_client import get_openai_answer
 from ..ai_clients.claude_client import get_claude_answer
 from ..ai_clients.cohere_client import get_cohere_answer
 from StudyFlow.logging_utils import debug_log
+
+# Load API key for OpenAI from the environment
+openai.api_key = os.getenv("OPENAI_API_KEY")
+if openai.api_key is None:
+    debug_log("Warning: OpenAI API key not found in environment variables.")
 
 def triple_call_ai_api_json_final(ocr_json):
     answer_openai = get_openai_answer(ocr_json)
