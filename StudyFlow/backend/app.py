@@ -110,6 +110,42 @@ def layout():
         debug_log(f"🔥 /api/layout error: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
+# 🧠 OpenAI OCR Candidate Selection
+@app.route("/api/select-best-ocr", methods=["POST"])
+def select_best_ocr():
+    data = request.get_json()
+    candidates = data.get("candidates")
+
+    if not candidates or not isinstance(candidates, list) or len(candidates) != 3:
+        debug_log("❌ /api/select-best-ocr: Invalid candidate data")
+        return jsonify({"error": "You must provide exactly 3 OCR candidates in a list"}), 400
+
+    prompt = (
+        "Below are three OCR candidate outputs for the same question:\n\n"
+        f"Candidate 1:\n{candidates[0]}\n\n"
+        f"Candidate 2:\n{candidates[1]}\n\n"
+        f"Candidate 3:\n{candidates[2]}\n\n"
+        "Based on clarity and completeness, which candidate best represents the actual question text? "
+        "Return only the candidate number (1, 2, or 3)."
+    )
+
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.0
+        )
+
+        ai_choice = response.choices[0].message.content.strip()
+        match = re.findall(r'\d+', ai_choice)
+        chosen = int(match[0]) if match else 1
+
+        debug_log(f"✅ /api/select-best-ocr: AI chose candidate {chosen}")
+        return jsonify({"chosen_index": chosen})
+    except Exception as e:
+        debug_log(f"🔥 /api/select-best-ocr error: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
 # 🚀 Start the server when running directly
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
