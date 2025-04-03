@@ -28,28 +28,50 @@ def process_data():
     try:
         ocr_json = request.get_json()
         if not ocr_json:
+            debug_log("❌ No JSON provided")
             return jsonify({"error": "No JSON provided"}), 400
 
-        result = 1  # Placeholder for actual logic
+        result = 1  # Placeholder logic
         return jsonify({"result": result})
     except Exception as e:
+        debug_log(f"🔥 Error in /api/process: {e}")
         return jsonify({"error": str(e)}), 500
 
 # 👁️ OCR endpoint that handles image upload and returns extracted text
 @app.route("/ocr", methods=["POST"])
 def ocr_endpoint():
+    debug_log("🔍 /ocr endpoint hit")
+
     if "image" not in request.files:
+        debug_log("❌ No image in request")
         return jsonify({"error": "No image provided"}), 400
+
     try:
         file = request.files["image"]
+        debug_log(f"📁 Received file: {file.filename}")
+
         image = Image.open(file.stream)
+        debug_log("🧼 Image opened successfully")
 
-        processed = preprocess_image(image)
+        # Optional: show image size/type for debugging
+        debug_log(f"📏 Image size: {image.size}, mode: {image.mode}")
+
+        # Preprocess image safely
+        try:
+            processed = preprocess_image(image)
+            debug_log("🛠️ Image preprocessed successfully")
+        except Exception as pe:
+            debug_log(f"⚠️ preprocess_image failed: {pe}")
+            return jsonify({"error": f"preprocess_image failed: {pe}"}), 500
+
+        # Perform OCR
         ocr_text = pytesseract.image_to_string(processed)
+        debug_log("🔡 OCR complete")
 
-        mapping = {}  # Optional: build actual mapping if needed
+        mapping = {}  # Placeholder mapping if needed
         return jsonify({"ocr_text": ocr_text, "mapping": mapping})
     except Exception as e:
+        debug_log(f"🔥 OCR processing failed: {e}")
         return jsonify({"error": str(e)}), 500
 
 # 🚀 Start the server when running directly
