@@ -6,6 +6,7 @@ import subprocess
 import os
 import json
 import openai
+import re
 
 from StudyFlow.backend.image_processing import preprocess_image
 from StudyFlow.config import TESSERACT_PATH
@@ -42,7 +43,7 @@ def process_data():
         debug_log(f"🔥 Error in /api/process: {e}")
         return jsonify({"error": str(e)}), 500
 
-# 👁️ OCR endpoint that handles image upload and returns extracted text
+# 👁️ OCR endpoint that handles image upload and returns extracted text and mapping
 @app.route("/ocr", methods=["POST"])
 def ocr_endpoint():
     debug_log("🔍 /ocr endpoint hit")
@@ -66,11 +67,36 @@ def ocr_endpoint():
             debug_log(f"⚠️ preprocess_image failed: {pe}")
             return jsonify({"error": f"preprocess_image failed: {pe}"}), 500
 
+        # Perform OCR using Tesseract
         ocr_text = pytesseract.image_to_string(processed)
         debug_log("🔡 OCR complete")
 
-        mapping = {}  # Placeholder
-        return jsonify({"ocr_text": ocr_text, "mapping": mapping})
+        # Create a word-level mapping using pytesseract.image_to_data
+        data = pytesseract.image_to_data(processed, output_type=pytesseract.Output.DICT,
+                                         config="--psm 6 --oem 3")
+        mapping = {}
+        tag_number = 1
+        for i in range(len(data["text"])):
+            text = data["text"][i].strip()
+            try:
+                conf = float(data["conf"][i])
+            except ValueError:
+                continue
+            if text and conf > 0:
+                mapping[str(tag_number)] = {
+                    "text": text,
+                    "left": data["left"][i],
+                    "top": data["top"][i],
+                    "width": data["width"][i],
+                    "height": data["height"][i],
+                    "line_num": data["line_num"][i]
+                }
+                tag_number += 1
+
+        # Create a tagged string using the mapping (e.g., "[1] word1 [2] word2 ...")
+        tagged_text = " ".join([f"[{k}] {v['text']}" for k, v in mapping.items()])
+
+        return jsonify({"ocr_text": tagged_text, "mapping": mapping})
     except Exception as e:
         debug_log(f"🔥 OCR processing failed: {e}")
         return jsonify({"error": str(e)}), 500
@@ -146,7 +172,7 @@ def select_best_ocr():
         debug_log(f"🔥 /api/select-best-ocr error: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-        # 🪵 Endpoint for logging frontend messages to the backend
+# 🪵 Endpoint for logging frontend messages to the backend
 @app.route("/api/log", methods=["POST"])
 def receive_log():
     data = request.get_json()
@@ -159,7 +185,6 @@ def receive_log():
         except Exception as e:
             print(f"[Logging Error] Could not write to file: {e}")
     return jsonify({"status": "ok"}), 200
-
 
 # 🚀 Start the server when running directly
 if __name__ == "__main__":
