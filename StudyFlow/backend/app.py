@@ -4,13 +4,18 @@ from io import BytesIO
 import pytesseract
 import subprocess
 import os
+import json
+import openai
 
-from StudyFlow.backend.image_processing import preprocess_image  # Ensure this exists
+from StudyFlow.backend.image_processing import preprocess_image
 from StudyFlow.config import TESSERACT_PATH
-from StudyFlow.logging_utils import debug_log  # Assuming you have a debug logger
+from StudyFlow.logging_utils import debug_log
 
 # 🔧 Set the Tesseract binary path for pytesseract
 pytesseract.pytesseract.tesseract_cmd = TESSERACT_PATH
+
+# 🔐 Set OpenAI API key (comes from Render env)
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # 🧪 Log the Tesseract version to verify the path works
 try:
@@ -52,11 +57,8 @@ def ocr_endpoint():
 
         image = Image.open(file.stream)
         debug_log("🧼 Image opened successfully")
-
-        # Optional: show image size/type for debugging
         debug_log(f"📏 Image size: {image.size}, mode: {image.mode}")
 
-        # Preprocess image safely
         try:
             processed = preprocess_image(image)
             debug_log("🛠️ Image preprocessed successfully")
@@ -64,14 +66,48 @@ def ocr_endpoint():
             debug_log(f"⚠️ preprocess_image failed: {pe}")
             return jsonify({"error": f"preprocess_image failed: {pe}"}), 500
 
-        # Perform OCR
         ocr_text = pytesseract.image_to_string(processed)
         debug_log("🔡 OCR complete")
 
-        mapping = {}  # Placeholder mapping if needed
+        mapping = {}  # Placeholder
         return jsonify({"ocr_text": ocr_text, "mapping": mapping})
     except Exception as e:
         debug_log(f"🔥 OCR processing failed: {e}")
+        return jsonify({"error": str(e)}), 500
+
+# 🤖 OpenAI Layout Structuring endpoint
+@app.route("/api/layout", methods=["POST"])
+def layout():
+    data = request.get_json()
+    text = data.get("text", "")
+
+    if not text:
+        debug_log("❌ /api/layout: No text provided")
+        return jsonify({"error": "No text provided"}), 400
+
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are an OCR layout engine. Turn OCR exam text into JSON with 'question' and 'answers'. 'answers' should be a list of answer strings."
+                },
+                {
+                    "role": "user",
+                    "content": text
+                }
+            ]
+        )
+
+        layout_text = response.choices[0].message.content.strip()
+        structured = json.loads(layout_text)
+
+        debug_log("✅ /api/layout: Structured data returned successfully")
+        return jsonify({"structured_ai": structured}), 200
+
+    except Exception as e:
+        debug_log(f"🔥 /api/layout error: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 # 🚀 Start the server when running directly
