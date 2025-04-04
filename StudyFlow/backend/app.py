@@ -11,6 +11,8 @@ import re
 from StudyFlow.backend.image_processing import preprocess_image
 from StudyFlow.config import TESSERACT_PATH
 from StudyFlow.logging_utils import debug_log
+from StudyFlow.backend.ai_manager import triple_call_ai_api_json_final
+
 
 # 🔧 Set the Tesseract binary path for pytesseract
 pytesseract.pytesseract.tesseract_cmd = TESSERACT_PATH
@@ -28,7 +30,8 @@ except Exception as e:
 # 🔌 Initialize the Flask app
 app = Flask(__name__)
 
-# 🧠 Dummy endpoint for testing data processing
+from StudyFlow.backend.ai_manager import triple_call_ai_api_json_final
+
 @app.route("/api/process", methods=["POST"])
 def process_data():
     try:
@@ -37,8 +40,32 @@ def process_data():
             debug_log("❌ No JSON provided")
             return jsonify({"error": "No JSON provided"}), 400
 
-        result = 1  # Placeholder logic
-        return jsonify({"result": result})
+        # Ensure keys exist
+        if "ocr_text" not in ocr_json or "answers" not in ocr_json:
+            debug_log("❌ Missing 'ocr_text' or 'answers' in request")
+            return jsonify({"error": "Missing 'ocr_text' or 'answers'"}), 400
+
+        # 🔍 Call AI voting logic
+        voted_answer = triple_call_ai_api_json_final(ocr_json)
+
+        # 🧠 Find the matching answer's index (1-based, for your frontend)
+        answer_texts = [a["text"] for a in ocr_json["answers"]]
+        try:
+            result_index = answer_texts.index(voted_answer) + 1
+            debug_log(f"✅ Correct answer matched at index: {result_index}")
+        except ValueError:
+            debug_log("⚠️ Voted answer not found in answer list. Returning index 1 as fallback.")
+            result_index = 1
+
+        return jsonify({
+            "result": result_index,
+            "answers": ocr_json["answers"]
+        })
+
+    except Exception as e:
+        debug_log(f"🔥 Error in /api/process: {e}")
+        return jsonify({"error": str(e)}), 500
+
     except Exception as e:
         debug_log(f"🔥 Error in /api/process: {e}")
         return jsonify({"error": str(e)}), 500
