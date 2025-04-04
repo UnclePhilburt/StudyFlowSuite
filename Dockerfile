@@ -27,8 +27,11 @@ COPY . /app
 # Set environment variable so pytesseract can find the binary
 ENV TESSERACT_PATH=/usr/bin/tesseract
 
+# Set PYTHONPATH to the directory containing the StudyFlow package
+ENV PYTHONPATH=/app
+
 # Expose app port
 EXPOSE 8000
 
-# Run the app
+# Run the app as a module
 CMD ["python", "-m", "StudyFlow.backend.app"]
