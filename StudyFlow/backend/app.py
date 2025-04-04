@@ -124,6 +124,42 @@ def layout():
         debug_log(f"🔥 /api/layout error: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
+# 🧠 Fallback Structure Generator
+@app.route("/api/fallback", methods=["POST"])
+def fallback():
+    try:
+        data = request.get_json()
+        mapping = data.get("ocr_mapping")
+        expected_answers = int(data.get("expected_answers", 4))
+
+        if not mapping:
+            return jsonify({"error": "Missing ocr_mapping"}), 400
+
+        from StudyFlow.backend.ocr_logic import fallback_structure
+        result = fallback_structure(mapping, expected_answers)
+        return jsonify(result), 200
+    except Exception as e:
+        debug_log(f"🔥 /api/fallback error: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
+# 🔀 Merge AI + Fallback JSON
+@app.route("/api/merge", methods=["POST"])
+def merge():
+    try:
+        data = request.get_json()
+        ai_json = data.get("ai_json", {})
+        fallback_json = data.get("fallback_json", {})
+        mapping = data.get("ocr_mapping", {})
+
+        from StudyFlow.backend.ocr_logic import merge_ai_and_fallback
+        merged = merge_ai_and_fallback(ai_json, fallback_json, mapping)
+        return jsonify(merged), 200
+    except Exception as e:
+        debug_log(f"🔥 /api/merge error: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+
 # 🧠 OpenAI OCR Candidate Selection
 @app.route("/api/select-best-ocr", methods=["POST"])
 def select_best_ocr():
