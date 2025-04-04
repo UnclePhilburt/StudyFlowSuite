@@ -206,6 +206,33 @@ def receive_log():
             print(f"[Logging Error] Could not write to file: {e}")
     return jsonify({"status": "ok"}), 200
 
+@app.route("/api/explanation", methods=["POST"])
+def generate_explanation():
+    try:
+        data = request.get_json()
+        ocr_json = data.get("ocr_json")
+        chosen_index = data.get("chosen_index")
+
+        if not ocr_json or chosen_index is None:
+            return jsonify({"error": "Missing data"}), 400
+
+        prompt = (
+            "Here is the OCR output in JSON format:\n" + str(ocr_json) +
+            "\nExplain why answer option " + str(chosen_index) +
+            " is correct. Provide a concise explanation (max 100 words)."
+        )
+
+        response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.0
+        )
+        explanation = response['choices'][0]['message']['content'].strip()
+        return jsonify({"explanation": explanation})
+    except Exception as e:
+        return jsonify({"error": f"Failed to generate explanation: {e}"}), 500
+
+
 # 🚀 Start the server when running directly
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
