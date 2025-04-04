@@ -11,7 +11,7 @@ import re
 from StudyFlow.backend.image_processing import preprocess_image
 from StudyFlow.config import TESSERACT_PATH
 from StudyFlow.logging_utils import debug_log
-from ai_clients.openai_client import get_openai_answer  ✅
+from ai_clients.openai_client import get_openai_answer
 
 
 # 🔧 Set the Tesseract binary path for pytesseract
