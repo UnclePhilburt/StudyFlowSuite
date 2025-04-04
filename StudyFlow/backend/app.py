@@ -28,50 +28,19 @@ except Exception as e:
 # 🔌 Initialize the Flask app
 app = Flask(__name__)
 
-# Updated /api/process endpoint with real logic
+# 🧠 Dummy endpoint for testing data processing
 @app.route("/api/process", methods=["POST"])
 def process_data():
     try:
-        # Expect the frontend to send OCR text, structured answers, and the mapping.
-        data = request.get_json()
-        if not data:
-            debug_log("❌ /api/process: No JSON provided")
+        ocr_json = request.get_json()
+        if not ocr_json:
+            debug_log("❌ No JSON provided")
             return jsonify({"error": "No JSON provided"}), 400
 
-        ocr_text = data.get("ocr_text", "")
-        mapping = data.get("mapping", {})
-        structured_answers = data.get("answers", {})
-
-        if not ocr_text or not structured_answers:
-            debug_log("❌ /api/process: Missing ocr_text or answers")
-            return jsonify({"error": "Missing ocr_text or answers"}), 400
-
-        # Build a prompt that shows the question and the answer options.
-        prompt = f"Question:\n{ocr_text}\n\nAnswer Options:\n"
-        for key, answer in structured_answers.items():
-            prompt += f"{key}. {answer.get('text', '')}\n"
-        prompt += "\nBased on the above, which answer is most correct? Return only the number."
-
-        # Use OpenAI to determine the correct answer.
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.0
-        )
-        ai_choice = response.choices[0].message.content.strip()
-        matches = re.findall(r'\d+', ai_choice)
-        final_index = int(matches[0]) if matches else 1
-
-        debug_log(f"✅ /api/process: OpenAI chose answer {final_index}")
-
-        # Return the selected answer index along with the structured answers.
-        return jsonify({
-            "result": final_index,
-            "answers": structured_answers
-        }), 200
-
+        result = 1  # Placeholder logic
+        return jsonify({"result": result})
     except Exception as e:
-        debug_log(f"🔥 /api/process error: {str(e)}")
+        debug_log(f"🔥 Error in /api/process: {e}")
         return jsonify({"error": str(e)}), 500
 
 # 👁️ OCR endpoint that handles image upload and returns extracted text and mapping
@@ -98,11 +67,11 @@ def ocr_endpoint():
             debug_log(f"⚠️ preprocess_image failed: {pe}")
             return jsonify({"error": f"preprocess_image failed: {pe}"}), 500
 
-        # Perform OCR using Tesseract to get the raw text.
+        # Perform OCR using Tesseract
         ocr_text = pytesseract.image_to_string(processed)
         debug_log("🔡 OCR complete")
 
-        # Build a word-level mapping using pytesseract.image_to_data.
+        # Create a word-level mapping using pytesseract.image_to_data
         data = pytesseract.image_to_data(processed, output_type=pytesseract.Output.DICT,
                                          config="--psm 6 --oem 3")
         mapping = {}
@@ -124,10 +93,10 @@ def ocr_endpoint():
                 }
                 tag_number += 1
 
-        # Create a tagged string (e.g., "[1] word1 [2] word2 ...")
+        # Create a tagged string using the mapping (e.g., "[1] word1 [2] word2 ...")
         tagged_text = " ".join([f"[{k}] {v['text']}" for k, v in mapping.items()])
 
-        return jsonify({"ocr_text": tagged_text, "mapping": mapping}), 200
+        return jsonify({"ocr_text": tagged_text, "mapping": mapping})
     except Exception as e:
         debug_log(f"🔥 OCR processing failed: {e}")
         return jsonify({"error": str(e)}), 500
@@ -198,7 +167,7 @@ def select_best_ocr():
         chosen = int(match[0]) if match else 1
 
         debug_log(f"✅ /api/select-best-ocr: AI chose candidate {chosen}")
-        return jsonify({"chosen_index": chosen}), 200
+        return jsonify({"chosen_index": chosen})
     except Exception as e:
         debug_log(f"🔥 /api/select-best-ocr error: {str(e)}")
         return jsonify({"error": str(e)}), 500
