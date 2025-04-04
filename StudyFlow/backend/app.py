@@ -12,23 +12,25 @@ from StudyFlow.backend.image_processing import preprocess_image
 from StudyFlow.config import TESSERACT_PATH
 from StudyFlow.logging_utils import debug_log
 
-# 🔧 Set the Tesseract binary path for pytesseract
+# Import the triple-call function for the AI clients
+from StudyFlow.backend.ai_manager import triple_call_ai_api_json_final
+
+# Set the Tesseract binary path for pytesseract
 pytesseract.pytesseract.tesseract_cmd = TESSERACT_PATH
 
-# 🔐 Set OpenAI API key (comes from Render env)
+# Set OpenAI API key (comes from Render env)
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# 🧪 Log the Tesseract version to verify the path works
+# Log the Tesseract version to verify the path works
 try:
     version_output = subprocess.check_output([TESSERACT_PATH, "--version"]).decode("utf-8")
     debug_log("✅ Tesseract version output:\n" + version_output)
 except Exception as e:
     debug_log("❌ Failed to call Tesseract: " + str(e))
 
-# 🔌 Initialize the Flask app
 app = Flask(__name__)
 
-# 🧠 Dummy endpoint for testing data processing
+# 🤖 Updated endpoint to call the three AI clients instead of using dummy code
 @app.route("/api/process", methods=["POST"])
 def process_data():
     try:
@@ -37,7 +39,8 @@ def process_data():
             debug_log("❌ No JSON provided")
             return jsonify({"error": "No JSON provided"}), 400
 
-        result = 1  # Placeholder logic
+        # Call the function that invokes all three AI clients and returns the chosen answer
+        result = triple_call_ai_api_json_final(ocr_json)
         return jsonify({"result": result})
     except Exception as e:
         debug_log(f"🔥 Error in /api/process: {e}")
@@ -47,15 +50,12 @@ def process_data():
 @app.route("/ocr", methods=["POST"])
 def ocr_endpoint():
     debug_log("🔍 /ocr endpoint hit")
-
     if "image" not in request.files:
         debug_log("❌ No image in request")
         return jsonify({"error": "No image provided"}), 400
-
     try:
         file = request.files["image"]
         debug_log(f"📁 Received file: {file.filename}")
-
         image = Image.open(file.stream)
         debug_log("🧼 Image opened successfully")
         debug_log(f"📏 Image size: {image.size}, mode: {image.mode}")
@@ -95,7 +95,6 @@ def ocr_endpoint():
 
         # Create a tagged string using the mapping (e.g., "[1] word1 [2] word2 ...")
         tagged_text = " ".join([f"[{k}] {v['text']}" for k, v in mapping.items()])
-
         return jsonify({"ocr_text": tagged_text, "mapping": mapping})
     except Exception as e:
         debug_log(f"🔥 OCR processing failed: {e}")
@@ -106,32 +105,21 @@ def ocr_endpoint():
 def layout():
     data = request.get_json()
     text = data.get("text", "")
-
     if not text:
         debug_log("❌ /api/layout: No text provided")
         return jsonify({"error": "No text provided"}), 400
-
     try:
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
-                {
-                    "role": "system",
-                    "content": "You are an OCR layout engine. Turn OCR exam text into JSON with 'question' and 'answers'. 'answers' should be a list of answer strings."
-                },
-                {
-                    "role": "user",
-                    "content": text
-                }
+                {"role": "system", "content": "You are an OCR layout engine. Turn OCR exam text into JSON with 'question' and 'answers'. 'answers' should be a list of answer strings."},
+                {"role": "user", "content": text}
             ]
         )
-
         layout_text = response.choices[0].message.content.strip()
         structured = json.loads(layout_text)
-
         debug_log("✅ /api/layout: Structured data returned successfully")
         return jsonify({"structured_ai": structured}), 200
-
     except Exception as e:
         debug_log(f"🔥 /api/layout error: {str(e)}")
         return jsonify({"error": str(e)}), 500
@@ -141,7 +129,6 @@ def layout():
 def select_best_ocr():
     data = request.get_json()
     candidates = data.get("candidates")
-
     if not candidates or not isinstance(candidates, list) or len(candidates) != 3:
         debug_log("❌ /api/select-best-ocr: Invalid candidate data")
         return jsonify({"error": "You must provide exactly 3 OCR candidates in a list"}), 400
@@ -154,18 +141,15 @@ def select_best_ocr():
         "Based on clarity and completeness, which candidate best represents the actual question text? "
         "Return only the candidate number (1, 2, or 3)."
     )
-
     try:
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.0
         )
-
         ai_choice = response.choices[0].message.content.strip()
         match = re.findall(r'\d+', ai_choice)
         chosen = int(match[0]) if match else 1
-
         debug_log(f"✅ /api/select-best-ocr: AI chose candidate {chosen}")
         return jsonify({"chosen_index": chosen})
     except Exception as e:
