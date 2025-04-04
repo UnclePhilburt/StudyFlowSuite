@@ -1,8 +1,8 @@
 import openai  # Ensure OpenAI is imported so its API key can be used
 from StudyFlow import config  # This ensures OPENAI_API_KEY is loaded and set
-from ..ai_clients.openai_client import get_openai_answer
-from ..ai_clients.claude_client import get_claude_answer
-from ..ai_clients.cohere_client import get_cohere_answer
+from StudyFlow.backend.ai_clients.openai_client import get_openai_answer
+from StudyFlow.backend.ai_clients.claude_client import get_claude_answer
+from StudyFlow.backend.ai_clients.cohere_client import get_cohere_answer
 from StudyFlow.logging_utils import debug_log
 
 
