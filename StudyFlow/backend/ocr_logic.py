@@ -36,7 +36,6 @@ def fallback_structure(mapping, expected_answers):
 
     return {"question": question, "answers": answers}
 
-
 def assign_tags_from_ocr(ai_answers, ocr_mapping):
     for key, answer in ai_answers.items():
         if answer.get("tag") is None:
@@ -50,13 +49,23 @@ def assign_tags_from_ocr(ai_answers, ocr_mapping):
                         break
     return ai_answers
 
-
 def merge_ai_and_fallback(ai_json, fallback_json, ocr_mapping):
     merged = {}
+    # question: prefer AI, fallback if missing
     merged["question"] = ai_json.get("question", fallback_json.get("question", ""))
+
+    # 1) Normalize AI answers: if list, convert to dict { "1": {...}, "2": {...}, ... }
     ai_answers = ai_json.get("answers", {})
+    if isinstance(ai_answers, list):
+        ai_answers = {
+            str(i+1): {"text": text, "tag": None}
+            for i, text in enumerate(ai_answers)
+        }
+        debug_log("Normalized AI answers list to dict with null tags.")
+
     fallback_answers = fallback_json.get("answers", {})
 
+    # 2) Merge: prefer AI text, but grab tags from fallback when missing
     merged_answers = {}
     for key, answer in ai_answers.items():
         if answer.get("tag") is None and key in fallback_answers:
@@ -67,6 +76,7 @@ def merge_ai_and_fallback(ai_json, fallback_json, ocr_mapping):
         else:
             merged_answers[key] = answer
 
+    # 3) If any tags still missing, try fuzzy-match via OCR
     if any(a.get("tag") is None for a in merged_answers.values()):
         debug_log("Missing tags detected after merge. Attempting reassignment.")
         merged_answers = assign_tags_from_ocr(merged_answers, ocr_mapping)
