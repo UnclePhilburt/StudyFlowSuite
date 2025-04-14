@@ -7,6 +7,8 @@ import os
 import json
 import openai
 import re
+import cv2
+import numpy as np
 
 from StudyFlow.backend.image_processing import preprocess_image
 from StudyFlow.config import TESSERACT_PATH
@@ -253,6 +255,55 @@ def generate_explanation():
         return jsonify({"explanation": explanation})
     except Exception as e:
         return jsonify({"error": f"Failed to generate explanation: {e}"}), 500
+
+# ➕ NEW: Find Button Endpoint with User-Supplied Template
+@app.route("/api/find_button", methods=["POST"])
+def find_button():
+    # Verify the screenshot file is provided.
+    if "image" not in request.files:
+        return jsonify({"error": "No screenshot image provided"}), 400
+
+    screenshot_file = request.files["image"]
+    npimg = np.frombuffer(screenshot_file.read(), np.uint8)
+    img = cv2.imdecode(npimg, cv2.IMREAD_GRAYSCALE)
+    if img is None:
+        return jsonify({"error": "Screenshot image decoding failed."}), 400
+
+    # Verify the user-supplied template is provided.
+    if "template" not in request.files:
+        return jsonify({"error": "No template image provided"}), 400
+
+    template_file = request.files["template"]
+    t_np = np.frombuffer(template_file.read(), np.uint8)
+    template = cv2.imdecode(t_np, cv2.IMREAD_GRAYSCALE)
+    if template is None:
+        return jsonify({"error": "Template image decoding failed."}), 400
+
+    best_val = 0
+    best_loc = None
+    best_temp_shape = None
+    scales = np.linspace(0.8, 1.2, 10)
+    for scale in scales:
+        resized_template = cv2.resize(template, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+        result = cv2.matchTemplate(img, resized_template, cv2.TM_CCOEFF_NORMED)
+        _, max_val, _, max_loc = cv2.minMaxLoc(result)
+        if max_val > best_val:
+            best_val = max_val
+            best_loc = max_loc
+            best_temp_shape = resized_template.shape
+
+    threshold = 0.7
+    if best_val >= threshold and best_loc and best_temp_shape:
+        tH, tW = best_temp_shape
+        center_x = best_loc[0] + tW // 2
+        center_y = best_loc[1] + tH // 2
+        return jsonify({
+            "center_x": int(center_x),
+            "center_y": int(center_y),
+            "confidence": float(best_val)
+        }), 200
+    else:
+        return jsonify({"error": "Button not found", "confidence": best_val}), 404
 
 # 🚀 Start the server when running directly
 if __name__ == "__main__":
