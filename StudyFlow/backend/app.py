@@ -14,6 +14,8 @@ from StudyFlow.logging_utils import debug_log
 
 # Import the triple-call function for the AI clients
 from StudyFlow.backend.ai_manager import triple_call_ai_api_json_final
+# Import the deepflow function for generating quiz questions
+from StudyFlow.backend.deepflow import get_deepflow_question
 
 # Set the Tesseract binary path for pytesseract
 pytesseract.pytesseract.tesseract_cmd = TESSERACT_PATH
@@ -44,6 +46,28 @@ def process_data():
         return jsonify({"result": result})
     except Exception as e:
         debug_log(f"🔥 Error in /api/process: {e}")
+        return jsonify({"error": str(e)}), 500
+
+# ➕ NEW: DeepFlow Quiz Question Endpoint
+@app.route("/api/deepflow_question", methods=["POST"])
+def deepflow_question():
+    try:
+        data = request.get_json()
+        topic = data.get("topic", "default topic")
+        previous_questions = data.get("previous_questions", [])
+        debug_log(f"Received deepflow question request for topic '{topic}' with previous questions: {previous_questions}")
+
+        # Use the deepflow function to generate the question
+        question_data = get_deepflow_question(topic, previous_questions)
+        if question_data is None:
+            debug_log("Failed to generate deepflow question.")
+            return jsonify({"error": "Failed to generate question"}), 500
+
+        debug_log("Deepflow question generated successfully.")
+        return jsonify(question_data), 200
+
+    except Exception as e:
+        debug_log(f"🔥 Error in /api/deepflow_question: {e}")
         return jsonify({"error": str(e)}), 500
 
 # 👁️ OCR endpoint that handles image upload and returns extracted text and mapping
@@ -142,7 +166,6 @@ def fallback():
         debug_log(f"🔥 /api/fallback error: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
-
 # 🔀 Merge AI + Fallback JSON
 @app.route("/api/merge", methods=["POST"])
 def merge():
@@ -158,7 +181,6 @@ def merge():
     except Exception as e:
         debug_log(f"🔥 /api/merge error: {str(e)}")
         return jsonify({"error": str(e)}), 500
-
 
 # 🧠 OpenAI OCR Candidate Selection
 @app.route("/api/select-best-ocr", methods=["POST"])
@@ -231,7 +253,6 @@ def generate_explanation():
         return jsonify({"explanation": explanation})
     except Exception as e:
         return jsonify({"error": f"Failed to generate explanation: {e}"}), 500
-
 
 # 🚀 Start the server when running directly
 if __name__ == "__main__":
