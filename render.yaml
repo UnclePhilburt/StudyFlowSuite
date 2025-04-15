@@ -1,4 +1,21 @@
 services:
+  - type: web
+    name: studyflow-web
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    region: ohio
+    plan: standard
+    envVars:
+      - key: CELERY_BROKER_URL
+        fromService:
+          name: studyflow-redis
+          type: redis
+          property: connectionString
+    disk:
+      name: data-disk
+      mountPath: /mnt/data
+      sizeGB: 1
+
   - type: worker
     name: studyflow-celery-worker
     runtime: docker
