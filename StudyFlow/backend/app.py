@@ -389,7 +389,7 @@ from flask import send_from_directory, render_template_string
 @app.route("/admin/button-templates")
 def admin_view_button_templates():
     templates_dir = os.path.join(app.root_path, "static", "button_templates")
-    metadata_path = os.path.join(templates_dir, "metadata.json")
+    metadata_path = os.path.join(templates_dir, "submit_template_index.json")
 
     # Load metadata
     metadata = {}
@@ -398,7 +398,7 @@ def admin_view_button_templates():
             metadata = json.load(f)
 
     # Create a sorted list of (filename, count) tuples
-    sorted_templates = sorted(metadata.items(), key=lambda x: -x[1])  # Descending by count
+    sorted_templates = sorted(metadata.items(), key=lambda x: -x[1].get("count", 0))
 
     # HTML Template
     html = """
