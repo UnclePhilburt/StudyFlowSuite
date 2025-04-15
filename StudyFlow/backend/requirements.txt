@@ -1,5 +1,7 @@
+# requirements.txt
 Flask
 gunicorn
+gevent
 openai
 anthropic
 cohere
@@ -11,5 +13,3 @@ opencv-python-headless
 scikit-image
 rapidfuzz
 imagehash
-pip install gunicorn gevent
-
