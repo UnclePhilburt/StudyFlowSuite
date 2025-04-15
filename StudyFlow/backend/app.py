@@ -13,6 +13,8 @@ import numpy as np
 from StudyFlow.backend.image_processing import preprocess_image
 from StudyFlow.config import TESSERACT_PATH
 from StudyFlow.logging_utils import debug_log
+from StudyFlow.backend.submit_button_storage import register_submit_button_upload
+
 
 # Import the triple-call function for the AI clients
 from StudyFlow.backend.ai_manager import triple_call_ai_api_json_final
@@ -33,6 +35,8 @@ except Exception as e:
     debug_log("❌ Failed to call Tesseract: " + str(e))
 
 app = Flask(__name__)
+register_submit_button_upload(app)
+
 
 # 🤖 Updated endpoint to call the three AI clients instead of using dummy code
 @app.route("/api/process", methods=["POST"])
