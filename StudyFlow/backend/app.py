@@ -150,6 +150,49 @@ def layout():
         debug_log(f"🔥 /api/layout error: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
+@app.route("/api/ocr_region", methods=["POST"])
+def ocr_region():
+    try:
+        data = request.get_json()
+        region = data.get("region")
+
+        if not region or len(region) != 4:
+            return jsonify({"error": "Missing or invalid region"}), 400
+
+        from StudyFlow.backend.screenshot_utils import get_region_screenshot
+        from StudyFlow.backend.image_processing import preprocess_image
+
+        screenshot = get_region_screenshot(region)
+        processed = preprocess_image(screenshot)
+
+        import pytesseract
+        from pytesseract import Output
+
+        # OCR + mapping
+        data = pytesseract.image_to_data(processed, output_type=Output.DICT, config="--psm 6")
+        mapping = {}
+        tag = 1
+        for i in range(len(data["text"])):
+            text = data["text"][i].strip()
+            conf = float(data["conf"][i]) if data["conf"][i] != "-1" else 0
+            if text and conf > 0:
+                mapping[str(tag)] = {
+                    "text": text,
+                    "left": data["left"][i],
+                    "top": data["top"][i],
+                    "width": data["width"][i],
+                    "height": data["height"][i],
+                    "line_num": data["line_num"][i]
+                }
+                tag += 1
+
+        tagged_text = " ".join([f"[{k}] {v['text']}" for k, v in mapping.items()])
+        return jsonify({"ocr_text": tagged_text, "mapping": mapping})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # 🧠 Fallback Structure Generator
 @app.route("/api/fallback", methods=["POST"])
 def fallback():
