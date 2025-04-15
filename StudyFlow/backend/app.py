@@ -469,6 +469,24 @@ def admin_view_button_templates():
 def serve_button_template(filename):
     return send_from_directory("/mnt/data/button_templates", filename)
 
+@app.route("/admin/view-qa")
+def view_qa():
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("SELECT question, answer, timestamp FROM qa_pairs ORDER BY timestamp DESC")
+        rows = c.fetchall()
+        conn.close()
+
+        # Make it HTML so it's human-friendly
+        html = "<h1>Stored Questions & Answers</h1><ul>"
+        for q, a, t in rows:
+            html += f"<li><b>Q:</b> {q}<br><b>A:</b> {a}<br><small>{t}</small><br><br></li>"
+        html += "</ul>"
+        return html
+    except Exception as e:
+        return f"<h1>Error:</h1><p>{e}</p>"
+
 
 # 🚀 Start the server when running directly
 if __name__ == "__main__":
