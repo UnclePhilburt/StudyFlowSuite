@@ -55,6 +55,21 @@ def init_question_db():
     conn.commit()
     conn.close()
 
+def add_count_column_if_needed():
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("ALTER TABLE qa_pairs ADD COLUMN count INTEGER DEFAULT 1")
+        conn.commit()
+        conn.close()
+        print("✅ Added 'count' column to qa_pairs table.")
+    except sqlite3.OperationalError as e:
+        if "duplicate column name" in str(e):
+            print("ℹ️ 'count' column already exists.")
+        else:
+            print(f"❌ Error adding 'count' column: {e}")
+
+
 # Initialize on startup
 init_question_db()
 add_count_column_if_needed()
@@ -494,19 +509,6 @@ def view_qa():
     except Exception as e:
         return f"<h1>Error:</h1><p>{e}</p>"
 
-def add_count_column_if_needed():
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute("ALTER TABLE qa_pairs ADD COLUMN count INTEGER DEFAULT 1")
-        conn.commit()
-        conn.close()
-        print("✅ Added 'count' column to qa_pairs table.")
-    except sqlite3.OperationalError as e:
-        if "duplicate column name" in str(e):
-            print("ℹ️ 'count' column already exists.")
-        else:
-            print(f"❌ Error adding 'count' column: {e}")
 
 
 # 🚀 Start the server when running directly
