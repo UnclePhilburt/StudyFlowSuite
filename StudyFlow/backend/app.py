@@ -388,7 +388,7 @@ from flask import send_from_directory, render_template_string
 
 @app.route("/admin/button-templates")
 def admin_view_button_templates():
-    templates_dir = os.path.join(app.root_path, "static", "button_templates")
+    templates_dir = "/mnt/data/button_templates"
     metadata_path = os.path.join(templates_dir, "submit_template_index.json")
 
     # Load metadata
@@ -397,10 +397,8 @@ def admin_view_button_templates():
         with open(metadata_path, "r", encoding="utf-8") as f:
             metadata = json.load(f)
 
-    # Create a sorted list of (filename, count) tuples
     sorted_templates = sorted(metadata.items(), key=lambda x: -x[1].get("count", 0))
 
-    # HTML Template
     html = """
     <!DOCTYPE html>
     <html>
@@ -419,17 +417,20 @@ def admin_view_button_templates():
         <div class="grid">
             {% for filename, data in templates %}
                 <div class="item">
-                    <img src="/static/button_templates/{{ filename }}" alt="{{ filename }}">
+                    <img src="/admin/button-image/{{ filename }}" alt="{{ filename }}">
                     <div><strong>{{ filename }}</strong></div>
                     <div>Matches: {{ data.get('count', 0) }}</div>
                 </div>
             {% endfor %}
-
         </div>
     </body>
     </html>
     """
     return render_template_string(html, templates=sorted_templates)
+
+@app.route("/admin/button-image/<path:filename>")
+def serve_button_template(filename):
+    return send_from_directory("/mnt/data/button_templates", filename)
 
 
 # 🚀 Start the server when running directly
