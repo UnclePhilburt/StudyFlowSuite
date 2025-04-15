@@ -10,6 +10,8 @@ services:
       mountPath: /mnt/data
       sizeGB: 1
     envVars:
+      - key: ROLE
+        value: web
       - key: CELERY_BROKER_URL
         fromService:
           name: studyflow-redis
@@ -27,6 +29,8 @@ services:
       mountPath: /mnt/data
       sizeGB: 1
     envVars:
+      - key: ROLE
+        value: worker
       - key: CELERY_BROKER_URL
         fromService:
           name: studyflow-redis
@@ -40,6 +44,8 @@ services:
     region: ohio
     plan: free
     envVars:
+      - key: ROLE
+        value: flower
       - key: CELERY_BROKER_URL
         fromService:
           name: studyflow-redis
@@ -51,4 +57,4 @@ services:
     region: ohio
     plan: starter
     maxmemoryPolicy: noeviction
-    ipAllowList: []
+    ipAllowList: []  # internal only
