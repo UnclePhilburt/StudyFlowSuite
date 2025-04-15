@@ -398,7 +398,7 @@ def admin_view_button_templates():
             metadata = json.load(f)
 
     # Create a sorted list of (filename, count) tuples
-    sorted_templates = sorted(metadata.items(), key=lambda x: -x[1])
+    sorted_templates = sorted(metadata.items(), key=lambda x: -x[1].get("count", 0))
 
     # HTML Template
     html = """
@@ -417,13 +417,14 @@ def admin_view_button_templates():
     <body>
         <h1>Submit Button Templates</h1>
         <div class="grid">
-            {% for filename, count in templates %}
-            <div class="item">
-                <img src="/static/button_templates/{{ filename }}" alt="{{ filename }}">
-                <div><strong>{{ filename }}</strong></div>
-                <div>Matches: {{ count }}</div>
-            </div>
+            {% for filename, data in templates %}
+                <div class="item">
+                    <img src="/static/button_templates/{{ filename }}" alt="{{ filename }}">
+                    <div><strong>{{ filename }}</strong></div>
+                    <div>Matches: {{ data.get('count', 0) }}</div>
+                </div>
             {% endfor %}
+
         </div>
     </body>
     </html>
