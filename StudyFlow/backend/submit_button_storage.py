@@ -132,34 +132,8 @@ def register_submit_button_upload(app):
             with open(INDEX_FILE, "w") as f:
                 json.dump(index, f, indent=2)
 
-            # Now update the metadata with the new button template.
-            update_metadata(filename)
-
             return jsonify({"status": "stored", "filename": filename}), 200
 
         except Exception as e:
             return jsonify({"error": str(e)}), 500
 
-
-# New function to update the metadata
-def update_metadata(filename):
-    metadata_path = INDEX_FILE  # Using the correct filename
-
-    # Load existing metadata
-    if os.path.exists(metadata_path):
-        with open(metadata_path, "r", encoding="utf-8") as f:
-            metadata = json.load(f)
-    else:
-        metadata = {}
-
-    # Update the count for this template
-    if filename in metadata:
-        metadata[filename] += 1  # Increment the count
-    else:
-        metadata[filename] = 1  # Add new template with count 1
-
-    # Write back the updated metadata
-    with open(metadata_path, "w", encoding="utf-8") as f:
-        json.dump(metadata, f, indent=4)
-
-    debug_log(f"✅ Updated metadata for {filename}: {metadata[filename]} occurrences")
