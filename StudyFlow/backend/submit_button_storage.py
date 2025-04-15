@@ -122,6 +122,10 @@ def register_submit_button_upload(app):
                 path = os.path.join(TEMPLATE_DIR, filename)
                 if not os.path.exists(path):
                     image.save(path)
+                print(f"💾 Saving image to: {path}")
+                print(f"📦 Filename match: {filename}, Exists on disk: {os.path.exists(path)}")
+
+
 
             else:
                 filename = f"submit_template__{new_hash}.png"
@@ -133,6 +137,10 @@ def register_submit_button_upload(app):
                     "last_seen": now,
                     "hash": new_hash
                 }
+
+            print(f"💾 Saving image to: {path}")
+            print(f"📦 Filename match: {filename}, Exists on disk: {os.path.exists(path)}")
+
 
             with open(INDEX_FILE, "w") as f:
                 json.dump(index, f, indent=2)
