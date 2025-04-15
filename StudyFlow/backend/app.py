@@ -398,7 +398,7 @@ def admin_view_button_templates():
             metadata = json.load(f)
 
     # Create a sorted list of (filename, count) tuples
-    sorted_templates = sorted(metadata.items(), key=lambda x: -x[1].get("count", 0))
+    sorted_templates = sorted(metadata.items(), key=lambda x: -x[1])
 
     # HTML Template
     html = """
