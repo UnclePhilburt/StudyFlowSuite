@@ -8,4 +8,6 @@ Pillow
 openai==0.28
 pytesseract
 opencv-python-headless
+scikit-image
+rapidfuzz
 
