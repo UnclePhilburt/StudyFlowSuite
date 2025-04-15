@@ -16,6 +16,7 @@ from StudyFlow.config import TESSERACT_PATH
 from StudyFlow.logging_utils import debug_log
 from StudyFlow.backend.submit_button_storage import register_submit_button_upload
 from StudyFlow.backend.tasks import process_question_async
+from StudyFlow.backend.tasks import celery_app
 
 
 # Import the triple-call function for the AI clients
@@ -516,6 +517,19 @@ def view_qa():
         return html
     except Exception as e:
         return f"<h1>Error:</h1><p>{e}</p>"
+
+@app.route("/api/status/<task_id>")
+def get_task_status(task_id):
+    task = celery_app.AsyncResult(task_id)
+    
+    if task.state == "PENDING":
+        return jsonify({"status": "pending"}), 202
+    elif task.state == "SUCCESS":
+        return jsonify({"status": "complete", "result": task.result}), 200
+    elif task.state == "FAILURE":
+        return jsonify({"status": "failed"}), 500
+    else:
+        return jsonify({"status": task.state}), 202
 
 
 
