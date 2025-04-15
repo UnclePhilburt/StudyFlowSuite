@@ -384,6 +384,53 @@ def find_button():
     else:
         return jsonify({"error": "Button not found", "confidence": best_val}), 404
 
+from flask import send_from_directory, render_template_string
+
+@app.route("/admin/button-templates")
+def admin_view_button_templates():
+    templates_dir = os.path.join(app.root_path, "static", "button_templates")
+    metadata_path = os.path.join(templates_dir, "metadata.json")
+
+    # Load metadata
+    metadata = {}
+    if os.path.exists(metadata_path):
+        with open(metadata_path, "r", encoding="utf-8") as f:
+            metadata = json.load(f)
+
+    # Create a sorted list of (filename, count) tuples
+    sorted_templates = sorted(metadata.items(), key=lambda x: -x[1])  # Descending by count
+
+    # HTML Template
+    html = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Submit Button Templates</title>
+        <style>
+            body { font-family: Arial; background: #f4f4f4; padding: 20px; }
+            .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; }
+            .item { background: #fff; padding: 10px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); text-align: center; }
+            .item img { max-width: 100%; border-radius: 6px; margin-bottom: 10px; }
+            h1 { text-align: center; }
+        </style>
+    </head>
+    <body>
+        <h1>Submit Button Templates</h1>
+        <div class="grid">
+            {% for filename, count in templates %}
+            <div class="item">
+                <img src="/static/button_templates/{{ filename }}" alt="{{ filename }}">
+                <div><strong>{{ filename }}</strong></div>
+                <div>Matches: {{ count }}</div>
+            </div>
+            {% endfor %}
+        </div>
+    </body>
+    </html>
+    """
+    return render_template_string(html, templates=sorted_templates)
+
+
 # 🚀 Start the server when running directly
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
