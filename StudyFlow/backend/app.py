@@ -256,6 +256,80 @@ def generate_explanation():
     except Exception as e:
         return jsonify({"error": f"Failed to generate explanation: {e}"}), 500
 
+@app.route("/api/focusflow", methods=["POST"])
+def api_focusflow():
+    try:
+        from StudyFlow.backend.ocr_logic import fallback_structure, merge_ai_and_fallback
+        region = request.json.get("region")  # [x, y, width, height]
+        if not region or len(region) != 4:
+            return jsonify({"error": "Missing or invalid region"}), 400
+
+        region_tuple = tuple(region)
+
+        # Use existing backend utility
+        from StudyFlow.backend.screen_grab import grab_screen_region
+        image = grab_screen_region(region_tuple)
+
+        from StudyFlow.backend.image_processing import preprocess_image
+        processed = preprocess_image(image)
+
+        from pytesseract import image_to_string, image_to_data, Output
+        text = image_to_string(processed)
+        data = image_to_data(processed, output_type=Output.DICT, config="--psm 6 --oem 3")
+
+        mapping = {}
+        tag_number = 1
+        for i in range(len(data["text"])):
+            txt = data["text"][i].strip()
+            try:
+                conf = float(data["conf"][i])
+            except ValueError:
+                continue
+            if txt and conf > 0:
+                mapping[str(tag_number)] = {
+                    "text": txt,
+                    "left": data["left"][i],
+                    "top": data["top"][i],
+                    "width": data["width"][i],
+                    "height": data["height"][i],
+                    "line_num": data["line_num"][i]
+                }
+                tag_number += 1
+
+        tagged_text = " ".join([f"[{k}] {v['text']}" for k, v in mapping.items()])
+
+        from StudyFlow.backend.ocr_logic import ai_structure_layout, convert_answers_list_to_dict
+        ai_json = ai_structure_layout(tagged_text)
+        expected_answers = len(ai_json.get("answers", [])) if ai_json else 4
+
+        fallback_json = fallback_structure(mapping, expected_answers)
+
+        if ai_json and fallback_json.get("answers"):
+            ai_json = convert_answers_list_to_dict(ai_json)
+            merged_json = merge_ai_and_fallback(ai_json, fallback_json, mapping)
+        elif ai_json:
+            merged_json = ai_json
+        else:
+            merged_json = fallback_json
+
+        from StudyFlow.backend.ai_manager import triple_call_ai_api_json_final
+        chosen_index = triple_call_ai_api_json_final(merged_json)
+
+        from StudyFlow.backend.explanation_generator import generate_explanation_for_index
+        explanation = generate_explanation_for_index(merged_json, chosen_index)
+
+        full_answer = merged_json["answers"].get(str(chosen_index), {}).get("text", "Unknown")
+
+        return jsonify({
+            "full_answer": full_answer,
+            "explanation": explanation,
+            "merged_json": merged_json,
+            "tagged_text": tagged_text
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # ➕ NEW: Find Button Endpoint with User-Supplied Template
 @app.route("/api/find_button", methods=["POST"])
 def find_button():
