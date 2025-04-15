@@ -42,7 +42,7 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile
     region: ohio
-    plan: free
+    plan: standard
     envVars:
       - key: ROLE
         value: flower
@@ -55,6 +55,6 @@ services:
   - type: redis
     name: studyflow-redis
     region: ohio
-    plan: starter
+    plan: standard
     maxmemoryPolicy: noeviction
     ipAllowList: []  # internal only
