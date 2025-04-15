@@ -1,10 +1,11 @@
 services:
   - type: web
-    name: studyflowsuite-1
+    name: StudyFlowSuite-1
     runtime: docker
     dockerfilePath: ./Dockerfile
     region: ohio
     plan: standard
+    startCommand: "gunicorn StudyFlow.backend.app:app -k gevent --bind 0.0.0.0:10000 --workers 1"
     disk:
       name: data-disk
       mountPath: /mnt/data
@@ -22,6 +23,7 @@ services:
     dockerfilePath: ./Dockerfile
     region: ohio
     plan: standard
+    startCommand: "celery --app StudyFlow.backend.tasks worker --loglevel info --concurrency 4"
     disk:
       name: data-disk
       mountPath: /mnt/data
@@ -39,6 +41,7 @@ services:
     dockerfilePath: ./Dockerfile
     region: ohio
     plan: free
+    startCommand: "celery flower --app StudyFlow.backend.tasks --loglevel info"
     envVars:
       - key: CELERY_BROKER_URL
         fromService:
@@ -51,4 +54,4 @@ services:
     region: ohio
     plan: starter
     maxmemoryPolicy: noeviction
-    ipAllowList: []  # only allow internal connections
+    ipAllowList: []
