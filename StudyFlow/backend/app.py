@@ -104,6 +104,7 @@ def process_data():
 
         # 🧠 If not in DB, run AI
         result = triple_call_ai_api_json_final(ocr_json)
+        debug_log("🤖 Using AI to answer new question")
         chosen_index = str(result)
         answers = ocr_json.get("answers", {})
         chosen_answer = answers.get(chosen_index, {}).get("text", "").strip()
