@@ -15,6 +15,7 @@ from StudyFlow.backend.image_processing import preprocess_image
 from StudyFlow.config import TESSERACT_PATH
 from StudyFlow.logging_utils import debug_log
 from StudyFlow.backend.submit_button_storage import register_submit_button_upload
+from StudyFlow.backend.tasks import process_question_async
 
 
 # Import the triple-call function for the AI clients
@@ -74,7 +75,6 @@ def add_count_column_if_needed():
 init_question_db()
 add_count_column_if_needed()
 
-# 🤖 Updated endpoint to call the three AI clients instead of using dummy code
 @app.route("/api/process", methods=["POST"])
 def process_data():
     try:
@@ -105,20 +105,16 @@ def process_data():
             debug_log(f"✅ Found cached answer: '{saved_answer}'")
             return jsonify({"result": saved_answer, "source": "cache"})
 
-        # 🧠 If not in DB, run AI
-        result = triple_call_ai_api_json_final(ocr_json)
-        debug_log("🤖 Using AI to answer new question")
-        chosen_index = str(result)
-        answers = ocr_json.get("answers", {})
-        chosen_answer = answers.get(chosen_index, {}).get("text", "").strip()
-
-        if question_text and chosen_answer:
-            c.execute("INSERT INTO qa_pairs (question, answer, count) VALUES (?, ?, 1)", (question_text, chosen_answer))
-            conn.commit()
-            debug_log(f"✅ Added new Q&A to DB: '{question_text[:60]}...' → '{chosen_answer}'")
-
+        # 🧠 If not in DB, queue async task to process with AI
+        task = process_question_async.delay(ocr_json)
         conn.close()
-        return jsonify({"result": result, "source": "ai"})
+        debug_log("🚀 Queued async AI task")
+
+        return jsonify({
+            "status": "processing",
+            "message": "Question sent for async processing",
+            "task_id": task.id
+        })
 
     except Exception as e:
         debug_log(f"🔥 Error in /api/process: {e}")
