@@ -1,20 +1,20 @@
 services:
   - type: web
-    name: studyflow-web
+    name: studyflowsuite-1
     runtime: docker
     dockerfilePath: ./Dockerfile
     region: ohio
     plan: standard
+    disk:
+      name: data-disk
+      mountPath: /mnt/data
+      sizeGB: 1
     envVars:
       - key: CELERY_BROKER_URL
         fromService:
           name: studyflow-redis
           type: redis
           property: connectionString
-    disk:
-      name: data-disk
-      mountPath: /mnt/data
-      sizeGB: 1
 
   - type: worker
     name: studyflow-celery-worker
@@ -22,23 +22,23 @@ services:
     dockerfilePath: ./Dockerfile
     region: ohio
     plan: standard
+    disk:
+      name: data-disk
+      mountPath: /mnt/data
+      sizeGB: 1
     envVars:
       - key: CELERY_BROKER_URL
         fromService:
           name: studyflow-redis
           type: redis
           property: connectionString
-    disk:
-      name: data-disk
-      mountPath: /mnt/data
-      sizeGB: 1
 
   - type: web
     name: studyflow-flower
     runtime: docker
     dockerfilePath: ./Dockerfile
     region: ohio
-    plan: standard
+    plan: free
     envVars:
       - key: CELERY_BROKER_URL
         fromService:
@@ -49,6 +49,6 @@ services:
   - type: redis
     name: studyflow-redis
     region: ohio
-    plan: standard
+    plan: starter
     maxmemoryPolicy: noeviction
-    ipAllowList: []
+    ipAllowList: []  # only allow internal connections
