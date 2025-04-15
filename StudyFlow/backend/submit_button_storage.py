@@ -118,6 +118,11 @@ def register_submit_button_upload(app):
                 index[match]["count"] += 1
                 index[match]["last_seen"] = now
                 filename = match
+                # 🧠 Make sure the file exists on disk
+                path = os.path.join(TEMPLATE_DIR, filename)
+                if not os.path.exists(path):
+                    image.save(path)
+
             else:
                 filename = f"submit_template__{new_hash}.png"
                 path = os.path.join(TEMPLATE_DIR, filename)
