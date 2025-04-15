@@ -1,11 +1,9 @@
 services:
   - type: web
     name: studyflow-web
-    runtime: python
+    env: docker
     region: ohio
     plan: standard
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "gunicorn StudyFlow.backend.app:app -k gevent --bind 0.0.0.0:10000 --workers 3"
     envVars:
       - key: CELERY_BROKER_URL
         fromService:
@@ -15,11 +13,9 @@ services:
 
   - type: worker
     name: studyflow-celery-worker
-    runtime: python
+    env: docker
     region: ohio
     plan: standard
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "celery --app StudyFlow.backend.tasks worker --loglevel info --concurrency 4"
     envVars:
       - key: CELERY_BROKER_URL
         fromService:
@@ -29,11 +25,9 @@ services:
 
   - type: web
     name: studyflow-flower
-    runtime: python
+    env: docker
     region: ohio
     plan: free
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "celery flower --app StudyFlow.backend.tasks --loglevel info"
     envVars:
       - key: CELERY_BROKER_URL
         fromService:
