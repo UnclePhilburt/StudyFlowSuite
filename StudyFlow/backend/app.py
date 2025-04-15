@@ -57,6 +57,7 @@ def init_question_db():
 
 # Initialize on startup
 init_question_db()
+add_count_column_if_needed()
 
 # 🤖 Updated endpoint to call the three AI clients instead of using dummy code
 @app.route("/api/process", methods=["POST"])
@@ -79,7 +80,13 @@ def process_data():
             try:
                 conn = sqlite3.connect(DB_PATH)
                 c = conn.cursor()
-                c.execute("INSERT OR IGNORE INTO qa_pairs (question, answer) VALUES (?, ?)", (question_text, chosen_answer))
+                # Try updating count first
+                c.execute("SELECT count FROM qa_pairs WHERE question = ?", (question_text,))
+                row = c.fetchone()
+                if row:
+                    c.execute("UPDATE qa_pairs SET count = count + 1 WHERE question = ?", (question_text,))
+                else:
+                    c.execute("INSERT INTO qa_pairs (question, answer, count) VALUES (?, ?, 1)", (question_text, chosen_answer))
                 conn.commit()
                 conn.close()
                 debug_log(f"✅ Saved Q&A to database: '{question_text[:60]}...' → '{chosen_answer}'")
@@ -474,18 +481,32 @@ def view_qa():
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
-        c.execute("SELECT question, answer, timestamp FROM qa_pairs ORDER BY timestamp DESC")
+        c.execute("SELECT question, answer, timestamp, count FROM qa_pairs ORDER BY count DESC")
         rows = c.fetchall()
         conn.close()
 
         # Make it HTML so it's human-friendly
         html = "<h1>Stored Questions & Answers</h1><ul>"
-        for q, a, t in rows:
-            html += f"<li><b>Q:</b> {q}<br><b>A:</b> {a}<br><small>{t}</small><br><br></li>"
+        for q, a, t, count in rows:
+            html += f"<li><b>Q:</b> {q}<br><b>A:</b> {a}<br><small>{t} | Count: {count}</small><br><br></li>"
         html += "</ul>"
         return html
     except Exception as e:
         return f"<h1>Error:</h1><p>{e}</p>"
+
+def add_count_column_if_needed():
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("ALTER TABLE qa_pairs ADD COLUMN count INTEGER DEFAULT 1")
+        conn.commit()
+        conn.close()
+        print("✅ Added 'count' column to qa_pairs table.")
+    except sqlite3.OperationalError as e:
+        if "duplicate column name" in str(e):
+            print("ℹ️ 'count' column already exists.")
+        else:
+            print(f"❌ Error adding 'count' column: {e}")
 
 
 # 🚀 Start the server when running directly
