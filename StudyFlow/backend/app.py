@@ -38,8 +38,6 @@ except Exception as e:
 app = Flask(__name__)
 register_submit_button_upload(app)
 
-import sqlite3
-
 DB_PATH = "/mnt/data/questions_answers.db"
 
 def init_question_db():
@@ -59,8 +57,6 @@ def init_question_db():
 
 # Initialize on startup
 init_question_db()
-
-
 
 # 🤖 Updated endpoint to call the three AI clients instead of using dummy code
 @app.route("/api/process", methods=["POST"])
