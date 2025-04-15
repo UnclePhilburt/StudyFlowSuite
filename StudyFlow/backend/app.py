@@ -83,35 +83,43 @@ def process_data():
             debug_log("❌ No JSON provided")
             return jsonify({"error": "No JSON provided"}), 400
 
-        # Call the function that invokes all three AI clients and returns the chosen answer
-        result = triple_call_ai_api_json_final(ocr_json)
-        # Normalize question text for saving
         question_text = ocr_json.get("question", "").strip()
+        if not question_text:
+            debug_log("❌ No question found in input")
+            return jsonify({"error": "No question text provided"}), 400
+
+        # 🧠 Check DB for exact match
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute("SELECT answer, count FROM qa_pairs WHERE question = ?", (question_text,))
+        row = c.fetchone()
+
+        if row:
+            saved_answer, current_count = row
+            c.execute("UPDATE qa_pairs SET count = ? WHERE question = ?", (current_count + 1, question_text))
+            conn.commit()
+            conn.close()
+            debug_log(f"✅ Found cached answer: '{saved_answer}'")
+            return jsonify({"result": saved_answer, "source": "cache"})
+
+        # 🧠 If not in DB, run AI
+        result = triple_call_ai_api_json_final(ocr_json)
         chosen_index = str(result)
         answers = ocr_json.get("answers", {})
         chosen_answer = answers.get(chosen_index, {}).get("text", "").strip()
 
         if question_text and chosen_answer:
-            try:
-                conn = sqlite3.connect(DB_PATH)
-                c = conn.cursor()
-                # Try updating count first
-                c.execute("SELECT count FROM qa_pairs WHERE question = ?", (question_text,))
-                row = c.fetchone()
-                if row:
-                    c.execute("UPDATE qa_pairs SET count = count + 1 WHERE question = ?", (question_text,))
-                else:
-                    c.execute("INSERT INTO qa_pairs (question, answer, count) VALUES (?, ?, 1)", (question_text, chosen_answer))
-                conn.commit()
-                conn.close()
-                debug_log(f"✅ Saved Q&A to database: '{question_text[:60]}...' → '{chosen_answer}'")
-            except Exception as e:
-                debug_log(f"❌ Failed to save Q&A: {e}")
+            c.execute("INSERT INTO qa_pairs (question, answer, count) VALUES (?, ?, 1)", (question_text, chosen_answer))
+            conn.commit()
+            debug_log(f"✅ Added new Q&A to DB: '{question_text[:60]}...' → '{chosen_answer}'")
 
-        return jsonify({"result": result})
+        conn.close()
+        return jsonify({"result": result, "source": "ai"})
+
     except Exception as e:
         debug_log(f"🔥 Error in /api/process: {e}")
         return jsonify({"error": str(e)}), 500
+
 
 # ➕ NEW: DeepFlow Quiz Question Endpoint
 @app.route("/api/deepflow_question", methods=["POST"])
