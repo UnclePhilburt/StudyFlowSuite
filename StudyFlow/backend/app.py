@@ -99,6 +99,9 @@ def process_data():
             c.execute("UPDATE qa_pairs SET count = ? WHERE question = ?", (current_count + 1, question_text))
             conn.commit()
             conn.close()
+            debug_log(f"📦 Using cached answer from DB")
+            debug_log(f"✅ Q: {question_text[:100]}")
+            debug_log(f"✅ A: {saved_answer}")
             debug_log(f"✅ Found cached answer: '{saved_answer}'")
             return jsonify({"result": saved_answer, "source": "cache"})
 
