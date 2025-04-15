@@ -1,0 +1,49 @@
+services:
+  - type: web
+    name: studyflow-web
+    runtime: python
+    region: ohio
+    plan: standard
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn app:app -k gevent --bind 0.0.0.0:10000 --workers 1"
+    envVars:
+      - key: CELERY_BROKER_URL
+        fromService:
+          name: studyflow-redis
+          type: redis
+          property: connectionString
+
+  - type: worker
+    name: studyflow-celery-worker
+    runtime: python
+    region: ohio
+    plan: standard
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "celery --app=StudyFlow.backend.tasks worker --loglevel=info --concurrency=2"
+    envVars:
+      - key: CELERY_BROKER_URL
+        fromService:
+          name: studyflow-redis
+          type: redis
+          property: connectionString
+
+  - type: web
+    name: studyflow-flower
+    runtime: python
+    region: ohio
+    plan: free
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "celery --app=StudyFlow.backend.tasks flower --loglevel=info --port=10001"
+    envVars:
+      - key: CELERY_BROKER_URL
+        fromService:
+          name: studyflow-redis
+          type: redis
+          property: connectionString
+
+  - type: redis
+    name: studyflow-redis
+    region: ohio
+    plan: starter
+    maxmemoryPolicy: noeviction
+    ipAllowList: []  # allow internal connections only
