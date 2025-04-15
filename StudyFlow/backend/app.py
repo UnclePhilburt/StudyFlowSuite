@@ -9,6 +9,7 @@ import openai
 import re
 import cv2
 import numpy as np
+import sqlite3
 
 from StudyFlow.backend.image_processing import preprocess_image
 from StudyFlow.config import TESSERACT_PATH
@@ -36,6 +37,29 @@ except Exception as e:
 
 app = Flask(__name__)
 register_submit_button_upload(app)
+
+import sqlite3
+
+DB_PATH = "/mnt/data/questions_answers.db"
+
+def init_question_db():
+    os.makedirs("/mnt/data", exist_ok=True)
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS qa_pairs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            question TEXT UNIQUE,
+            answer TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+# Initialize on startup
+init_question_db()
+
 
 
 # 🤖 Updated endpoint to call the three AI clients instead of using dummy code
