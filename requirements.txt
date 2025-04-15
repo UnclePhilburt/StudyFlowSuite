@@ -1,0 +1,17 @@
+# requirements.txt
+Flask
+gunicorn
+gevent
+openai
+anthropic
+cohere
+python-dotenv
+Pillow
+openai==0.28
+pytesseract
+opencv-python-headless
+scikit-image
+rapidfuzz
+imagehash
+celery
+redis
