@@ -10,4 +10,5 @@ pytesseract
 opencv-python-headless
 scikit-image
 rapidfuzz
+imagehash
 
