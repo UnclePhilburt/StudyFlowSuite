@@ -73,6 +73,23 @@ def process_data():
 
         # Call the function that invokes all three AI clients and returns the chosen answer
         result = triple_call_ai_api_json_final(ocr_json)
+        # Normalize question text for saving
+        question_text = ocr_json.get("question", "").strip()
+        chosen_index = str(result)
+        answers = ocr_json.get("answers", {})
+        chosen_answer = answers.get(chosen_index, {}).get("text", "").strip()
+
+        if question_text and chosen_answer:
+            try:
+                conn = sqlite3.connect(DB_PATH)
+                c = conn.cursor()
+                c.execute("INSERT OR IGNORE INTO qa_pairs (question, answer) VALUES (?, ?)", (question_text, chosen_answer))
+                conn.commit()
+                conn.close()
+                debug_log(f"✅ Saved Q&A to database: '{question_text[:60]}...' → '{chosen_answer}'")
+            except Exception as e:
+                debug_log(f"❌ Failed to save Q&A: {e}")
+
         return jsonify({"result": result})
     except Exception as e:
         debug_log(f"🔥 Error in /api/process: {e}")
