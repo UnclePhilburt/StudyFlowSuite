@@ -11,4 +11,5 @@ opencv-python-headless
 scikit-image
 rapidfuzz
 imagehash
+pip install gunicorn gevent
 
