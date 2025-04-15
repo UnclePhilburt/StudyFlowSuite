@@ -3,7 +3,6 @@ services:
     name: StudyFlowSuite-1
     runtime: docker
     dockerfilePath: ./Dockerfile
-    region: ohio
     plan: standard
     disk:
       name: data-disk
@@ -22,7 +21,6 @@ services:
     name: studyflow-celery-worker
     runtime: docker
     dockerfilePath: ./Dockerfile
-    region: ohio
     plan: standard
     disk:
       name: data-disk
@@ -41,7 +39,6 @@ services:
     name: studyflow-flower
     runtime: docker
     dockerfilePath: ./Dockerfile
-    region: ohio
     plan: standard
     envVars:
       - key: ROLE
@@ -54,7 +51,6 @@ services:
 
   - type: redis
     name: studyflow-redis
-    region: ohio
     plan: standard
     maxmemoryPolicy: noeviction
     ipAllowList: []  # internal only
