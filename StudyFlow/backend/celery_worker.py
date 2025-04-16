@@ -9,5 +9,5 @@ celery_app = Celery(
 )
 
 celery_app.conf.task_routes = {
-    "StudyFlow.backend.tasks.process_question_async": {"queue": "default"},
+    "StudyFlow.backend.tasks.process_question_async": {"queue": "celery"},
 }
