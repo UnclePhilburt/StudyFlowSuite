@@ -4,6 +4,7 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile
     plan: standard
+    startCommand: "gunicorn StudyFlow.backend.app:app -k gevent --bind 0.0.0.0:10000"
     disk:
       name: data-disk
       mountPath: /mnt/data
@@ -22,6 +23,7 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile
     plan: standard
+    startCommand: "celery --app StudyFlow.backend.tasks worker --loglevel=info --concurrency=4"
     disk:
       name: data-disk
       mountPath: /mnt/data
@@ -40,6 +42,7 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile
     plan: standard
+    startCommand: "celery --app StudyFlow.backend.tasks flower --loglevel=info"
     envVars:
       - key: ROLE
         value: flower
