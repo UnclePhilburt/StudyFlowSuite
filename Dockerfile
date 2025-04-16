@@ -21,6 +21,14 @@ COPY . /app
 ENV TESSERACT_PATH=/usr/bin/tesseract
 ENV PYTHONPATH=/app
 
-# Default command for local testing.
-# This command will be overridden by Render's startCommand.
-CMD ["gunicorn", "StudyFlow.backend.app:app", "-k", "gevent", "--bind", "0.0.0.0:10000", "--workers", "1"]
+# Use a conditional CMD:
+# - If ROLE is "worker", run the Celery worker.
+# - If ROLE is "flower", run Flower.
+# - Otherwise (or if ROLE is not set), run the web server.
+CMD if [ "$ROLE" = "worker" ]; then \
+      celery --app StudyFlow.backend.tasks worker --loglevel info --concurrency 4; \
+    elif [ "$ROLE" = "flower" ]; then \
+      celery flower --app StudyFlow.backend.tasks --loglevel info; \
+    else \
+      gunicorn StudyFlow.backend.app:app -k gevent --bind 0.0.0.0:10000 --workers 1; \
+    fi
