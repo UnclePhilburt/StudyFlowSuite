@@ -1,4 +1,10 @@
 services:
+  - type: redis
+    name: studyflow-redis
+    ipAllowList:
+      - source: 0.0.0.0/0
+        description: Allow all
+
   - type: web
     name: studyflowsuite-1
     env: python
@@ -7,7 +13,12 @@ services:
     envVars:
       - key: REDIS_URL
         fromService:
-          name: studyflow-redis  # ✅ Correct Redis service name
+          name: studyflow-redis
+          type: redis
+          property: connectionString
+      - key: CELERY_BROKER_URL
+        fromService:
+          name: studyflow-redis
           type: redis
           property: connectionString
       - key: OPENAI_API_KEY
@@ -17,7 +28,7 @@ services:
       - key: COHERE_API_KEY
         sync: false
       - key: ROLE
-        sync: false
+        value: web
 
   - type: worker
     name: studyflow-worker
@@ -27,7 +38,12 @@ services:
     envVars:
       - key: REDIS_URL
         fromService:
-          name: studyflow-redis  # ✅ Hooked here too
+          name: studyflow-redis
+          type: redis
+          property: connectionString
+      - key: CELERY_BROKER_URL
+        fromService:
+          name: studyflow-redis
           type: redis
           property: connectionString
       - key: OPENAI_API_KEY
@@ -37,7 +53,25 @@ services:
       - key: COHERE_API_KEY
         sync: false
       - key: ROLE
-        sync: false
+        value: worker
 
-  - type: redis
-    name: studyflow-redis  # ✅ Matches exactly
+  - type: worker
+    name: flower
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "celery -A StudyFlow.backend.tasks flower --port=$PORT"
+    envVars:
+      - key: REDIS_URL
+        fromService:
+          name: studyflow-redis
+          type: redis
+          property: connectionString
+      - key: CELERY_BROKER_URL
+        fromService:
+          name: studyflow-redis
+          type: redis
+          property: connectionString
+      - key: PORT
+        value: 10000
+      - key: ROLE
+        value: flower
