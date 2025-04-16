@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory, render_template_string
 from PIL import Image
 from io import BytesIO
 import pytesseract
@@ -10,14 +10,13 @@ import re
 import cv2
 import numpy as np
 import sqlite3
+import traceback
 
 from StudyFlow.backend.image_processing import preprocess_image
 from StudyFlow.config import TESSERACT_PATH
 from StudyFlow.logging_utils import debug_log
 from StudyFlow.backend.submit_button_storage import register_submit_button_upload
-from StudyFlow.backend.tasks import process_question_async
-from StudyFlow.backend.tasks import celery_app
-
+from StudyFlow.backend.tasks import process_question_async, celery_app
 
 # Import the triple-call function for the AI clients
 from StudyFlow.backend.ai_manager import triple_call_ai_api_json_final
@@ -35,7 +34,7 @@ try:
     version_output = subprocess.check_output([TESSERACT_PATH, "--version"]).decode("utf-8")
     debug_log("✅ Tesseract version output:\n" + version_output)
 except Exception as e:
-    debug_log("❌ Failed to call Tesseract: " + str(e))
+    debug_log("❌ Failed to call Tesseract: " + str(e) + "\n" + traceback.format_exc())
 
 app = Flask(__name__)
 register_submit_button_upload(app)
@@ -70,7 +69,6 @@ def add_count_column_if_needed():
             print("ℹ️ 'count' column already exists.")
         else:
             print(f"❌ Error adding 'count' column: {e}")
-
 
 # Initialize on startup
 init_question_db()
@@ -110,7 +108,6 @@ def process_data():
         task = process_question_async.delay(ocr_json)
         conn.close()
         debug_log("🚀 Queued async AI task")
-
         return jsonify({
             "status": "processing",
             "message": "Question sent for async processing",
@@ -118,11 +115,9 @@ def process_data():
         })
 
     except Exception as e:
-        debug_log(f"🔥 Error in /api/process: {e}")
+        debug_log(f"🔥 Error in /api/process: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
-
-# ➕ NEW: DeepFlow Quiz Question Endpoint
 @app.route("/api/deepflow_question", methods=["POST"])
 def deepflow_question():
     try:
@@ -141,10 +136,9 @@ def deepflow_question():
         return jsonify(question_data), 200
 
     except Exception as e:
-        debug_log(f"🔥 Error in /api/deepflow_question: {e}")
+        debug_log(f"🔥 Error in /api/deepflow_question: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
-# 👁️ OCR endpoint that handles image upload and returns extracted text and mapping
 @app.route("/ocr", methods=["POST"])
 def ocr_endpoint():
     debug_log("🔍 /ocr endpoint hit")
@@ -162,7 +156,7 @@ def ocr_endpoint():
             processed = preprocess_image(image)
             debug_log("🛠️ Image preprocessed successfully")
         except Exception as pe:
-            debug_log(f"⚠️ preprocess_image failed: {pe}")
+            debug_log(f"⚠️ preprocess_image failed: {pe}\n{traceback.format_exc()}")
             return jsonify({"error": f"preprocess_image failed: {pe}"}), 500
 
         # Perform OCR using Tesseract
@@ -195,10 +189,9 @@ def ocr_endpoint():
         tagged_text = " ".join([f"[{k}] {v['text']}" for k, v in mapping.items()])
         return jsonify({"ocr_text": tagged_text, "mapping": mapping})
     except Exception as e:
-        debug_log(f"🔥 OCR processing failed: {e}")
+        debug_log(f"🔥 OCR processing failed: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
-# 🤖 OpenAI Layout Structuring endpoint
 @app.route("/api/layout", methods=["POST"])
 def layout():
     data = request.get_json()
@@ -219,11 +212,9 @@ def layout():
         debug_log("✅ /api/layout: Structured data returned successfully")
         return jsonify({"structured_ai": structured}), 200
     except Exception as e:
-        debug_log(f"🔥 /api/layout error: {str(e)}")
+        debug_log(f"🔥 /api/layout error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
-
-# 🧠 Fallback Structure Generator
 @app.route("/api/fallback", methods=["POST"])
 def fallback():
     try:
@@ -238,10 +229,9 @@ def fallback():
         result = fallback_structure(mapping, expected_answers)
         return jsonify(result), 200
     except Exception as e:
-        debug_log(f"🔥 /api/fallback error: {str(e)}")
+        debug_log(f"🔥 /api/fallback error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
-# 🔀 Merge AI + Fallback JSON
 @app.route("/api/merge", methods=["POST"])
 def merge():
     try:
@@ -254,10 +244,9 @@ def merge():
         merged = merge_ai_and_fallback(ai_json, fallback_json, mapping)
         return jsonify(merged), 200
     except Exception as e:
-        debug_log(f"🔥 /api/merge error: {str(e)}")
+        debug_log(f"🔥 /api/merge error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
-# 🧠 OpenAI OCR Candidate Selection
 @app.route("/api/select-best-ocr", methods=["POST"])
 def select_best_ocr():
     data = request.get_json()
@@ -286,22 +275,25 @@ def select_best_ocr():
         debug_log(f"✅ /api/select-best-ocr: AI chose candidate {chosen}")
         return jsonify({"chosen_index": chosen})
     except Exception as e:
-        debug_log(f"🔥 /api/select-best-ocr error: {str(e)}")
+        debug_log(f"🔥 /api/select-best-ocr error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
-# 🪵 Endpoint for logging frontend messages to the backend
 @app.route("/api/log", methods=["POST"])
 def receive_log():
-    data = request.get_json()
-    message = data.get("message", "")
-    if message:
-        print(message)  # Always show in server logs
-        try:
-            with open("backend_log.txt", "a", encoding="utf-8") as f:
-                f.write(message + "\n")
-        except Exception as e:
-            print(f"[Logging Error] Could not write to file: {e}")
-    return jsonify({"status": "ok"}), 200
+    try:
+        data = request.get_json()
+        message = data.get("message", "")
+        if message:
+            print(message)  # Always show in server logs
+            try:
+                with open("backend_log.txt", "a", encoding="utf-8") as f:
+                    f.write(message + "\n")
+            except Exception as e:
+                print(f"[Logging Error] Could not write to file: {e}\n{traceback.format_exc()}")
+        return jsonify({"status": "ok"}), 200
+    except Exception as e:
+        debug_log(f"🔥 /api/log error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/api/explanation", methods=["POST"])
 def generate_explanation():
@@ -327,6 +319,7 @@ def generate_explanation():
         explanation = response['choices'][0]['message']['content'].strip()
         return jsonify({"explanation": explanation})
     except Exception as e:
+        debug_log(f"🔥 /api/explanation error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": f"Failed to generate explanation: {e}"}), 500
 
 @app.route("/api/focusflow", methods=["POST"])
@@ -339,7 +332,6 @@ def api_focusflow():
 
         region_tuple = tuple(region)
 
-        # Use existing backend utility
         from StudyFlow.backend.screen_grab import grab_screen_region
         image = grab_screen_region(region_tuple)
 
@@ -400,105 +392,114 @@ def api_focusflow():
             "tagged_text": tagged_text
         }), 200
     except Exception as e:
+        debug_log(f"🔥 /api/focusflow error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
-
-# ➕ NEW: Find Button Endpoint with User-Supplied Template
 @app.route("/api/find_button", methods=["POST"])
 def find_button():
-    # Verify the screenshot file is provided.
-    if "image" not in request.files:
-        return jsonify({"error": "No screenshot image provided"}), 400
+    try:
+        # Verify the screenshot file is provided.
+        if "image" not in request.files:
+            return jsonify({"error": "No screenshot image provided"}), 400
 
-    screenshot_file = request.files["image"]
-    npimg = np.frombuffer(screenshot_file.read(), np.uint8)
-    img = cv2.imdecode(npimg, cv2.IMREAD_GRAYSCALE)
-    if img is None:
-        return jsonify({"error": "Screenshot image decoding failed."}), 400
+        screenshot_file = request.files["image"]
+        npimg = np.frombuffer(screenshot_file.read(), np.uint8)
+        img = cv2.imdecode(npimg, cv2.IMREAD_GRAYSCALE)
+        if img is None:
+            return jsonify({"error": "Screenshot image decoding failed."}), 400
 
-    # Verify the user-supplied template is provided.
-    if "template" not in request.files:
-        return jsonify({"error": "No template image provided"}), 400
+        # Verify the user-supplied template is provided.
+        if "template" not in request.files:
+            return jsonify({"error": "No template image provided"}), 400
 
-    template_file = request.files["template"]
-    t_np = np.frombuffer(template_file.read(), np.uint8)
-    template = cv2.imdecode(t_np, cv2.IMREAD_GRAYSCALE)
-    if template is None:
-        return jsonify({"error": "Template image decoding failed."}), 400
+        template_file = request.files["template"]
+        t_np = np.frombuffer(template_file.read(), np.uint8)
+        template = cv2.imdecode(t_np, cv2.IMREAD_GRAYSCALE)
+        if template is None:
+            return jsonify({"error": "Template image decoding failed."}), 400
 
-    best_val = 0
-    best_loc = None
-    best_temp_shape = None
-    scales = np.linspace(0.8, 1.2, 10)
-    for scale in scales:
-        resized_template = cv2.resize(template, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
-        result = cv2.matchTemplate(img, resized_template, cv2.TM_CCOEFF_NORMED)
-        _, max_val, _, max_loc = cv2.minMaxLoc(result)
-        if max_val > best_val:
-            best_val = max_val
-            best_loc = max_loc
-            best_temp_shape = resized_template.shape
+        best_val = 0
+        best_loc = None
+        best_temp_shape = None
+        scales = np.linspace(0.8, 1.2, 10)
+        for scale in scales:
+            resized_template = cv2.resize(template, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+            result = cv2.matchTemplate(img, resized_template, cv2.TM_CCOEFF_NORMED)
+            _, max_val, _, max_loc = cv2.minMaxLoc(result)
+            if max_val > best_val:
+                best_val = max_val
+                best_loc = max_loc
+                best_temp_shape = resized_template.shape
 
-    threshold = 0.7
-    if best_val >= threshold and best_loc and best_temp_shape:
-        tH, tW = best_temp_shape
-        center_x = best_loc[0] + tW // 2
-        center_y = best_loc[1] + tH // 2
-        return jsonify({
-            "center_x": int(center_x),
-            "center_y": int(center_y),
-            "confidence": float(best_val)
-        }), 200
-    else:
-        return jsonify({"error": "Button not found", "confidence": best_val}), 404
-
-from flask import send_from_directory, render_template_string
+        threshold = 0.7
+        if best_val >= threshold and best_loc and best_temp_shape:
+            tH, tW = best_temp_shape
+            center_x = best_loc[0] + tW // 2
+            center_y = best_loc[1] + tH // 2
+            return jsonify({
+                "center_x": int(center_x),
+                "center_y": int(center_y),
+                "confidence": float(best_val)
+            }), 200
+        else:
+            return jsonify({"error": "Button not found", "confidence": best_val}), 404
+    except Exception as e:
+        debug_log(f"🔥 /api/find_button error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/admin/button-templates")
 def admin_view_button_templates():
-    templates_dir = "/mnt/data/button_templates"
-    metadata_path = os.path.join(templates_dir, "submit_template_index.json")
+    try:
+        templates_dir = "/mnt/data/button_templates"
+        metadata_path = os.path.join(templates_dir, "submit_template_index.json")
 
-    # Load metadata
-    metadata = {}
-    if os.path.exists(metadata_path):
-        with open(metadata_path, "r", encoding="utf-8") as f:
-            metadata = json.load(f)
+        # Load metadata
+        metadata = {}
+        if os.path.exists(metadata_path):
+            with open(metadata_path, "r", encoding="utf-8") as f:
+                metadata = json.load(f)
 
-    sorted_templates = sorted(metadata.items(), key=lambda x: -x[1].get("count", 0))
+        sorted_templates = sorted(metadata.items(), key=lambda x: -x[1].get("count", 0))
 
-    html = """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Submit Button Templates</title>
-        <style>
-            body { font-family: Arial; background: #f4f4f4; padding: 20px; }
-            .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; }
-            .item { background: #fff; padding: 10px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); text-align: center; }
-            .item img { max-width: 100%; border-radius: 6px; margin-bottom: 10px; }
-            h1 { text-align: center; }
-        </style>
-    </head>
-    <body>
-        <h1>Submit Button Templates</h1>
-        <div class="grid">
-            {% for filename, data in templates %}
-                <div class="item">
-                    <img src="/admin/button-image/{{ filename }}" alt="{{ filename }}">
-                    <div><strong>{{ filename }}</strong></div>
-                    <div>Matches: {{ data.get('count', 0) }}</div>
-                </div>
-            {% endfor %}
-        </div>
-    </body>
-    </html>
-    """
-    return render_template_string(html, templates=sorted_templates)
+        html = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Submit Button Templates</title>
+            <style>
+                body { font-family: Arial; background: #f4f4f4; padding: 20px; }
+                .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; }
+                .item { background: #fff; padding: 10px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); text-align: center; }
+                .item img { max-width: 100%; border-radius: 6px; margin-bottom: 10px; }
+                h1 { text-align: center; }
+            </style>
+        </head>
+        <body>
+            <h1>Submit Button Templates</h1>
+            <div class="grid">
+                {% for filename, data in templates %}
+                    <div class="item">
+                        <img src="/admin/button-image/{{ filename }}" alt="{{ filename }}">
+                        <div><strong>{{ filename }}</strong></div>
+                        <div>Matches: {{ data.get('count', 0) }}</div>
+                    </div>
+                {% endfor %}
+            </div>
+        </body>
+        </html>
+        """
+        return render_template_string(html, templates=sorted_templates)
+    except Exception as e:
+        debug_log(f"🔥 /admin/button-templates error: {e}\n{traceback.format_exc()}")
+        return f"<h1>Error:</h1><p>{e}</p>"
 
 @app.route("/admin/button-image/<path:filename>")
 def serve_button_template(filename):
-    return send_from_directory("/mnt/data/button_templates", filename)
+    try:
+        return send_from_directory("/mnt/data/button_templates", filename)
+    except Exception as e:
+        debug_log(f"🔥 /admin/button-image error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/admin/view-qa")
 def view_qa():
@@ -508,32 +509,35 @@ def view_qa():
         c.execute("SELECT question, answer, timestamp, count FROM qa_pairs ORDER BY count DESC")
         rows = c.fetchall()
         conn.close()
-
-        # Make it HTML so it's human-friendly
         html = "<h1>Stored Questions & Answers</h1><ul>"
         for q, a, t, count in rows:
             html += f"<li><b>Q:</b> {q}<br><b>A:</b> {a}<br><small>{t} | Count: {count}</small><br><br></li>"
         html += "</ul>"
         return html
     except Exception as e:
+        debug_log(f"🔥 /admin/view-qa error: {e}\n{traceback.format_exc()}")
         return f"<h1>Error:</h1><p>{e}</p>"
 
 @app.route("/api/status/<task_id>")
 def get_task_status(task_id):
-    task = celery_app.AsyncResult(task_id)
-    
-    if task.state == "PENDING":
-        return jsonify({"status": "pending"}), 202
-    elif task.state == "SUCCESS":
-        return jsonify({"status": "complete", "result": task.result}), 200
-    elif task.state == "FAILURE":
-        return jsonify({"status": "failed"}), 500
-    else:
-        return jsonify({"status": task.state}), 202
-
-
+    try:
+        task = celery_app.AsyncResult(task_id)
+        if task.state == "PENDING":
+            return jsonify({"status": "pending"}), 202
+        elif task.state == "SUCCESS":
+            return jsonify({"status": "complete", "result": task.result}), 200
+        elif task.state == "FAILURE":
+            return jsonify({"status": "failed"}), 500
+        else:
+            return jsonify({"status": task.state}), 202
+    except Exception as e:
+        debug_log(f"🔥 /api/status error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
 
 # 🚀 Start the server when running directly
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    try:
+        port = int(os.environ.get("PORT", 5000))
+        app.run(host="0.0.0.0", port=port)
+    except Exception as e:
+        debug_log(f"🔥 Server startup error: {e}\n{traceback.format_exc()}")
