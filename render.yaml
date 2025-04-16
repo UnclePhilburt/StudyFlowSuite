@@ -1,66 +1,43 @@
 services:
-  - type: redis
-    name: studyflow-redis
-
   - type: web
     name: studyflowsuite-1
     env: python
     buildCommand: "pip install -r requirements.txt"
-    startCommand: "gunicorn -k gevent -b 0.0.0.0:$PORT StudyFlow.backend.app:app"
+    startCommand: "gunicorn -k gevent -w 1 StudyFlow.backend.app:app"
     envVars:
-      - key: ROLE
-        value: web
-      - key: CELERY_BROKER_URL
-        fromService:
-          name: studyflow-redis
-          type: redis
-          property: connectionString
       - key: REDIS_URL
         fromService:
-          name: studyflow-redis
+          name: studyflow-redis  # ✅ Correct Redis service name
           type: redis
           property: connectionString
       - key: OPENAI_API_KEY
         sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: COHERE_API_KEY
+        sync: false
+      - key: ROLE
+        sync: false
 
   - type: worker
-    name: celery-worker
+    name: studyflow-worker
     env: python
     buildCommand: "pip install -r requirements.txt"
     startCommand: "celery -A StudyFlow.backend.tasks worker --loglevel=info"
     envVars:
-      - key: ROLE
-        value: worker
-      - key: CELERY_BROKER_URL
-        fromService:
-          name: studyflow-redis
-          type: redis
-          property: connectionString
       - key: REDIS_URL
         fromService:
-          name: studyflow-redis
+          name: studyflow-redis  # ✅ Hooked here too
           type: redis
           property: connectionString
       - key: OPENAI_API_KEY
         sync: false
-
-  - type: worker
-    name: flower
-    env: python
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "celery -A StudyFlow.backend.tasks flower --port=$PORT"
-    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: COHERE_API_KEY
+        sync: false
       - key: ROLE
-        value: flower
-      - key: CELERY_BROKER_URL
-        fromService:
-          name: studyflow-redis
-          type: redis
-          property: connectionString
-      - key: REDIS_URL
-        fromService:
-          name: studyflow-redis
-          type: redis
-          property: connectionString
-      - key: PORT
-        value: 10000
+        sync: false
+
+  - type: redis
+    name: studyflow-redis  # ✅ Matches exactly
