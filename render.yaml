@@ -4,12 +4,13 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile
     plan: standard
-    startCommand: "gunicorn StudyFlow.backend.app:app -k gevent --bind 0.0.0.0:10000"
     disk:
       name: data-disk
       mountPath: /mnt/data
       sizeGB: 1
     envVars:
+      - key: ROLE
+        value: web
       - key: CELERY_BROKER_URL
         fromService:
           name: studyflow-redis
@@ -21,12 +22,13 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile
     plan: standard
-    startCommand: "celery --app StudyFlow.backend.tasks worker --loglevel=info --concurrency=4"
     disk:
       name: data-disk
       mountPath: /mnt/data
       sizeGB: 1
     envVars:
+      - key: ROLE
+        value: worker
       - key: CELERY_BROKER_URL
         fromService:
           name: studyflow-redis
@@ -38,8 +40,9 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile
     plan: standard
-    startCommand: "celery --app StudyFlow.backend.tasks flower --loglevel=info"
     envVars:
+      - key: ROLE
+        value: flower
       - key: CELERY_BROKER_URL
         fromService:
           name: studyflow-redis
