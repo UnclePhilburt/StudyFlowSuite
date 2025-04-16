@@ -19,11 +19,12 @@ def process_question_async(ocr_json):
             raise ValueError("AI function returned None.")
         
         # Convert the result to a string index to lookup answers.
+        answers = {str(k): v for k, v in ocr_json.get("answers", {}).items()}
         chosen_index = str(result)
-        answers = ocr_json.get("answers", {})
         chosen_answer = answers.get(chosen_index, {}).get("text", "").strip()
         if not chosen_answer:
             raise ValueError(f"Chosen answer text is empty for index {chosen_index}.")
+
 
         # Insert or update the question-answer pair in the database.
         conn = sqlite3.connect(DB_PATH)
