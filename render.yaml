@@ -3,10 +3,10 @@ services:
     name: studyflow-redis
     ipAllowList:
       - source: 0.0.0.0/0
-        description: Allow all
+        description: Allow all services to access Redis
 
   - type: web
-    name: studyflowsuite-1
+    name: StudyFlowSuite-1  # 💡 Use exact original name
     env: python
     buildCommand: "pip install -r requirements.txt"
     startCommand: "gunicorn -k gevent -w 1 StudyFlow.backend.app:app"
@@ -31,7 +31,7 @@ services:
         value: web
 
   - type: worker
-    name: studyflow-worker
+    name: studyflow-celery-worker  # 💡 Use exact original name
     env: python
     buildCommand: "pip install -r requirements.txt"
     startCommand: "celery -A StudyFlow.backend.tasks worker --loglevel=info"
@@ -56,7 +56,7 @@ services:
         value: worker
 
   - type: worker
-    name: flower
+    name: studyflow-flower  # 💡 Use exact original name
     env: python
     buildCommand: "pip install -r requirements.txt"
     startCommand: "celery -A StudyFlow.backend.tasks flower --port=$PORT"
@@ -71,7 +71,13 @@ services:
           name: studyflow-redis
           type: redis
           property: connectionString
-      - key: PORT
-        value: 10000
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: COHERE_API_KEY
+        sync: false
       - key: ROLE
         value: flower
+      - key: PORT
+        value: 10000
