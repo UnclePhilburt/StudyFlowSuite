@@ -107,7 +107,10 @@ def process_data():
             return jsonify({"result": saved_answer, "source": "cache"})
 
         # 🧠 If not in DB, queue async task to process with AI
+        # 🧠 If not in DB, queue async task to process with AI
+        debug_log("📨 About to queue async task...")
         task = process_question_async.delay(ocr_json)
+        debug_log(f"✅ Task queued: {task.id}")
         conn.close()
         debug_log("🚀 Queued async AI task")
         return jsonify({
@@ -115,6 +118,7 @@ def process_data():
             "message": "Question sent for async processing",
             "task_id": task.id
         })
+
 
     except Exception as e:
         debug_log(f"🔥 Error in /api/process: {e}\n{traceback.format_exc()}")
