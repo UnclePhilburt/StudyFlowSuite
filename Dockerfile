@@ -21,13 +21,6 @@ COPY . /app
 ENV TESSERACT_PATH=/usr/bin/tesseract
 ENV PYTHONPATH=/app
 
-# 👇 This decides what to run based on ENV var ROLE
-CMD if [ "$ROLE" = "web" ]; then \
-      gunicorn StudyFlow.backend.app:app -k gevent --bind 0.0.0.0:10000 --workers 1; \
-    elif [ "$ROLE" = "worker" ]; then \
-      celery --app StudyFlow.backend.tasks worker --loglevel info --concurrency 4; \
-    elif [ "$ROLE" = "flower" ]; then \
-      celery flower --app StudyFlow.backend.tasks --loglevel info; \
-    else \
-      echo "❌ Unknown ROLE: $ROLE" && exit 1; \
-    fi
+# Default command for local testing.
+# This command will be overridden by Render's startCommand.
+CMD ["gunicorn", "StudyFlow.backend.app:app", "-k", "gevent", "--bind", "0.0.0.0:10000", "--workers", "1"]
