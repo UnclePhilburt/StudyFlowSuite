@@ -1,13 +1,12 @@
 services:
+  - type: redis
+    name: studyflow-redis
+
   - type: web
-    name: StudyFlowSuite-1
-    runtime: docker
-    dockerfilePath: ./Dockerfile
-    plan: standard
-    disk:
-      name: data-disk
-      mountPath: /mnt/data
-      sizeGB: 1
+    name: studyflowsuite-1
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn -k gevent -b 0.0.0.0:$PORT StudyFlow.backend.app:app"
     envVars:
       - key: ROLE
         value: web
@@ -16,16 +15,19 @@ services:
           name: studyflow-redis
           type: redis
           property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: studyflow-redis
+          type: redis
+          property: connectionString
+      - key: OPENAI_API_KEY
+        sync: false
 
   - type: worker
-    name: studyflow-celery-worker
-    runtime: docker
-    dockerfilePath: ./Dockerfile
-    plan: standard
-    disk:
-      name: data-disk
-      mountPath: /mnt/data
-      sizeGB: 1
+    name: celery-worker
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "celery -A StudyFlow.backend.tasks worker --loglevel=info"
     envVars:
       - key: ROLE
         value: worker
@@ -34,12 +36,19 @@ services:
           name: studyflow-redis
           type: redis
           property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: studyflow-redis
+          type: redis
+          property: connectionString
+      - key: OPENAI_API_KEY
+        sync: false
 
-  - type: web
-    name: studyflow-flower
-    runtime: docker
-    dockerfilePath: ./Dockerfile
-    plan: standard
+  - type: worker
+    name: flower
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "celery -A StudyFlow.backend.tasks flower --port=$PORT"
     envVars:
       - key: ROLE
         value: flower
@@ -48,9 +57,10 @@ services:
           name: studyflow-redis
           type: redis
           property: connectionString
-
-  - type: redis
-    name: studyflow-redis
-    plan: standard
-    maxmemoryPolicy: noeviction
-    ipAllowList: []  # internal only
+      - key: REDIS_URL
+        fromService:
+          name: studyflow-redis
+          type: redis
+          property: connectionString
+      - key: PORT
+        value: 10000
