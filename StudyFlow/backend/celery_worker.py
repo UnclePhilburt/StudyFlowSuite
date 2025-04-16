@@ -1,11 +1,15 @@
 from celery import Celery
 import os
 
+# Get Redis URL from environment variable
+redis_url = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
+print(f"🔌 Connecting to Redis at: {redis_url}")  # Optional debug log
+
 # Set up Celery app
 celery_app = Celery(
     "studyflow_tasks",
-    broker=os.getenv("REDIS_URL", "redis://localhost:6379/0"),
-    backend=os.getenv("REDIS_URL", "redis://localhost:6379/0")
+    broker=redis_url,
+    backend=redis_url
 )
 
 # Ensure task routes match the queue your worker listens to
