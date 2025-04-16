@@ -1,4 +1,9 @@
 services:
+  - type: redis
+    name: studyflow-redis
+    plan: standard
+    ipAllowList: []
+
   - type: web
     name: StudyFlowSuite-1
     runtime: docker
@@ -15,28 +20,17 @@ services:
         fromService:
           name: studyflow-redis
           type: redis
-          property: connectionString
+          property: internalConnectionString
       - key: REDIS_URL
         fromService:
           name: studyflow-redis
           type: redis
-          property: connectionString
-      - key: OPENAI_API_KEY
-        sync: false
-      - key: ANTHROPIC_API_KEY
-        sync: false
-      - key: COHERE_API_KEY
-        sync: false
+          property: internalConnectionString
+      # ... the rest unchanged
 
   - type: worker
     name: studyflow-celery-worker
-    runtime: docker
-    dockerfilePath: ./Dockerfile
-    plan: standard
-    disk:
-      name: data-disk
-      mountPath: /mnt/data
-      sizeGB: 1
+    # …
     envVars:
       - key: ROLE
         value: worker
@@ -44,24 +38,17 @@ services:
         fromService:
           name: studyflow-redis
           type: redis
-          property: connectionString
+          property: internalConnectionString
       - key: REDIS_URL
         fromService:
           name: studyflow-redis
           type: redis
-          property: connectionString
-      - key: OPENAI_API_KEY
-        sync: false
-      - key: ANTHROPIC_API_KEY
-        sync: false
-      - key: COHERE_API_KEY
-        sync: false
+          property: internalConnectionString
+      # …
 
   - type: web
     name: studyflow-flower
-    runtime: docker
-    dockerfilePath: ./Dockerfile
-    plan: standard
+    # …
     envVars:
       - key: ROLE
         value: flower
@@ -69,15 +56,9 @@ services:
         fromService:
           name: studyflow-redis
           type: redis
-          property: connectionString
+          property: internalConnectionString
       - key: REDIS_URL
         fromService:
           name: studyflow-redis
           type: redis
-          property: connectionString
-
-  - type: redis
-    name: studyflow-redis
-    plan: standard
-    maxmemoryPolicy: noeviction
-    ipAllowList: []  # ✅ Required so services can connect internally
+          property: internalConnectionString
