@@ -1,47 +1,22 @@
 services:
-  - type: redis
-    name: studyflow-redis
-    ipAllowList:
-      - source: 0.0.0.0/0
-        description: Allow all services to access Redis
-
   - type: web
-    name: StudyFlowSuite-1  # 💡 Use exact original name
-    env: python
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "gunicorn -k gevent -w 1 StudyFlow.backend.app:app"
+    name: StudyFlowSuite-1
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: standard
+    disk:
+      name: data-disk
+      mountPath: /mnt/data
+      sizeGB: 1
     envVars:
-      - key: REDIS_URL
-        fromService:
-          name: studyflow-redis
-          type: redis
-          property: connectionString
-      - key: CELERY_BROKER_URL
-        fromService:
-          name: studyflow-redis
-          type: redis
-          property: connectionString
-      - key: OPENAI_API_KEY
-        sync: false
-      - key: ANTHROPIC_API_KEY
-        sync: false
-      - key: COHERE_API_KEY
-        sync: false
       - key: ROLE
         value: web
-
-  - type: worker
-    name: studyflow-celery-worker  # 💡 Use exact original name
-    env: python
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "celery -A StudyFlow.backend.tasks worker --loglevel=info"
-    envVars:
-      - key: REDIS_URL
+      - key: CELERY_BROKER_URL
         fromService:
           name: studyflow-redis
           type: redis
           property: connectionString
-      - key: CELERY_BROKER_URL
+      - key: REDIS_URL
         fromService:
           name: studyflow-redis
           type: redis
@@ -52,21 +27,25 @@ services:
         sync: false
       - key: COHERE_API_KEY
         sync: false
+
+  - type: worker
+    name: studyflow-celery-worker
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: standard
+    disk:
+      name: data-disk
+      mountPath: /mnt/data
+      sizeGB: 1
+    envVars:
       - key: ROLE
         value: worker
-
-  - type: worker
-    name: studyflow-flower  # 💡 Use exact original name
-    env: python
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "celery -A StudyFlow.backend.tasks flower --port=$PORT"
-    envVars:
-      - key: REDIS_URL
+      - key: CELERY_BROKER_URL
         fromService:
           name: studyflow-redis
           type: redis
           property: connectionString
-      - key: CELERY_BROKER_URL
+      - key: REDIS_URL
         fromService:
           name: studyflow-redis
           type: redis
@@ -77,7 +56,28 @@ services:
         sync: false
       - key: COHERE_API_KEY
         sync: false
+
+  - type: web
+    name: studyflow-flower
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: standard
+    envVars:
       - key: ROLE
         value: flower
-      - key: PORT
-        value: 10000
+      - key: CELERY_BROKER_URL
+        fromService:
+          name: studyflow-redis
+          type: redis
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: studyflow-redis
+          type: redis
+          property: connectionString
+
+  - type: redis
+    name: studyflow-redis
+    plan: standard
+    maxmemoryPolicy: noeviction
+    ipAllowList: []  # ✅ Allows internal-only access
