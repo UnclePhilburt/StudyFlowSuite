@@ -1,6 +1,8 @@
 from celery import Celery
 import os
 
+print("🔍 WEB sees CELERY_BROKER_URL =", os.getenv("CELERY_BROKER_URL"))
+
 # Get Redis URL from environment variable
 redis_url = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
 print(f"🔌 Connecting to Redis at: {redis_url}")  # Optional debug log
