@@ -80,4 +80,4 @@ services:
     name: studyflow-redis
     plan: standard
     maxmemoryPolicy: noeviction
-    ipAllowList: []  # ✅ Allows internal-only access
+    ipAllowList: []  # ✅ Required so services can connect internally
