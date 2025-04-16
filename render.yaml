@@ -15,7 +15,89 @@ services:
       sizeGB: 1
     envVars:
       - key: ROLE
+        value: webservices:
+  - type: redis
+    name: studyflow-redis
+    plan: standard
+    ipAllowList: []
+
+  - type: web
+    name: StudyFlowSuite-1
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: standard
+    disk:
+      name: data-disk
+      mountPath: /mnt/data
+      sizeGB: 1
+    envVars:
+      - key: ROLE
         value: web
+      - key: CELERY_BROKER_URL
+        fromService:
+          name: studyflow-redis
+          type: redis
+          property: internalConnectionString
+      - key: REDIS_URL
+        fromService:
+          name: studyflow-redis
+          type: redis
+          property: internalConnectionString
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: COHERE_API_KEY
+        sync: false
+
+  - type: worker
+    name: studyflow-celery-worker
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: standard
+    disk:
+      name: data-disk
+      mountPath: /mnt/data
+      sizeGB: 1
+    envVars:
+      - key: ROLE
+        value: worker
+      - key: CELERY_BROKER_URL
+        fromService:
+          name: studyflow-redis
+          type: redis
+          property: internalConnectionString
+      - key: REDIS_URL
+        fromService:
+          name: studyflow-redis
+          type: redis
+          property: internalConnectionString
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: COHERE_API_KEY
+        sync: false
+
+  - type: web
+    name: studyflow-flower
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: standard
+    envVars:
+      - key: ROLE
+        value: flower
+      - key: CELERY_BROKER_URL
+        fromService:
+          name: studyflow-redis
+          type: redis
+          property: internalConnectionString
+      - key: REDIS_URL
+        fromService:
+          name: studyflow-redis
+          type: redis
+          property: internalConnectionString
+
       - key: CELERY_BROKER_URL
         fromService:
           name: studyflow-redis
