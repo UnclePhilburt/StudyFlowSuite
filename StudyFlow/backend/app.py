@@ -17,6 +17,8 @@ from StudyFlow.config import TESSERACT_PATH
 from StudyFlow.logging_utils import debug_log
 from StudyFlow.backend.submit_button_storage import register_submit_button_upload
 from StudyFlow.backend.tasks import process_question_async, celery_app
+from StudyFlow.backend import tasks  # 🧠 This registers the task with Celery
+
 
 # Import the triple-call function for the AI clients
 from StudyFlow.backend.ai_manager import triple_call_ai_api_json_final
