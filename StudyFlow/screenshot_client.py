@@ -1,6 +1,7 @@
 import requests
 import pyautogui
 from io import BytesIO
+import os
 
 def capture_and_send_screenshot(region):
     """
@@ -20,7 +21,7 @@ def capture_and_send_screenshot(region):
     image_bytes = buf.getvalue()
 
     # 3. Send the image bytes to your cloud OCR service
-    url = "https://your-cool-service.onrender.com/ocr"  # Replace with your actual endpoint URL
+    url = os.environ.get("BACKEND_URL", "https://studyflowsuite.onrender.com") + "/ocr"  # Replace with your actual endpoint URL
     files = {"image": ("screenshot.png", image_bytes, "image/png")}
 
     response = requests.post(url, files=files)
