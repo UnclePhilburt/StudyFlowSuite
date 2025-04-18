@@ -48,6 +48,7 @@ def process_question_async(ocr_json):
                 (question_text,)
             )
         conn.commit()
+        print("✅ Wrote to DB:", question_text[:50], "→", chosen_answer[:50])
         conn.close()
         return result
 
