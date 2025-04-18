@@ -3,46 +3,62 @@ import sqlite3
 from celery import Celery
 from StudyFlow.backend.ai_manager import triple_call_ai_api_json_final
 
-celery_app = Celery("tasks", broker=os.environ.get("CELERY_BROKER_URL"))
+celery_app = Celery(
+    "tasks",
+    broker=os.getenv("CELERY_BROKER_URL"),
+    backend=os.getenv("CELERY_RESULT_BACKEND")
+)
 
 DB_PATH = "/mnt/data/questions_answers.db"
 
-def ensure_db_table():
+def init_db():
+    """Create the database and table if they don't exist."""
     conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("""
+    cursor = conn.cursor()
+    cursor.execute('''
         CREATE TABLE IF NOT EXISTS qa_pairs (
-            question TEXT PRIMARY KEY,
-            answer TEXT,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            question TEXT NOT NULL,
+            answers TEXT NOT NULL,
+            correct_answer TEXT NOT NULL,
             count INTEGER DEFAULT 1
         )
-    """)
+    ''')
+    cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_question ON qa_pairs(question)
+    ''')
     conn.commit()
     conn.close()
 
-def save_question_to_db(question: str, answer: str):
-    if not question or not answer:
-        return
-    ensure_db_table()
+init_db()
+
+def save_to_db(question, answers, correct_answer):
+    """Save a question and its answer to the database."""
     conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT count FROM qa_pairs WHERE question = ?", (question,))
-    row = c.fetchone()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT id, count FROM qa_pairs WHERE question = ?", (question,))
+    row = cursor.fetchone()
+
     if row:
-        c.execute("UPDATE qa_pairs SET count = count + 1 WHERE question = ?", (question,))
+        cursor.execute("UPDATE qa_pairs SET count = count + 1 WHERE id = ?", (row[0],))
     else:
-        c.execute("INSERT INTO qa_pairs (question, answer, count) VALUES (?, ?, 1)", (question, answer))
+        cursor.execute(
+            "INSERT INTO qa_pairs (question, answers, correct_answer) VALUES (?, ?, ?)",
+            (question, str(answers), correct_answer)
+        )
     conn.commit()
     conn.close()
 
-@celery_app.task
+@celery_app.task(name="process_question_async")
 def process_question_async(ocr_json):
-    try:
-        result = triple_call_ai_api_json_final(ocr_json)
-        if result and "question" in ocr_json and result.get("answer"):
-            question = ocr_json["question"]
-            answer = result["answer"]
-            save_question_to_db(question, answer)
-        return result
-    except Exception as e:
-        return {"error": str(e)}
+    question = ocr_json["question"]
+    answers = ocr_json["answers"]
+
+    result = triple_call_ai_api_json_final(ocr_json)
+    chosen_answer = result.get("chosen_answer")
+
+    if question and answers and chosen_answer:
+        save_to_db(question, answers, chosen_answer)
+
+    return result
