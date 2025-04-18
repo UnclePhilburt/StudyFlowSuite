@@ -62,8 +62,10 @@ def add_count_column_if_needed():
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
-        c.execute("ALTER TABLE qa_pairs ADD COLUMN count INTEGER DEFAULT 1")
-        conn.commit()
+        c.execute("SELECT question, answer, timestamp, count FROM qa_pairs ORDER BY count DESC")
+        rows = c.fetchall()
+        c.execute("SELECT COUNT(*), SUM(count) FROM qa_pairs")
+        total, total_count = c.fetchone()
         conn.close()
         print("✅ Added 'count' column to qa_pairs table.")
     except sqlite3.OperationalError as e:
@@ -523,11 +525,17 @@ def view_qa():
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
+
+        # Get all questions
         c.execute("SELECT question, answer, timestamp, count FROM qa_pairs ORDER BY count DESC")
         rows = c.fetchall()
-        conn.close()
+
+        # Get total stats
         c.execute("SELECT COUNT(*), SUM(count) FROM qa_pairs")
         total, total_count = c.fetchone()
+
+        conn.close()  # ✅ Now it's safe to close
+
         html = f"<h1>Stored Questions & Answers</h1><p>Total Questions: {total} | Total Attempts: {total_count}</p><ul>"
         for q, a, t, count in rows:
             html += f"<li><b>Q:</b> {q}<br><b>A:</b> {a}<br><small>{t} | Count: {count}</small><br><br></li>"
@@ -536,6 +544,7 @@ def view_qa():
     except Exception as e:
         debug_log(f"🔥 /admin/view-qa error: {e}\n{traceback.format_exc()}")
         return f"<h1>Error:</h1><p>{e}</p>"
+
 
 @app.route("/api/status/<task_id>")
 def get_task_status(task_id):
