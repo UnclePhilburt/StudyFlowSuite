@@ -97,7 +97,7 @@ def process_data():
                     return jsonify({
                         "status": "complete",
                         "result": {
-                            "chosen_index": key,
+                            "chosen_index": str(key),
                             "source": "cache"
                          }
                     })
