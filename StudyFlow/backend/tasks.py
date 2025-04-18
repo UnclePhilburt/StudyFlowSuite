@@ -1,56 +1,56 @@
-from StudyFlow.backend.celery_worker import celery_app
-from StudyFlow.backend.ai_manager import triple_call_ai_api_json_final
-import sqlite3
+from StudyFlow.backend.ai_voter import triple_call_ai_api_json_final
+from StudyFlow.backend.db_utils import get_db_connection
+from celery import Celery
 import os
-import json
 
-DB_PATH = "/mnt/data/questions_answers.db"
+celery_app = Celery("tasks", broker=os.getenv("CELERY_BROKER_URL"))
 
-@celery_app.task(name="StudyFlow.backend.tasks.process_question_async")
+@celery_app.task()
 def process_question_async(ocr_json):
     try:
-        print("🚀 Task started.")
-        print("📥 Received OCR JSON:\n", json.dumps(ocr_json, indent=2))
-
-        question_text = ocr_json.get("question", "").strip()
-        if not question_text:
-            raise ValueError("Missing or empty question text in OCR JSON.")
+        print("📥 Received OCR JSON for processing.")
 
         result = triple_call_ai_api_json_final(ocr_json)
-        print("🤖 AI voted result:", result)
 
-        if result is None:
-            raise ValueError("AI function returned None.")
+        if not result:
+            print("⚠️ No result returned from AI voter.")
+            return None
 
-        answers = {str(k): v for k, v in ocr_json.get("answers", {}).items()}
-        chosen_index = str(result)
-        chosen_answer = answers.get(chosen_index, {}).get("text", "").strip()
+        question_text = result.get("question")
+        chosen_answer = result.get("final_answer")
 
-        print(f"🎯 Looking for answer index: {chosen_index}")
-        print(f"📝 Chosen answer: {chosen_answer}")
+        print(f"🤖 Chosen answer: {chosen_answer}")
+        print(f"📖 Question: {question_text}")
 
-        if not chosen_answer:
-            raise ValueError(f"Chosen answer text is empty for index {chosen_index}. Answers dict: {json.dumps(answers, indent=2)}")
+        if question_text and chosen_answer:
+            conn = get_db_connection()
+            cur = conn.cursor()
 
+            # Check if question already exists
+            cur.execute("SELECT count FROM qa_pairs WHERE question = ?", (question_text,))
+            row = cur.fetchone()
 
-        # Insert or update the question-answer pair in the database.
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        try:
-            c.execute(
-                "INSERT INTO qa_pairs (question, answer, count) VALUES (?, ?, 1)",
-                (question_text, chosen_answer)
-            )
-        except sqlite3.IntegrityError:
-            # If the question already exists, update its count.
-            c.execute(
-                "UPDATE qa_pairs SET count = count + 1 WHERE question = ?",
-                (question_text,)
-            )
-        conn.commit()
-        conn.close()
+            if row:
+                new_count = row["count"] + 1
+                cur.execute(
+                    "UPDATE qa_pairs SET count = ?, answer = ? WHERE question = ?",
+                    (new_count, chosen_answer, question_text)
+                )
+                print(f"🔁 Updated existing question (new count: {new_count})")
+            else:
+                cur.execute(
+                    "INSERT INTO qa_pairs (question, answer, count) VALUES (?, ?, ?)",
+                    (question_text, chosen_answer, 1)
+                )
+                print("🆕 Inserted new question into database")
+
+            conn.commit()
+            conn.close()
+        else:
+            print("❌ Missing question or answer in result, skipping DB save.")
+
         return result
 
     except Exception as e:
-        # Re-raise exception with a more detailed message for debugging.
-        raise Exception(f"Error processing question: {e}")
+        print(f"💥 Error in process_question_async: {e}")
+        return None
