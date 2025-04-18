@@ -1,4 +1,8 @@
 services:
+  - type: postgres
+    name: studyflow-db
+    plan: starter  # You can bump this up if needed
+
   - type: redis
     name: studyflow-redis
     plan: standard
