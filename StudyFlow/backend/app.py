@@ -282,7 +282,7 @@ def select_best_ocr():
             temperature=0.0
         )
         ai_choice = response.choices[0].message.content.strip()
-        match = re.search(r\"(\\d+)\", ai_choice)
+        match = re.search(r"(\d+)", ai_choice)
         chosen = int(match.group(1)) if match else 1
         debug_log(f"✅ /api/select-best-ocr: AI chose candidate {chosen}")
         return jsonify({"chosen_index": chosen}), 200
