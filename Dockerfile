@@ -2,7 +2,7 @@ FROM python:3.9
 
 # Install Tesseract OCR and its dependencies
 RUN apt-get update && \
-    apt-get install -y tesseract-ocr && \
+    apt-get install -y tesseract-ocr sqlite3 && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
