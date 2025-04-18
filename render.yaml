@@ -1,9 +1,4 @@
 services:
-  - type: pserv
-    name: studyflow-db
-    runtime: postgres
-    plan: basic
-   
   - type: redis
     name: studyflow-redis
     plan: standard
