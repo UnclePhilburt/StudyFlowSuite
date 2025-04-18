@@ -20,25 +20,15 @@ def triple_call_ai_api_json_final(ocr_json):
         if ans is not None:
             votes[ans] = votes.get(ans, 0) + 1
 
-    # Use majority if possible, fallback to Claude
-    final_answer = None
+    majority = None
     for ans, count in votes.items():
         if count >= 2:
-            final_answer = ans
+            majority = ans
             break
 
-    if final_answer:
-        debug_log("✅ Majority vote selected answer: " + str(final_answer))
+    if majority is not None:
+        debug_log("✅ Majority vote selected answer: " + str(majority))
+        return majority
     else:
-        final_answer = answer_claude
-        debug_log("⚠️ No majority vote. Falling back to Claude's answer: " + str(final_answer))
-
-    # 🔍 Match the final answer text to a key in ocr_json["answers"]
-    for key, val in ocr_json.get("answers", {}).items():
-        if val["text"].strip() == final_answer.strip():
-            debug_log(f"✅ Returning matching answer key: {key}")
-            return key
-
-    # ❌ If no match is found, return "1" as a safe fallback
-    debug_log("❌ No matching key found in OCR answers. Defaulting to '1'")
-    return "1"
+        debug_log("⚠️ No majority vote. Falling back to Claude's answer: " + str(answer_claude))
+        return answer_claude
