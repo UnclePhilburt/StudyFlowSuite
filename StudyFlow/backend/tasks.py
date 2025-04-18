@@ -1,64 +1,56 @@
-import os
-import sqlite3
-from celery import Celery
+from StudyFlow.backend.celery_worker import celery_app
 from StudyFlow.backend.ai_manager import triple_call_ai_api_json_final
-
-celery_app = Celery(
-    "tasks",
-    broker=os.getenv("CELERY_BROKER_URL"),
-    backend=os.getenv("CELERY_RESULT_BACKEND")
-)
+import sqlite3
+import os
+import json
 
 DB_PATH = "/mnt/data/questions_answers.db"
 
-def init_db():
-    """Create the database and table if they don't exist."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS qa_pairs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            question TEXT NOT NULL,
-            answers TEXT NOT NULL,
-            correct_answer TEXT NOT NULL,
-            count INTEGER DEFAULT 1
-        )
-    ''')
-    cursor.execute('''
-        CREATE INDEX IF NOT EXISTS idx_question ON qa_pairs(question)
-    ''')
-    conn.commit()
-    conn.close()
-
-init_db()
-
-def save_to_db(question, answers, correct_answer):
-    """Save a question and its answer to the database."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT id, count FROM qa_pairs WHERE question = ?", (question,))
-    row = cursor.fetchone()
-
-    if row:
-        cursor.execute("UPDATE qa_pairs SET count = count + 1 WHERE id = ?", (row[0],))
-    else:
-        cursor.execute(
-            "INSERT INTO qa_pairs (question, answers, correct_answer) VALUES (?, ?, ?)",
-            (question, str(answers), correct_answer)
-        )
-    conn.commit()
-    conn.close()
-
-@celery_app.task(name="process_question_async")
+@celery_app.task(name="StudyFlow.backend.tasks.process_question_async")
 def process_question_async(ocr_json):
-    question = ocr_json["question"]
-    answers = ocr_json["answers"]
+    try:
+        print("🚀 Task started.")
+        print("📥 Received OCR JSON:\n", json.dumps(ocr_json, indent=2))
 
-    result = triple_call_ai_api_json_final(ocr_json)
-    chosen_answer = result.get("chosen_answer")
+        question_text = ocr_json.get("question", "").strip()
+        if not question_text:
+            raise ValueError("Missing or empty question text in OCR JSON.")
 
-    if question and answers and chosen_answer:
-        save_to_db(question, answers, chosen_answer)
+        result = triple_call_ai_api_json_final(ocr_json)
+        print("🤖 AI voted result:", result)
 
-    return result
+        if result is None:
+            raise ValueError("AI function returned None.")
+
+        answers = {str(k): v for k, v in ocr_json.get("answers", {}).items()}
+        chosen_index = str(result)
+        chosen_answer = answers.get(chosen_index, {}).get("text", "").strip()
+
+        print(f"🎯 Looking for answer index: {chosen_index}")
+        print(f"📝 Chosen answer: {chosen_answer}")
+
+        if not chosen_answer:
+            raise ValueError(f"Chosen answer text is empty for index {chosen_index}. Answers dict: {json.dumps(answers, indent=2)}")
+
+
+        # Insert or update the question-answer pair in the database.
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        try:
+            c.execute(
+                "INSERT INTO qa_pairs (question, answer, count) VALUES (?, ?, 1)",
+                (question_text, chosen_answer)
+            )
+        except sqlite3.IntegrityError:
+            # If the question already exists, update its count.
+            c.execute(
+                "UPDATE qa_pairs SET count = count + 1 WHERE question = ?",
+                (question_text,)
+            )
+        conn.commit()
+        conn.close()
+        return result
+
+    except Exception as e:
+        # Re-raise exception with a more detailed message for debugging.
+        raise Exception(f"Error processing question: {e}")
