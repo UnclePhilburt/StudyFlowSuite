@@ -2,7 +2,7 @@ services:
   - type: pserv
     name: studyflow-db
     runtime: postgres
-    plan: standard
+    plan: free
     properties:
       databaseName: studyflow
       user: studyflow_user
