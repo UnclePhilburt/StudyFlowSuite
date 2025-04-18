@@ -41,6 +41,7 @@ services:
     disk:
       name: data-disk
       mountPath: /mnt/data
+      sizeGB: 1
     envVars:
       - key: ROLE
         value: worker
