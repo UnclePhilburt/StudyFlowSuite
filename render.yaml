@@ -15,7 +15,7 @@ services:
       - key: DATABASE_URL
         fromService:
           name: studyflow-db
-          type: postgres
+          type: pserv
           property: connectionString
       - key: CELERY_BROKER_URL
         fromService:
@@ -45,7 +45,7 @@ services:
       - key: DATABASE_URL
         fromService:
           name: studyflow-db
-          type: postgres
+          type: pserv
           property: connectionString
       - key: CELERY_BROKER_URL
         fromService:
