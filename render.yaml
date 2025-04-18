@@ -10,7 +10,7 @@ services:
     dockerfilePath: ./Dockerfile
     plan: standard
     disk:
-      name: data-disk
+      name: shared-data
       mountPath: /mnt/data
       sizeGB: 1
     envVars:
@@ -39,9 +39,8 @@ services:
     dockerfilePath: ./Dockerfile
     plan: standard
     disk:
-      name: data-disk
+      name: shared-data
       mountPath: /mnt/data
-      sizeGB: 1
     envVars:
       - key: ROLE
         value: worker
