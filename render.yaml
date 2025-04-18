@@ -3,10 +3,7 @@ services:
     name: studyflow-db
     runtime: postgres
     plan: basic
-    properties:
-      databaseName: studyflow_kha6
-      user: studyflow_kha6_user
-
+   
   - type: redis
     name: studyflow-redis
     plan: standard
