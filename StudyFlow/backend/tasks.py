@@ -1,10 +1,8 @@
 from StudyFlow.backend.celery_worker import celery_app
 from StudyFlow.backend.ai_manager import triple_call_ai_api_json_final
-import sqlite3
+import psycopg2
 import os
 import json
-
-DB_PATH = "/mnt/data/questions_answers.db"
 
 @celery_app.task(name="StudyFlow.backend.tasks.process_question_async")
 def process_question_async(ocr_json):
@@ -32,26 +30,14 @@ def process_question_async(ocr_json):
         if not chosen_answer:
             raise ValueError(f"Chosen answer text is empty for index {chosen_index}. Answers dict: {json.dumps(answers, indent=2)}")
 
+        # Insert or update into Postgres
+        conn = psycopg2.connect(os.environ["DATABASE_URL"])
+        cur = conn.cursor()
 
-        # Insert or update the question-answer pair in the database.
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
         try:
-            c.execute(
-                "INSERT INTO qa_pairs (question, answer, count) VALUES (?, ?, 1)",
-                (question_text, chosen_answer)
-            )
-        except sqlite3.IntegrityError:
-            # If the question already exists, update its count.
-            c.execute(
-                "UPDATE qa_pairs SET count = count + 1 WHERE question = ?",
-                (question_text,)
-            )
-        conn.commit()
-        print("✅ Wrote to DB:", question_text[:50], "→", chosen_answer[:50])
-        conn.close()
-        return result
-
-    except Exception as e:
-        # Re-raise exception with a more detailed message for debugging.
-        raise Exception(f"Error processing question: {e}")
+            cur.execute("""
+                INSERT INTO qa_pairs (question, answer, count)
+                VALUES (%s, %s, 1)
+                ON CONFLICT (question)
+                DO UPDATE SET count = qa_pairs.count + 1
+            """, (question
