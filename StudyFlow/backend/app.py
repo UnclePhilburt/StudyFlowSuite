@@ -92,7 +92,11 @@ def process_data():
             debug_log(f"✅ Q: {question_text[:100]}")
             debug_log(f"✅ A: {saved_answer}")
             debug_log(f"📈 Count incremented to {new_count}")
-            return jsonify({"result": saved_answer, "source": "cache"})
+            for key, val in ocr_json.get("answers", {}).items():
+                if val["text"].strip() == saved_answer.strip():
+                    return jsonify({"chosen_index": key, "source": "cache"})
+            return jsonify({"chosen_index": "1", "source": "cache"})  # fallback
+
 
 
         # 🧠 If not in DB, queue async task to process with AI
