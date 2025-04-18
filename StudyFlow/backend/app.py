@@ -257,18 +257,24 @@ def merge():
 def select_best_ocr():
     data = request.get_json()
     candidates = data.get("candidates")
-    if not candidates or not isinstance(candidates, list) or len(candidates) != 3:
+    if not candidates or not isinstance(candidates, list):
         debug_log("❌ /api/select-best-ocr: Invalid candidate data")
-        return jsonify({"error": "You must provide exactly 3 OCR candidates in a list"}), 400
+        return jsonify({"error": "You must provide a list of OCR candidates"}), 400
 
-    prompt = (
-        "Below are three OCR candidate outputs for the same question:\n\n"
-        f"Candidate 1:\n{candidates[0]}\n\n"
-        f"Candidate 2:\n{candidates[1]}\n\n"
-        f"Candidate 3:\n{candidates[2]}\n\n"
-        "Based on clarity and completeness, which candidate best represents the actual question text? "
-        "Return only the candidate number (1, 2, or 3)."
+    # If there's only one candidate, just pick it immediately
+    if len(candidates) == 1:
+        debug_log("ℹ️ /api/select-best-ocr: Single candidate received, selecting index 1")
+        return jsonify({"chosen_index": 1}), 200
+
+    # Otherwise, prompt GPT to choose among them
+    prompt = "Below are OCR candidate outputs for the same question:\n\n"
+    for i, text in enumerate(candidates):
+        prompt += f"Candidate {i+1}:\n{text}\n\n"
+    prompt += (
+        f"Based on clarity and completeness, which candidate best represents the actual question text? "
+        f"Return only the candidate number (1–{len(candidates)})."
     )
+
     try:
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
@@ -276,13 +282,16 @@ def select_best_ocr():
             temperature=0.0
         )
         ai_choice = response.choices[0].message.content.strip()
-        match = re.findall(r'\d+', ai_choice)
-        chosen = int(match[0]) if match else 1
+        match = re.search(r\"(\\d+)\", ai_choice)
+        chosen = int(match.group(1)) if match else 1
         debug_log(f"✅ /api/select-best-ocr: AI chose candidate {chosen}")
-        return jsonify({"chosen_index": chosen})
+        return jsonify({"chosen_index": chosen}), 200
+
     except Exception as e:
-        debug_log(f"🔥 /api/select-best-ocr error: {e}\n{traceback.format_exc()}")
-        return jsonify({"error": str(e)}), 500
+        debug_log(f"🔥 /api/select-best-ocr error: {e}\\n{traceback.format_exc()}")
+        # fallback to first if something goes wrong
+        return jsonify({"chosen_index": 1}), 200
+
 
 @app.route("/api/log", methods=["POST"])
 def receive_log():
