@@ -526,7 +526,9 @@ def view_qa():
         c.execute("SELECT question, answer, timestamp, count FROM qa_pairs ORDER BY count DESC")
         rows = c.fetchall()
         conn.close()
-        html = "<h1>Stored Questions & Answers</h1><ul>"
+        c.execute("SELECT COUNT(*), SUM(count) FROM qa_pairs")
+        total, total_count = c.fetchone()
+        html = f"<h1>Stored Questions & Answers</h1><p>Total Questions: {total} | Total Attempts: {total_count}</p><ul>"
         for q, a, t, count in rows:
             html += f"<li><b>Q:</b> {q}<br><b>A:</b> {a}<br><small>{t} | Count: {count}</small><br><br></li>"
         html += "</ul>"
