@@ -62,10 +62,8 @@ def add_count_column_if_needed():
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
-        c.execute("SELECT question, answer, timestamp, count FROM qa_pairs ORDER BY count DESC")
-        rows = c.fetchall()
-        c.execute("SELECT COUNT(*), SUM(count) FROM qa_pairs")
-        total, total_count = c.fetchone()
+        c.execute("ALTER TABLE qa_pairs ADD COLUMN count INTEGER DEFAULT 1")
+        conn.commit()
         conn.close()
         print("✅ Added 'count' column to qa_pairs table.")
     except sqlite3.OperationalError as e:
