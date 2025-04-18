@@ -9,13 +9,14 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile
     plan: standard
-    disk:
-      name: shared-data
-      mountPath: /mnt/data
-      sizeGB: 1
     envVars:
       - key: ROLE
         value: web
+      - key: DATABASE_URL
+        fromService:
+          name: studyflow-db
+          type: postgres
+          property: connectionString
       - key: CELERY_BROKER_URL
         fromService:
           name: studyflow-redis
@@ -38,12 +39,14 @@ services:
     runtime: docker
     dockerfilePath: ./Dockerfile
     plan: standard
-    disk:
-      name: shared-data
-      mountPath: /mnt/data
     envVars:
       - key: ROLE
         value: worker
+      - key: DATABASE_URL
+        fromService:
+          name: studyflow-db
+          type: postgres
+          property: connectionString
       - key: CELERY_BROKER_URL
         fromService:
           name: studyflow-redis
