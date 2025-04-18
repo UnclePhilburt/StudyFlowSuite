@@ -9,7 +9,7 @@ import openai
 import re
 import cv2
 import numpy as np
-import sqlite3
+import psycopg2
 import traceback
 
 from StudyFlow.backend.image_processing import preprocess_image
@@ -41,40 +41,28 @@ except Exception as e:
 app = Flask(__name__)
 register_submit_button_upload(app)
 
-DB_PATH = "/mnt/data/questions_answers.db"
 
-def init_question_db():
-    os.makedirs("/mnt/data", exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS qa_pairs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            question TEXT UNIQUE,
-            answer TEXT,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.commit()
-    conn.close()
-
-def add_count_column_if_needed():
+def init_postgres_db():
     try:
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute("ALTER TABLE qa_pairs ADD COLUMN count INTEGER DEFAULT 1")
+        conn = psycopg2.connect(os.environ["DATABASE_URL"])
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS qa_pairs (
+                id SERIAL PRIMARY KEY,
+                question TEXT UNIQUE,
+                answer TEXT,
+                count INTEGER DEFAULT 1,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
         conn.commit()
         conn.close()
-        print("✅ Added 'count' column to qa_pairs table.")
-    except sqlite3.OperationalError as e:
-        if "duplicate column name" in str(e):
-            print("ℹ️ 'count' column already exists.")
-        else:
-            print(f"❌ Error adding 'count' column: {e}")
+        print("✅ PostgreSQL: qa_pairs table ready.")
+    except Exception as e:
+        print(f"❌ DB init error: {e}")
 
 # Initialize on startup
-init_question_db()
-add_count_column_if_needed()
+init_postgres_db()
 
 @app.route("/api/process", methods=["POST"])
 def process_data():
@@ -89,16 +77,15 @@ def process_data():
             debug_log("❌ No question found in input")
             return jsonify({"error": "No question text provided"}), 400
 
-        # 🧠 Check DB for exact match
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-        c.execute("SELECT answer, count FROM qa_pairs WHERE question = ?", (question_text,))
-        row = c.fetchone()
+        conn = psycopg2.connect(os.environ["DATABASE_URL"])
+        cur = conn.cursor()
+        cur.execute("SELECT answer, count FROM qa_pairs WHERE question = %s", (question_text,))
+        row = cur.fetchone()
 
         if row:
             saved_answer, current_count = row
             new_count = current_count + 1
-            c.execute("UPDATE qa_pairs SET count = ? WHERE question = ?", (new_count, question_text))
+            cur.execute("UPDATE qa_pairs SET count = %s WHERE question = %s", (new_count, question_text))
             conn.commit()
             conn.close()
             debug_log(f"📦 Using cached answer from DB")
@@ -521,18 +508,17 @@ def serve_button_template(filename):
 @app.route("/admin/view-qa")
 def view_qa():
     try:
-        conn = sqlite3.connect(DB_PATH)
-        c = conn.cursor()
-
+        conn = psycopg2.connect(os.environ["DATABASE_URL"])
+        cur = conn.cursor()
         # Get all questions
-        c.execute("SELECT question, answer, timestamp, count FROM qa_pairs ORDER BY count DESC")
-        rows = c.fetchall()
-
+        cur.execute("SELECT question, answer, timestamp, count FROM qa_pairs ORDER BY count DESC")
+        rows = cur.fetchall()
         # Get total stats
-        c.execute("SELECT COUNT(*), SUM(count) FROM qa_pairs")
-        total, total_count = c.fetchone()
-
-        conn.close()  # ✅ Now it's safe to close
+        cur.execute("SELECT COUNT(*), SUM(count) FROM qa_pairs")
+        total, total_count = cur.fetchone()
+        conn.close()
+ 
+        # ✅ Now it's safe to close
 
         html = f"<h1>Stored Questions & Answers</h1><p>Total Questions: {total} | Total Attempts: {total_count}</p><ul>"
         for q, a, t, count in rows:
