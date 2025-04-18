@@ -2,10 +2,10 @@ services:
   - type: pserv
     name: studyflow-db
     runtime: postgres
-    plan: free
+    plan: basic
     properties:
-      databaseName: studyflow
-      user: studyflow_user
+      databaseName: studyflow_kha6
+      user: studyflow_kha6_user
 
   - type: redis
     name: studyflow-redis
@@ -21,10 +21,7 @@ services:
       - key: ROLE
         value: web
       - key: DATABASE_URL
-        fromService:
-          name: studyflow-db
-          type: pserv
-          property: connectionString
+        value: postgresql://studyflow_kha6_user:v3r84owiVGAmFJ0MiqRA6NJwdut3sIkc@dpg-d01b19re5dus73e2uf80-a/studyflow_kha6
       - key: CELERY_BROKER_URL
         fromService:
           name: studyflow-redis
@@ -51,10 +48,7 @@ services:
       - key: ROLE
         value: worker
       - key: DATABASE_URL
-        fromService:
-          name: studyflow-db
-          type: pserv
-          property: connectionString
+        value: postgresql://studyflow_kha6_user:v3r84owiVGAmFJ0MiqRA6NJwdut3sIkc@dpg-d01b19re5dus73e2uf80-a/studyflow_kha6
       - key: CELERY_BROKER_URL
         fromService:
           name: studyflow-redis
