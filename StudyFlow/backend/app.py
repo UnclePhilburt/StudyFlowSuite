@@ -94,8 +94,21 @@ def process_data():
             debug_log(f"📈 Count incremented to {new_count}")
             for key, val in ocr_json.get("answers", {}).items():
                 if val["text"].strip() == saved_answer.strip():
-                    return jsonify({"chosen_index": key, "source": "cache"})
-            return jsonify({"chosen_index": "1", "source": "cache"})  # fallback
+                    return jsonify({
+                        "status": "complete",
+                        "result": {
+                            "chosen_index": key,
+                            "source": "cache"
+                         }
+                    })
+            # 🛠 fallback if exact match not found
+            return jsonify({
+                "status": "complete",
+                "result": {
+                    "chosen_index": "1",  # Default to index 1 if match fails
+                    "source": "cache"
+                }
+            })
 
 
 
