@@ -40,4 +40,11 @@ def process_question_async(ocr_json):
                 VALUES (%s, %s, 1)
                 ON CONFLICT (question)
                 DO UPDATE SET count = qa_pairs.count + 1
-            """, (question
+            """, (question_text, chosen_answer))
+            conn.commit()
+            print("💾 Stored question and answer in Postgres.")
+        finally:
+            conn.close()
+
+    except Exception as e:
+        print("❌ Error in task:", str(e))
