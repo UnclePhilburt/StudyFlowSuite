@@ -17,21 +17,19 @@ from StudyFlow.config import TESSERACT_PATH
 from StudyFlow.logging_utils import debug_log
 from StudyFlow.backend.submit_button_storage import register_submit_button_upload
 from StudyFlow.backend.tasks import process_question_async, celery_app
-from StudyFlow.backend import tasks  # 🧠 This registers the task with Celery
-print("✅ tasks module imported successfully")
+from StudyFlow.backend import tasks  # 🧠 registers the Celery task
 
-# Import the triple-call function for the AI clients
+# Import AI clients
 from StudyFlow.backend.ai_manager import triple_call_ai_api_json_final
-# Import the deepflow function for generating quiz questions
 from StudyFlow.backend.deepflow import get_deepflow_question
 
-# Set the Tesseract binary path for pytesseract
+# Set up Tesseract
 pytesseract.pytesseract.tesseract_cmd = TESSERACT_PATH
 
-# Set OpenAI API key (comes from Render env)
+# Set up OpenAI
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# Log the Tesseract version to verify the path works
+# Log Tesseract version
 try:
     version_output = subprocess.check_output([TESSERACT_PATH, "--version"]).decode("utf-8")
     debug_log("✅ Tesseract version output:\n" + version_output)
@@ -61,8 +59,9 @@ def init_postgres_db():
     except Exception as e:
         print(f"❌ DB init error: {e}")
 
-# Initialize on startup
+# Initialize DB on startup
 init_postgres_db()
+
 
 @app.route("/api/process", methods=["POST"])
 def process_data():
@@ -77,6 +76,7 @@ def process_data():
             debug_log("❌ No question found in input")
             return jsonify({"error": "No question text provided"}), 400
 
+        # Connect and check cache
         conn = psycopg2.connect(os.environ["DATABASE_URL"])
         cur = conn.cursor()
         cur.execute("SELECT answer, count FROM qa_pairs WHERE question = %s", (question_text,))
@@ -85,50 +85,48 @@ def process_data():
         if row:
             saved_answer, current_count = row
             new_count = current_count + 1
-            cur.execute("UPDATE qa_pairs SET count = %s WHERE question = %s", (new_count, question_text))
+            cur.execute(
+                "UPDATE qa_pairs SET count = %s WHERE question = %s",
+                (new_count, question_text)
+            )
             conn.commit()
-            conn.close()
-            debug_log(f"📦 Using cached answer from DB")
+
+            debug_log("📦 Using cached answer from DB")
             debug_log(f"✅ Q: {question_text[:100]}")
             debug_log(f"✅ A: {saved_answer}")
             debug_log(f"📈 Count incremented to {new_count}")
+
+            # Try to find which key in the incoming answers matches the saved text
             for key, val in ocr_json.get("answers", {}).items():
-                if val["text"].strip() == saved_answer.strip():
+                if val.get("text", "").strip() == saved_answer.strip():
+                    conn.close()
                     return jsonify({
                         "status": "complete",
-                        "result": {
-                            "chosen_index": str(key),
-                            "source": "cache"
-                         }
+                        "result": int(key)   # return integer index
                     })
-            # 🛠 fallback if exact match not found
+
+            # Fallback if none matched exactly
+            conn.close()
             return jsonify({
                 "status": "complete",
-                "result": {
-                    "chosen_index": "1",  # Default to index 1 if match fails
-                    "source": "cache"
-                }
+                "result": 1   # default to 1
             })
 
-
-
-        # 🧠 If not in DB, queue async task to process with AI
-        # 🧠 If not in DB, queue async task to process with AI
+        # Not cached → queue an async AI task
         debug_log("📨 About to queue async task...")
         task = process_question_async.delay(ocr_json)
-        debug_log(f"✅ Task queued: {task.id}")
         conn.close()
-        debug_log("🚀 Queued async AI task")
+        debug_log(f"✅ Task queued: {task.id}")
         return jsonify({
             "status": "processing",
             "message": "Question sent for async processing",
             "task_id": task.id
         })
 
-
     except Exception as e:
         debug_log(f"🔥 Error in /api/process: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
+
 
 @app.route("/api/deepflow_question", methods=["POST"])
 def deepflow_question():
@@ -138,7 +136,6 @@ def deepflow_question():
         previous_questions = data.get("previous_questions", [])
         debug_log(f"Received deepflow question request for topic '{topic}' with previous questions: {previous_questions}")
 
-        # Use the deepflow function to generate the question
         question_data = get_deepflow_question(topic, previous_questions)
         if question_data is None:
             debug_log("Failed to generate deepflow question.")
@@ -151,6 +148,7 @@ def deepflow_question():
         debug_log(f"🔥 Error in /api/deepflow_question: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
+
 @app.route("/ocr", methods=["POST"])
 def ocr_endpoint():
     debug_log("🔍 /ocr endpoint hit")
@@ -159,32 +157,22 @@ def ocr_endpoint():
         return jsonify({"error": "No image provided"}), 400
     try:
         file = request.files["image"]
-        debug_log(f"📁 Received file: {file.filename}")
         image = Image.open(file.stream)
-        debug_log("🧼 Image opened successfully")
-        debug_log(f"📏 Image size: {image.size}, mode: {image.mode}")
+        processed = preprocess_image(image)
 
-        try:
-            processed = preprocess_image(image)
-            debug_log("🛠️ Image preprocessed successfully")
-        except Exception as pe:
-            debug_log(f"⚠️ preprocess_image failed: {pe}\n{traceback.format_exc()}")
-            return jsonify({"error": f"preprocess_image failed: {pe}"}), 500
-
-        # Perform OCR using Tesseract
         ocr_text = pytesseract.image_to_string(processed)
-        debug_log("🔡 OCR complete")
-
-        # Create a word-level mapping using pytesseract.image_to_data
-        data = pytesseract.image_to_data(processed, output_type=pytesseract.Output.DICT,
-                                         config="--psm 6 --oem 3")
+        data = pytesseract.image_to_data(
+            processed,
+            output_type=pytesseract.Output.DICT,
+            config="--psm 6 --oem 3"
+        )
         mapping = {}
         tag_number = 1
-        for i in range(len(data["text"])):
-            text = data["text"][i].strip()
+        for i, txt in enumerate(data["text"]):
+            text = txt.strip()
             try:
                 conf = float(data["conf"][i])
-            except ValueError:
+            except:
                 continue
             if text and conf > 0:
                 mapping[str(tag_number)] = {
@@ -197,105 +185,94 @@ def ocr_endpoint():
                 }
                 tag_number += 1
 
-        # Create a tagged string using the mapping (e.g., "[1] word1 [2] word2 ...")
-        tagged_text = " ".join([f"[{k}] {v['text']}" for k, v in mapping.items()])
+        tagged_text = " ".join(f"[{k}] {v['text']}" for k, v in mapping.items())
         return jsonify({"ocr_text": tagged_text, "mapping": mapping})
+
     except Exception as e:
         debug_log(f"🔥 OCR processing failed: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
+
 
 @app.route("/api/layout", methods=["POST"])
 def layout():
     data = request.get_json()
     text = data.get("text", "")
     if not text:
-        debug_log("❌ /api/layout: No text provided")
         return jsonify({"error": "No text provided"}), 400
     try:
-        response = openai.ChatCompletion.create(
+        resp = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "You are an OCR layout engine. Turn OCR exam text into JSON with 'question' and 'answers'. 'answers' should be a list of answer strings."},
+                {
+                    "role": "system",
+                    "content": "You are an OCR layout engine. Turn OCR exam text into JSON with 'question' and 'answers'."
+                },
                 {"role": "user", "content": text}
             ]
         )
-        layout_text = response.choices[0].message.content.strip()
-        structured = json.loads(layout_text)
-        debug_log("✅ /api/layout: Structured data returned successfully")
+        structured = json.loads(resp.choices[0].message.content.strip())
         return jsonify({"structured_ai": structured}), 200
     except Exception as e:
         debug_log(f"🔥 /api/layout error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
+
 
 @app.route("/api/fallback", methods=["POST"])
 def fallback():
     try:
         data = request.get_json()
         mapping = data.get("ocr_mapping")
-        expected_answers = int(data.get("expected_answers", 4))
-
+        expected = int(data.get("expected_answers", 4))
         if not mapping:
             return jsonify({"error": "Missing ocr_mapping"}), 400
 
         from StudyFlow.backend.ocr_logic import fallback_structure
-        result = fallback_structure(mapping, expected_answers)
-        return jsonify(result), 200
+        return jsonify(fallback_structure(mapping, expected)), 200
+
     except Exception as e:
         debug_log(f"🔥 /api/fallback error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
+
 
 @app.route("/api/merge", methods=["POST"])
 def merge():
     try:
         data = request.get_json()
-        ai_json = data.get("ai_json", {})
-        fallback_json = data.get("fallback_json", {})
-        mapping = data.get("ocr_mapping", {})
-
         from StudyFlow.backend.ocr_logic import merge_ai_and_fallback
-        merged = merge_ai_and_fallback(ai_json, fallback_json, mapping)
+        merged = merge_ai_and_fallback(
+            data.get("ai_json", {}),
+            data.get("fallback_json", {}),
+            data.get("ocr_mapping", {})
+        )
         return jsonify(merged), 200
+
     except Exception as e:
         debug_log(f"🔥 /api/merge error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
+
 @app.route("/api/select-best-ocr", methods=["POST"])
 def select_best_ocr():
     data = request.get_json()
-    candidates = data.get("candidates")
-    if not candidates or not isinstance(candidates, list):
-        debug_log("❌ /api/select-best-ocr: Invalid candidate data")
-        return jsonify({"error": "You must provide a list of OCR candidates"}), 400
-
-    # If there's only one candidate, just pick it immediately
-    if len(candidates) == 1:
-        debug_log("ℹ️ /api/select-best-ocr: Single candidate received, selecting index 1")
+    cands = data.get("candidates")
+    if not isinstance(cands, list) or not cands:
+        return jsonify({"error": "You must provide a list of candidates"}), 400
+    if len(cands) == 1:
         return jsonify({"chosen_index": 1}), 200
 
-    # Otherwise, prompt GPT to choose among them
-    prompt = "Below are OCR candidate outputs for the same question:\n\n"
-    for i, text in enumerate(candidates):
-        prompt += f"Candidate {i+1}:\n{text}\n\n"
-    prompt += (
-        f"Based on clarity and completeness, which candidate best represents the actual question text? "
-        f"Return only the candidate number (1–{len(candidates)})."
-    )
-
+    prompt = "Below are OCR candidate outputs:\n\n" + "\n\n".join(
+        f"Candidate {i+1}:\n{txt}" for i, txt in enumerate(cands)
+    ) + f"\n\nWhich is best? Return only the number 1–{len(cands)}."
     try:
-        response = openai.ChatCompletion.create(
+        resp = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.0
+            temperature=0
         )
-        ai_choice = response.choices[0].message.content.strip()
-        match = re.search(r"(\d+)", ai_choice)
-        chosen = int(match.group(1)) if match else 1
-        debug_log(f"✅ /api/select-best-ocr: AI chose candidate {chosen}")
-        return jsonify({"chosen_index": chosen}), 200
-
+        m = re.search(r"(\d+)", resp.choices[0].message.content)
+        return jsonify({"chosen_index": int(m.group(1)) if m else 1}), 200
     except Exception as e:
-        debug_log(f"🔥 /api/select-best-ocr error: {e}\\n{traceback.format_exc()}")
-        # fallback to first if something goes wrong
+        debug_log(f"🔥 /api/select-best-ocr error: {e}")
         return jsonify({"chosen_index": 1}), 200
 
 
@@ -303,216 +280,174 @@ def select_best_ocr():
 def receive_log():
     try:
         data = request.get_json()
-        message = data.get("message", "")
-        if message:
-            print(message)  # Always show in server logs
-            try:
-                with open("backend_log.txt", "a", encoding="utf-8") as f:
-                    f.write(message + "\n")
-            except Exception as e:
-                print(f"[Logging Error] Could not write to file: {e}\n{traceback.format_exc()}")
+        msg = data.get("message", "")
+        if msg:
+            print(msg)
+            with open("backend_log.txt", "a", encoding="utf-8") as f:
+                f.write(msg + "\n")
         return jsonify({"status": "ok"}), 200
     except Exception as e:
-        debug_log(f"🔥 /api/log error: {e}\n{traceback.format_exc()}")
+        debug_log(f"🔥 /api/log error: {e}")
         return jsonify({"error": str(e)}), 500
+
 
 @app.route("/api/explanation", methods=["POST"])
 def generate_explanation():
     try:
         data = request.get_json()
         ocr_json = data.get("ocr_json")
-        chosen_index = data.get("chosen_index")
-
-        if not ocr_json or chosen_index is None:
+        idx = data.get("chosen_index")
+        if ocr_json is None or idx is None:
             return jsonify({"error": "Missing data"}), 400
 
         prompt = (
-            "Here is the OCR output in JSON format:\n" + str(ocr_json) +
-            "\nExplain why answer option " + str(chosen_index) +
-            " is correct. Provide a concise explanation (max 100 words)."
+            f"Here is the OCR output in JSON:\n{ocr_json}\n"
+            f"Explain why answer option {idx} is correct (max 100 words)."
         )
-
-        response = openai.ChatCompletion.create(
+        resp = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.0
+            temperature=0
         )
-        explanation = response['choices'][0]['message']['content'].strip()
-        return jsonify({"explanation": explanation})
+        return jsonify({"explanation": resp.choices[0].message.content.strip()}), 200
+
     except Exception as e:
-        debug_log(f"🔥 /api/explanation error: {e}\n{traceback.format_exc()}")
-        return jsonify({"error": f"Failed to generate explanation: {e}"}), 500
+        debug_log(f"🔥 /api/explanation error: {e}")
+        return jsonify({"error": str(e)}), 500
+
 
 @app.route("/api/focusflow", methods=["POST"])
 def api_focusflow():
     try:
-        from StudyFlow.backend.ocr_logic import fallback_structure, merge_ai_and_fallback
-        region = request.json.get("region")  # [x, y, width, height]
-        if not region or len(region) != 4:
+        from StudyFlow.backend.ocr_logic import (
+            fallback_structure, ai_structure_layout, convert_answers_list_to_dict, merge_ai_and_fallback
+        )
+        region = request.json.get("region")
+        if not isinstance(region, list) or len(region) != 4:
             return jsonify({"error": "Missing or invalid region"}), 400
-
-        region_tuple = tuple(region)
-
         from StudyFlow.backend.screen_grab import grab_screen_region
-        image = grab_screen_region(region_tuple)
-
-        from StudyFlow.backend.image_processing import preprocess_image
-        processed = preprocess_image(image)
-
-        from pytesseract import image_to_string, image_to_data, Output
-        text = image_to_string(processed)
-        data = image_to_data(processed, output_type=Output.DICT, config="--psm 6 --oem 3")
-
+        img = grab_screen_region(tuple(region))
+        proc = preprocess_image(img)
+        txt = pytesseract.image_to_string(proc)
+        data = pytesseract.image_to_data(proc, output_type=pytesseract.Output.DICT)
         mapping = {}
-        tag_number = 1
-        for i in range(len(data["text"])):
-            txt = data["text"][i].strip()
+        tag = 1
+        for i, t in enumerate(data["text"]):
+            w = t.strip()
             try:
                 conf = float(data["conf"][i])
-            except ValueError:
+            except:
                 continue
-            if txt and conf > 0:
-                mapping[str(tag_number)] = {
-                    "text": txt,
+            if w and conf > 0:
+                mapping[str(tag)] = {
+                    "text": w,
                     "left": data["left"][i],
                     "top": data["top"][i],
                     "width": data["width"][i],
                     "height": data["height"][i],
                     "line_num": data["line_num"][i]
                 }
-                tag_number += 1
+                tag += 1
+        tagged = " ".join(f"[{k}] {v['text']}" for k, v in mapping.items())
 
-        tagged_text = " ".join([f"[{k}] {v['text']}" for k, v in mapping.items()])
+        ai_json = ai_structure_layout(tagged)
+        expected = len(ai_json.get("answers", [])) if ai_json else 4
+        fb_json = fallback_structure(mapping, expected)
 
-        from StudyFlow.backend.ocr_logic import ai_structure_layout, convert_answers_list_to_dict
-        ai_json = ai_structure_layout(tagged_text)
-        expected_answers = len(ai_json.get("answers", [])) if ai_json else 4
-
-        fallback_json = fallback_structure(mapping, expected_answers)
-
-        if ai_json and fallback_json.get("answers"):
+        if ai_json and fb_json.get("answers"):
             ai_json = convert_answers_list_to_dict(ai_json)
-            merged_json = merge_ai_and_fallback(ai_json, fallback_json, mapping)
-        elif ai_json:
-            merged_json = ai_json
+            merged = merge_ai_and_fallback(ai_json, fb_json, mapping)
         else:
-            merged_json = fallback_json
+            merged = ai_json or fb_json
 
-        from StudyFlow.backend.ai_manager import triple_call_ai_api_json_final
-        chosen_index = triple_call_ai_api_json_final(merged_json)
-
+        idx = triple_call_ai_api_json_final(merged)
         from StudyFlow.backend.explanation_generator import generate_explanation_for_index
-        explanation = generate_explanation_for_index(merged_json, chosen_index)
-
-        full_answer = merged_json["answers"].get(str(chosen_index), {}).get("text", "Unknown")
+        explanation = generate_explanation_for_index(merged, idx)
+        full = merged["answers"].get(str(idx), {}).get("text", "Unknown")
 
         return jsonify({
-            "full_answer": full_answer,
+            "full_answer": full,
             "explanation": explanation,
-            "merged_json": merged_json,
-            "tagged_text": tagged_text
+            "merged_json": merged,
+            "tagged_text": tagged
         }), 200
+
     except Exception as e:
         debug_log(f"🔥 /api/focusflow error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
+
 @app.route("/api/find_button", methods=["POST"])
 def find_button():
     try:
-        # Verify the screenshot file is provided.
-        if "image" not in request.files:
-            return jsonify({"error": "No screenshot image provided"}), 400
+        if "image" not in request.files or "template" not in request.files:
+            return jsonify({"error": "Missing image or template"}), 400
 
-        screenshot_file = request.files["image"]
-        npimg = np.frombuffer(screenshot_file.read(), np.uint8)
+        npimg = np.frombuffer(request.files["image"].read(), np.uint8)
         img = cv2.imdecode(npimg, cv2.IMREAD_GRAYSCALE)
-        if img is None:
-            return jsonify({"error": "Screenshot image decoding failed."}), 400
 
-        # Verify the user-supplied template is provided.
-        if "template" not in request.files:
-            return jsonify({"error": "No template image provided"}), 400
+        tnp = np.frombuffer(request.files["template"].read(), np.uint8)
+        tmpl = cv2.imdecode(tnp, cv2.IMREAD_GRAYSCALE)
 
-        template_file = request.files["template"]
-        t_np = np.frombuffer(template_file.read(), np.uint8)
-        template = cv2.imdecode(t_np, cv2.IMREAD_GRAYSCALE)
-        if template is None:
-            return jsonify({"error": "Template image decoding failed."}), 400
+        best_val, best_loc, best_shape = 0, None, None
+        for scale in np.linspace(0.8, 1.2, 10):
+            tpl = cv2.resize(tmpl, None, fx=scale, fy=scale)
+            res = cv2.matchTemplate(img, tpl, cv2.TM_CCOEFF_NORMED)
+            _, mx, _, ml = cv2.minMaxLoc(res)
+            if mx > best_val:
+                best_val, best_loc, best_shape = mx, ml, tpl.shape
 
-        best_val = 0
-        best_loc = None
-        best_temp_shape = None
-        scales = np.linspace(0.8, 1.2, 10)
-        for scale in scales:
-            resized_template = cv2.resize(template, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
-            result = cv2.matchTemplate(img, resized_template, cv2.TM_CCOEFF_NORMED)
-            _, max_val, _, max_loc = cv2.minMaxLoc(result)
-            if max_val > best_val:
-                best_val = max_val
-                best_loc = max_loc
-                best_temp_shape = resized_template.shape
-
-        threshold = 0.7
-        if best_val >= threshold and best_loc and best_temp_shape:
-            tH, tW = best_temp_shape
-            center_x = best_loc[0] + tW // 2
-            center_y = best_loc[1] + tH // 2
+        if best_val >= 0.7 and best_loc and best_shape:
+            h, w = best_shape
+            cx, cy = best_loc[0] + w//2, best_loc[1] + h//2
             return jsonify({
-                "center_x": int(center_x),
-                "center_y": int(center_y),
+                "center_x": int(cx),
+                "center_y": int(cy),
                 "confidence": float(best_val)
             }), 200
-        else:
-            return jsonify({"error": "Button not found", "confidence": best_val}), 404
+
+        return jsonify({"error": "Button not found", "confidence": best_val}), 404
+
     except Exception as e:
         debug_log(f"🔥 /api/find_button error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
+
 
 @app.route("/admin/button-templates")
 def admin_view_button_templates():
     try:
         templates_dir = "/mnt/data/button_templates"
-        metadata_path = os.path.join(templates_dir, "submit_template_index.json")
-
-        # Load metadata
-        metadata = {}
-        if os.path.exists(metadata_path):
-            with open(metadata_path, "r", encoding="utf-8") as f:
-                metadata = json.load(f)
-
-        sorted_templates = sorted(metadata.items(), key=lambda x: -x[1].get("count", 0))
+        meta = os.path.join(templates_dir, "submit_template_index.json")
+        data = {}
+        if os.path.exists(meta):
+            data = json.load(open(meta, encoding="utf-8"))
+        items = sorted(data.items(), key=lambda kv: -kv[1].get("count", 0))
 
         html = """
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Submit Button Templates</title>
-            <style>
-                body { font-family: Arial; background: #f4f4f4; padding: 20px; }
-                .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; }
-                .item { background: #fff; padding: 10px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); text-align: center; }
-                .item img { max-width: 100%; border-radius: 6px; margin-bottom: 10px; }
-                h1 { text-align: center; }
-            </style>
-        </head>
-        <body>
-            <h1>Submit Button Templates</h1>
-            <div class="grid">
-                {% for filename, data in templates %}
-                    <div class="item">
-                        <img src="/admin/button-image/{{ filename }}" alt="{{ filename }}">
-                        <div><strong>{{ filename }}</strong></div>
-                        <div>Matches: {{ data.get('count', 0) }}</div>
-                    </div>
-                {% endfor %}
-            </div>
-        </body>
-        </html>
+        <!DOCTYPE html><html><head><title>Submit Button Templates</title>
+        <style>
+        body{font-family:Arial;background:#f4f4f4;padding:20px}
+        .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:20px}
+        .item{background:#fff;padding:10px;border-radius:8px;box-shadow:0 2px 5px rgba(0,0,0,0.1);text-align:center}
+        .item img{max-width:100%;border-radius:6px;margin-bottom:10px}
+        h1{text-align:center}
+        </style></head><body>
+        <h1>Submit Button Templates</h1><div class="grid">
+        {% for filename,data in templates %}
+          <div class="item">
+            <img src="/admin/button-image/{{ filename }}" alt="{{ filename }}">
+            <div><strong>{{ filename }}</strong></div>
+            <div>Matches: {{ data.get('count',0) }}</div>
+          </div>
+        {% endfor %}
+        </div></body></html>
         """
-        return render_template_string(html, templates=sorted_templates)
+        return render_template_string(html, templates=items)
+
     except Exception as e:
         debug_log(f"🔥 /admin/button-templates error: {e}\n{traceback.format_exc()}")
         return f"<h1>Error:</h1><p>{e}</p>"
+
 
 @app.route("/admin/button-image/<path:filename>")
 def serve_button_template(filename):
@@ -522,26 +457,24 @@ def serve_button_template(filename):
         debug_log(f"🔥 /admin/button-image error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
+
 @app.route("/admin/view-qa")
 def view_qa():
     try:
         conn = psycopg2.connect(os.environ["DATABASE_URL"])
         cur = conn.cursor()
-        # Get all questions
         cur.execute("SELECT question, answer, timestamp, count FROM qa_pairs ORDER BY count DESC")
         rows = cur.fetchall()
-        # Get total stats
         cur.execute("SELECT COUNT(*), SUM(count) FROM qa_pairs")
         total, total_count = cur.fetchone()
         conn.close()
- 
-        # ✅ Now it's safe to close
 
         html = f"<h1>Stored Questions & Answers</h1><p>Total Questions: {total} | Total Attempts: {total_count}</p><ul>"
-        for q, a, t, count in rows:
-            html += f"<li><b>Q:</b> {q}<br><b>A:</b> {a}<br><small>{t} | Count: {count}</small><br><br></li>"
+        for q,a,t,c in rows:
+            html += f"<li><b>Q:</b> {q}<br><b>A:</b> {a}<br><small>{t} | Count: {c}</small><br><br></li>"
         html += "</ul>"
         return html
+
     except Exception as e:
         debug_log(f"🔥 /admin/view-qa error: {e}\n{traceback.format_exc()}")
         return f"<h1>Error:</h1><p>{e}</p>"
@@ -553,17 +486,17 @@ def get_task_status(task_id):
         task = celery_app.AsyncResult(task_id)
         if task.state == "PENDING":
             return jsonify({"status": "pending"}), 202
-        elif task.state == "SUCCESS":
+        if task.state == "SUCCESS":
             return jsonify({"status": "complete", "result": task.result}), 200
-        elif task.state == "FAILURE":
+        if task.state == "FAILURE":
             return jsonify({"status": "failed"}), 500
-        else:
-            return jsonify({"status": task.state}), 202
+        return jsonify({"status": task.state}), 202
+
     except Exception as e:
         debug_log(f"🔥 /api/status error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
-# 🚀 Start the server when running directly
+
 if __name__ == "__main__":
     try:
         port = int(os.environ.get("PORT", 5000))
