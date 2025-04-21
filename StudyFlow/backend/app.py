@@ -100,17 +100,13 @@ def process_data():
             for key, val in ocr_json.get("answers", {}).items():
                 if val.get("text", "").strip() == saved_answer.strip():
                     conn.close()
-                    return jsonify({
-                        "status": "complete",
-                        "result": int(key)   # return integer index
-                    })
+                    return jsonify({"result": int(key)})
 
+    
             # Fallback if none matched exactly
             conn.close()
-            return jsonify({
-                "status": "complete",
-                "result": 1   # default to 1
-            })
+            return jsonify({"result": 1})
+    
 
         # Not cached → queue an async AI task
         debug_log("📨 About to queue async task...")
