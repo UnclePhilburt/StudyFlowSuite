@@ -33,7 +33,6 @@ def process_question_async(ocr_json):
         # Insert or update into Postgres
         conn = psycopg2.connect(os.environ["DATABASE_URL"])
         cur = conn.cursor()
-
         try:
             cur.execute("""
                 INSERT INTO qa_pairs (question, answer, count)
@@ -45,6 +44,9 @@ def process_question_async(ocr_json):
             print("💾 Stored question and answer in Postgres.")
         finally:
             conn.close()
+
+        # ✅ Return chosen index so the frontend gets it
+        return int(chosen_index)
 
     except Exception as e:
         print("❌ Error in task:", str(e))
