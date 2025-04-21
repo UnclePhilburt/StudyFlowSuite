@@ -196,21 +196,33 @@ def layout():
     if not text:
         return jsonify({"error": "No text provided"}), 400
     try:
+        # 1) call the LLM
         resp = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
-                {
-                    "role": "system",
-                    "content": "You are an OCR layout engine. Turn OCR exam text into JSON with 'question' and 'answers'."
-                },
+                {"role": "system", "content": "You are an OCR layout engine. Turn OCR exam text into JSON with 'question' and 'answers'."},
                 {"role": "user", "content": text}
             ]
         )
         structured = json.loads(resp.choices[0].message.content.strip())
+
+        # 2) normalize answers into dicts with 'text' keys
+        raw_answers = structured.get("answers", {})
+        if isinstance(raw_answers, list):
+            wrapped = {str(i+1): {"text": ans} for i, ans in enumerate(raw_answers)}
+        else:
+            wrapped = {
+                key: (val if isinstance(val, dict) else {"text": val})
+                for key, val in raw_answers.items()
+            }
+        structured["answers"] = wrapped
+
         return jsonify({"structured_ai": structured}), 200
+
     except Exception as e:
         debug_log(f"🔥 /api/layout error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
+
 
 
 @app.route("/api/fallback", methods=["POST"])
