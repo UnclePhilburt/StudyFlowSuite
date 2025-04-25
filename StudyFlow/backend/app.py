@@ -51,13 +51,18 @@ def init_postgres_db():
                 answer TEXT,
                 count INTEGER DEFAULT 1,
                 timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
+            );
+            CREATE TABLE IF NOT EXISTS app_config (
+                key   TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
         """)
         conn.commit()
         conn.close()
-        print("✅ PostgreSQL: qa_pairs table ready.")
+        print("✅ PostgreSQL: qa_pairs and app_config tables ready.")
     except Exception as e:
         print(f"❌ DB init error: {e}")
+)
 
 # Initialize DB on startup
 init_postgres_db()
@@ -531,6 +536,34 @@ def get_task_status(task_id):
     except Exception as e:
         debug_log(f"🔥 /api/status error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
+
+@app.route("/api/home_message", methods=["GET", "POST"])
+def home_message():
+    conn = psycopg2.connect(os.environ["DATABASE_URL"])
+    cur = conn.cursor()
+
+    if request.method == "POST":
+        # Read the new message from the JSON body
+        msg = request.get_json().get("message", "").strip()
+        # Insert or update the key/value in app_config
+        cur.execute("""
+            INSERT INTO app_config (key, value)
+            VALUES ('home_message', %s)
+            ON CONFLICT (key)
+            DO UPDATE SET value = EXCLUDED.value
+        """, (msg,))
+        conn.commit()
+        conn.close()
+        return jsonify({"message": msg})
+
+    # GET: fetch the stored message or return a default
+    cur.execute("SELECT value FROM app_config WHERE key = 'home_message'")
+    row = cur.fetchone()
+    conn.close()
+    return jsonify({
+        "message": row[0] if row else "Welcome to StudyFlow!"
+    })
+
 
 
 if __name__ == "__main__":
