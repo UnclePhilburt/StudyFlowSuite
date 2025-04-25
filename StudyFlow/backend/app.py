@@ -195,33 +195,42 @@ def layout():
     text = data.get("text", "")
     if not text:
         return jsonify({"error": "No text provided"}), 400
+
     try:
-        # 1) call the LLM
+        # 1) call the LLM, preserving the original OCR tags
         resp = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "You are an OCR layout engine. Turn OCR exam text into JSON with 'question' and 'answers'."},
+                {
+                    "role": "system",
+                    "content": (
+                        "You are an OCR layout engine. The input text is annotated with "
+                        "bracketed numeric tags like [1], [2], etc. Return JSON in exactly "
+                        "this format:\n\n"
+                        "{\n"
+                        "  \"question\": \"…\",\n"
+                        "  \"answers\": {\n"
+                        "    \"1\": {\"text\": \"<answer-text>\", \"tag\": 1},\n"
+                        "    \"2\": {\"text\": \"<answer-text>\", \"tag\": 2},\n"
+                        "    …\n"
+                        "  }\n"
+                        "}\n\n"
+                        "Use the same numeric keys and tag values as in the OCR input."
+                    )
+                },
                 {"role": "user", "content": text}
             ]
         )
-        structured = json.loads(resp.choices[0].message.content.strip())
 
-        # 2) normalize answers into dicts with 'text' keys
-        raw_answers = structured.get("answers", {})
-        if isinstance(raw_answers, list):
-            wrapped = {str(i+1): {"text": ans} for i, ans in enumerate(raw_answers)}
-        else:
-            wrapped = {
-                key: (val if isinstance(val, dict) else {"text": val})
-                for key, val in raw_answers.items()
-            }
-        structured["answers"] = wrapped
+        # 2) parse the JSON the model returns
+        structured = json.loads(resp.choices[0].message.content.strip())
 
         return jsonify({"structured_ai": structured}), 200
 
     except Exception as e:
         debug_log(f"🔥 /api/layout error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
+
 
 
 
