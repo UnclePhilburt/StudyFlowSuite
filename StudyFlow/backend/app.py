@@ -197,7 +197,7 @@ def layout():
         return jsonify({"error": "No text provided"}), 400
 
     try:
-        # 1) Call the LLM, preserving the original OCR tags verbatim
+        # 1) Let the model extract question + answers, preserving tags
         resp = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             temperature=0,
@@ -230,17 +230,28 @@ def layout():
             ]
         )
 
-        # 2) Parse and return exactly what the model gives us
-        structured = json.loads(resp.choices[0].message.content.strip())
-        return jsonify({"structured_ai": structured}), 200
+        # 2) Parse the model’s output
+        extracted = json.loads(resp.choices[0].message.content.strip())
+        raw_answers = extracted.get("answers", {})
+
+        # 3) Remap into position-based keys "1", "2", … while keeping the original tag
+        #    sorted by numeric tag so display order matches the OCR tags in reading order
+        sorted_tags = sorted(raw_answers.keys(), key=lambda k: int(k))
+        positioned = {}
+        for i, tag_str in enumerate(sorted_tags, start=1):
+            entry = raw_answers[tag_str]
+            positioned[str(i)] = {
+                "text": entry["text"],
+                "tag": int(tag_str)
+            }
+
+        # 4) Overwrite and return
+        extracted["answers"] = positioned
+        return jsonify({"structured_ai": extracted}), 200
 
     except Exception as e:
         debug_log(f"🔥 /api/layout error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
-
-
-
-
 
 @app.route("/api/fallback", methods=["POST"])
 def fallback():
