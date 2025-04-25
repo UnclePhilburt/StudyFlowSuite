@@ -62,7 +62,6 @@ def init_postgres_db():
         print("✅ PostgreSQL: qa_pairs and app_config tables ready.")
     except Exception as e:
         print(f"❌ DB init error: {e}")
-)
 
 # Initialize DB on startup
 init_postgres_db()
@@ -563,6 +562,52 @@ def home_message():
     return jsonify({
         "message": row[0] if row else "Welcome to StudyFlow!"
     })
+
+@app.route("/admin/home_message", methods=["GET", "POST"])
+def admin_home_message():
+    # connect to DB
+    conn = psycopg2.connect(os.environ["DATABASE_URL"])
+    cur = conn.cursor()
+
+    if request.method == "POST":
+        # grab the form value and upsert
+        new_msg = request.form.get("message", "").strip()
+        cur.execute("""
+            INSERT INTO app_config (key, value)
+            VALUES ('home_message', %s)
+            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+        """, (new_msg,))
+        conn.commit()
+        current = new_msg
+    else:
+        # fetch the existing message
+        cur.execute("SELECT value FROM app_config WHERE key = 'home_message'")
+        row = cur.fetchone()
+        current = row[0] if row else ""
+
+    conn.close()
+
+    # render a minimal HTML form
+    return render_template_string("""
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Admin: Home Message</title>
+      </head>
+      <body style="font-family: sans-serif; padding: 2rem;">
+        <h1>Update Home Message</h1>
+        <form method="post">
+          <textarea name="message" rows="4" cols="60"
+            style="font-size:1rem; padding:0.5rem;">{{ message }}</textarea><br><br>
+          <button type="submit" style="font-size:1rem; padding:0.5rem 1rem;">
+            Save
+          </button>
+        </form>
+      </body>
+    </html>
+    """, message=current)
+
 
 
 
