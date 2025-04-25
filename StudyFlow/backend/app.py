@@ -197,39 +197,47 @@ def layout():
         return jsonify({"error": "No text provided"}), 400
 
     try:
-        # 1) call the LLM, preserving the original OCR tags
+        # 1) Call the LLM, preserving the original OCR tags verbatim
         resp = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
+            temperature=0,
             messages=[
                 {
                     "role": "system",
                     "content": (
                         "You are an OCR layout engine. The input text is annotated with "
-                        "bracketed numeric tags like [1], [2], etc. Return JSON in exactly "
-                        "this format:\n\n"
+                        "bracketed numeric tags, for example:\n\n"
+                        "[12] A. Clostridium difficile\n"
+                        "[15] B. Helicobacter pylori\n"
+                        "[18] C. Helicobacter baculiformis\n"
+                        "[21] D. Vibrio vulnificus\n\n"
+                        "Extract the question and the answer options into JSON using "
+                        "exactly those same bracket numbers as both the keys and the "
+                        "`tag` values. Do NOT renumber anything.\n\n"
+                        "Return JSON in this shape:\n"
                         "{\n"
-                        "  \"question\": \"…\",\n"
-                        "  \"answers\": {\n"
-                        "    \"1\": {\"text\": \"<answer-text>\", \"tag\": 1},\n"
-                        "    \"2\": {\"text\": \"<answer-text>\", \"tag\": 2},\n"
-                        "    …\n"
+                        '  "question": "<the question text>",\n'
+                        '  "answers": {\n'
+                        '    "12": {"text": "A. Clostridium difficile",       "tag": 12},\n'
+                        '    "15": {"text": "B. Helicobacter pylori",        "tag": 15},\n'
+                        '    "18": {"text": "C. Helicobacter baculiformis", "tag": 18},\n'
+                        '    "21": {"text": "D. Vibrio vulnificus",         "tag": 21}\n'
                         "  }\n"
-                        "}\n\n"
-                        "Use the same numeric keys and tag values as in the OCR input."
+                        "}"
                     )
                 },
                 {"role": "user", "content": text}
             ]
         )
 
-        # 2) parse the JSON the model returns
+        # 2) Parse and return exactly what the model gives us
         structured = json.loads(resp.choices[0].message.content.strip())
-
         return jsonify({"structured_ai": structured}), 200
 
     except Exception as e:
         debug_log(f"🔥 /api/layout error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
+
 
 
 
