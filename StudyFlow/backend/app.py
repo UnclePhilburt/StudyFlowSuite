@@ -363,68 +363,52 @@ def generate_explanation():
 @app.route("/api/focusflow", methods=["POST"])
 def api_focusflow():
     try:
-        # Helpers for fallback and merging
         from StudyFlow.backend.ocr_logic import fallback_structure, merge_ai_and_fallback
 
-        # 1️⃣ Read and validate region
-        region = request.json.get("region")
-        if not isinstance(region, list) or len(region) != 4:
-            return jsonify({"error": "Missing or invalid region"}), 400
+        # 1️⃣ grab the uploaded image
+        if "image" not in request.files:
+            return jsonify({"error":"No image file provided"}), 400
+        file = request.files["image"]
+        img = Image.open(file.stream).convert("RGB")
 
-        # 2️⃣ Grab & preprocess the screen region
-        from StudyFlow.backend.screen_grab import grab_screen_region
-        img = grab_screen_region(tuple(region))
+        # 2️⃣ preprocess & OCR
         proc = preprocess_image(img)
-
-        # 3️⃣ OCR → build mapping and tagged string
-        ocr_data = pytesseract.image_to_data(proc, output_type=pytesseract.Output.DICT)
+        data = pytesseract.image_to_data(proc, output_type=pytesseract.Output.DICT)
         mapping = {}
         tag = 1
-        for i, txt in enumerate(ocr_data["text"]):
-            word = txt.strip()
-            try:
-                conf = float(ocr_data["conf"][i])
-            except:
-                continue
-            if word and conf > 0:
+        for i, txt in enumerate(data["text"]):
+            w = txt.strip()
+            try: conf = float(data["conf"][i])
+            except: continue
+            if w and conf > 0:
                 mapping[str(tag)] = {
-                    "text": word,
-                    "left": ocr_data["left"][i],
-                    "top": ocr_data["top"][i],
-                    "width": ocr_data["width"][i],
-                    "height": ocr_data["height"][i],
-                    "line_num": ocr_data["line_num"][i]
+                    "text": w,
+                    "left":   data["left"][i],
+                    "top":    data["top"][i],
+                    "width":  data["width"][i],
+                    "height": data["height"][i],
+                    "line_num": data["line_num"][i]
                 }
                 tag += 1
-        tagged = " ".join(f"[{k}] {v['text']}" for k, v in mapping.items())
+        tagged = " ".join(f"[{k}] {v['text']}" for k,v in mapping.items())
 
-        # 4️⃣ Ask our /api/layout endpoint to parse question + answers
-        layout_resp = requests.post(
-            f"{BACKEND_URL}/api/layout",
-            json={"text": tagged}
-        )
+        # 3️⃣ layout via API
+        layout_resp = requests.post(f"{BACKEND_URL}/api/layout", json={"text": tagged})
         if layout_resp.status_code != 200:
-            return jsonify({
-                "error": "Layout API failed",
-                "details": layout_resp.text
-            }), 500
+            return jsonify({"error":"Layout failed","details":layout_resp.text}), 500
         ai_json = layout_resp.json().get("structured_ai", {})
 
-        # 5️⃣ Build fallback JSON and merge with AI result
+        # 4️⃣ merge with fallback
         expected = len(ai_json.get("answers", {})) if ai_json else 4
-        fb_json = fallback_structure(mapping, expected)
-        if ai_json and fb_json.get("answers"):
-            merged = merge_ai_and_fallback(ai_json, fb_json, mapping)
-        else:
-            merged = ai_json or fb_json
+        fb_json  = fallback_structure(mapping, expected)
+        merged = merge_ai_and_fallback(ai_json, fb_json, mapping) if ai_json and fb_json.get("answers") else ai_json or fb_json
 
-        # 6️⃣ Do the triple-vote and generate an explanation
+        # 5️⃣ AI vote + explanation
         idx = triple_call_ai_api_json_final(merged)
         from StudyFlow.backend.explanation_generator import generate_explanation_for_index
         explanation = generate_explanation_for_index(merged, idx)
-        full = merged["answers"].get(str(idx), {}).get("text", "Unknown")
+        full = merged["answers"].get(str(idx),{}).get("text","Unknown")
 
-        # 7️⃣ Return everything to the front end
         return jsonify({
             "full_answer": full,
             "explanation": explanation,
