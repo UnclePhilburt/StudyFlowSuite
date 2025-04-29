@@ -360,8 +360,10 @@ def generate_explanation():
 def api_focusflow():
     try:
         from StudyFlow.backend.ocr_logic import (
-            fallback_structure, ai_structure_layout, convert_answers_list_to_dict, merge_ai_and_fallback
+            fallback_structure, convert_answers_list_to_dict, merge_ai_and_fallback
         )
+        ai_structure_layout = merge_ai_and_fallback
+        
         region = request.json.get("region")
         if not isinstance(region, list) or len(region) != 4:
             return jsonify({"error": "Missing or invalid region"}), 400
