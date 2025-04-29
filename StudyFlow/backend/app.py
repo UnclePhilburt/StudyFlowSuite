@@ -536,6 +536,8 @@ def view_qa():
         return f"<h1>Error:</h1><p>{e}</p>"
 
 
+
+
 @app.route("/api/status/<task_id>")
 def get_task_status(task_id):
     try:
@@ -578,6 +580,79 @@ def home_message():
     return jsonify({
         "message": row[0] if row else "Welcome to StudyFlow!"
     })
+
+@app.route("/api/freeflow_message", methods=["GET", "POST"])
+def freeflow_message():
+    conn = psycopg2.connect(os.environ["DATABASE_URL"])
+    cur = conn.cursor()
+
+    if request.method == "POST":
+        msg = request.get_json().get("message", "").strip()
+        cur.execute("""
+            INSERT INTO app_config (key, value)
+            VALUES ('freeflow_message', %s)
+            ON CONFLICT (key)
+            DO UPDATE SET value = EXCLUDED.value
+        """, (msg,))
+        conn.commit()
+        conn.close()
+        return jsonify({"message": msg})
+
+    cur.execute("SELECT value FROM app_config WHERE key = 'freeflow_message'")
+    row = cur.fetchone()
+    conn.close()
+    return jsonify({
+        "message": row[0] if row else "Welcome to FreeFlow!"
+    })
+
+@app.route("/api/focusflow_message", methods=["GET", "POST"])
+def focusflow_message():
+    conn = psycopg2.connect(os.environ["DATABASE_URL"])
+    cur = conn.cursor()
+
+    if request.method == "POST":
+        msg = request.get_json().get("message", "").strip()
+        cur.execute("""
+            INSERT INTO app_config (key, value)
+            VALUES ('focusflow_message', %s)
+            ON CONFLICT (key)
+            DO UPDATE SET value = EXCLUDED.value
+        """, (msg,))
+        conn.commit()
+        conn.close()
+        return jsonify({"message": msg})
+
+    cur.execute("SELECT value FROM app_config WHERE key = 'focusflow_message'")
+    row = cur.fetchone()
+    conn.close()
+    return jsonify({
+        "message": row[0] if row else "Welcome to FocusFlow!"
+    })
+
+@app.route("/api/deepflow_message", methods=["GET", "POST"])
+def deepflow_message():
+    conn = psycopg2.connect(os.environ["DATABASE_URL"])
+    cur = conn.cursor()
+
+    if request.method == "POST":
+        msg = request.get_json().get("message", "").strip()
+        cur.execute("""
+            INSERT INTO app_config (key, value)
+            VALUES ('deepflow_message', %s)
+            ON CONFLICT (key)
+            DO UPDATE SET value = EXCLUDED.value
+        """, (msg,))
+        conn.commit()
+        conn.close()
+        return jsonify({"message": msg})
+
+    cur.execute("SELECT value FROM app_config WHERE key = 'deepflow_message'")
+    row = cur.fetchone()
+    conn.close()
+    return jsonify({
+        "message": row[0] if row else "Welcome to DeepFlow!"
+    })
+
 
 @app.route("/admin/home_message", methods=["GET", "POST"])
 def admin_home_message():
