@@ -653,6 +653,132 @@ def deepflow_message():
         "message": row[0] if row else "Welcome to DeepFlow!"
     })
 
+@app.route("/admin/freeflow_message", methods=["GET", "POST"])
+def admin_freeflow_message():
+    conn = psycopg2.connect(os.environ["DATABASE_URL"])
+    cur = conn.cursor()
+
+    if request.method == "POST":
+        new_msg = request.form.get("message", "").strip()
+        cur.execute("""
+            INSERT INTO app_config (key, value)
+            VALUES ('freeflow_message', %s)
+            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+        """, (new_msg,))
+        conn.commit()
+        current = new_msg
+    else:
+        cur.execute("SELECT value FROM app_config WHERE key = 'freeflow_message'")
+        row = cur.fetchone()
+        current = row[0] if row else ""
+
+    conn.close()
+
+    return render_template_string("""
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Admin: FreeFlow Message</title>
+      </head>
+      <body style="font-family: sans-serif; padding: 2rem;">
+        <h1>Update FreeFlow Message</h1>
+        <form method="post">
+          <textarea name="message" rows="4" cols="60"
+            style="font-size:1rem; padding:0.5rem;">{{ message }}</textarea><br><br>
+          <button type="submit" style="font-size:1rem; padding:0.5rem 1rem;">
+            Save
+          </button>
+        </form>
+      </body>
+    </html>
+    """, message=current)
+
+
+@app.route("/admin/focusflow_message", methods=["GET", "POST"])
+def admin_focusflow_message():
+    conn = psycopg2.connect(os.environ["DATABASE_URL"])
+    cur = conn.cursor()
+
+    if request.method == "POST":
+        new_msg = request.form.get("message", "").strip()
+        cur.execute("""
+            INSERT INTO app_config (key, value)
+            VALUES ('focusflow_message', %s)
+            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+        """, (new_msg,))
+        conn.commit()
+        current = new_msg
+    else:
+        cur.execute("SELECT value FROM app_config WHERE key = 'focusflow_message'")
+        row = cur.fetchone()
+        current = row[0] if row else ""
+
+    conn.close()
+
+    return render_template_string("""
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Admin: FocusFlow Message</title>
+      </head>
+      <body style="font-family: sans-serif; padding: 2rem;">
+        <h1>Update FocusFlow Message</h1>
+        <form method="post">
+          <textarea name="message" rows="4" cols="60"
+            style="font-size:1rem; padding:0.5rem;">{{ message }}</textarea><br><br>
+          <button type="submit" style="font-size:1rem; padding:0.5rem 1rem;">
+            Save
+          </button>
+        </form>
+      </body>
+    </html>
+    """, message=current)
+
+
+@app.route("/admin/deepflow_message", methods=["GET", "POST"])
+def admin_deepflow_message():
+    conn = psycopg2.connect(os.environ["DATABASE_URL"])
+    cur = conn.cursor()
+
+    if request.method == "POST":
+        new_msg = request.form.get("message", "").strip()
+        cur.execute("""
+            INSERT INTO app_config (key, value)
+            VALUES ('deepflow_message', %s)
+            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+        """, (new_msg,))
+        conn.commit()
+        current = new_msg
+    else:
+        cur.execute("SELECT value FROM app_config WHERE key = 'deepflow_message'")
+        row = cur.fetchone()
+        current = row[0] if row else ""
+
+    conn.close()
+
+    return render_template_string("""
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <title>Admin: DeepFlow Message</title>
+      </head>
+      <body style="font-family: sans-serif; padding: 2rem;">
+        <h1>Update DeepFlow Message</h1>
+        <form method="post">
+          <textarea name="message" rows="4" cols="60"
+            style="font-size:1rem; padding:0.5rem;">{{ message }}</textarea><br><br>
+          <button type="submit" style="font-size:1rem; padding:0.5rem 1rem;">
+            Save
+          </button>
+        </form>
+      </body>
+    </html>
+    """, message=current)
+
+
 
 @app.route("/admin/home_message", methods=["GET", "POST"])
 def admin_home_message():
