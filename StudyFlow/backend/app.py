@@ -403,11 +403,30 @@ def api_focusflow():
         fb_json  = fallback_structure(mapping, expected)
         merged = merge_ai_and_fallback(ai_json, fb_json, mapping) if ai_json and fb_json.get("answers") else ai_json or fb_json
 
-        # 5️⃣ AI vote + explanation
+           # 5️⃣ AI vote
         idx = triple_call_ai_api_json_final(merged)
-        from StudyFlow.backend.explanation_generator import generate_explanation_for_index
-        explanation = generate_explanation_for_index(merged, idx)
-        full = merged["answers"].get(str(idx),{}).get("text","Unknown")
+        full = merged["answers"].get(str(idx), {}).get("text", "Unknown")
+
+    # 6️⃣ Generate explanation inline
+        prompt = (
+            f"Here is the OCR output in JSON:\n{json.dumps(merged)}\n"
+            f"Explain why answer option {idx} is correct (max 100 words)."
+        )
+        resp = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0
+        )
+        explanation = resp.choices[0].message.content.strip()
+
+    # 7️⃣ Return everything
+        return jsonify({
+            "full_answer": full,
+            "explanation": explanation,
+            "merged_json": merged,
+            "tagged_text": tagged
+        }), 200
+
 
         return jsonify({
             "full_answer": full,
