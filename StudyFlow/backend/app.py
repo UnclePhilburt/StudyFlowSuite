@@ -131,6 +131,56 @@ def process_data():
         debug_log(f"🔥 Error in /api/process: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
+import stripe
+from StudyFlow.logging_utils import debug_log
+from StudyFlow.backend.db import get_db_connection  # adjust to your actual DB module
+
+# Set your webhook secret as an environment variable
+import os
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
+
+@app.route("/api/stripe_webhook", methods=["POST"])
+def stripe_webhook():
+    payload = request.data
+    sig_header = request.headers.get('Stripe-Signature')
+
+    try:
+        event = stripe.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
+    except ValueError as e:
+        debug_log(f"⚠️ Invalid payload: {e}")
+        return "Invalid payload", 400
+    except stripe.error.SignatureVerificationError as e:
+        debug_log(f"⚠️ Invalid signature: {e}")
+        return "Invalid signature", 400
+
+    # Handle the events you selected
+    if event['type'] == 'checkout.session.completed':
+        session = event['data']['object']
+        email = session['customer_details']['email']
+        customer_id = session['customer']
+        debug_log(f"✅ Checkout completed for {email} | Stripe ID: {customer_id}")
+
+        # Save email and customer_id to your database
+        conn = get_db_connection()
+        with conn:
+            conn.execute(
+                "INSERT INTO users (email, stripe_id) VALUES (%s, %s) ON CONFLICT (email) DO NOTHING",
+                (email, customer_id)
+            )
+
+    elif event['type'] == 'customer.subscription.deleted':
+        customer_id = event['data']['object']['customer']
+        debug_log(f"❌ Subscription cancelled for {customer_id}")
+        conn = get_db_connection()
+        with conn:
+            conn.execute("DELETE FROM users WHERE stripe_id = %s", (customer_id,))
+
+    elif event['type'] == 'invoice.paid':
+        debug_log("💵 Invoice paid")
+
+    return jsonify(success=True)
+
+
 
 @app.route("/api/deepflow_question", methods=["POST"])
 def deepflow_question():
