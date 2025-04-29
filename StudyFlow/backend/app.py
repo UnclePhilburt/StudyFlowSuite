@@ -133,7 +133,6 @@ def process_data():
 
 import stripe
 from StudyFlow.logging_utils import debug_log
-from StudyFlow.backend.db import get_db_connection  # adjust to your actual DB module
 
 # Set your webhook secret as an environment variable
 import os
@@ -161,7 +160,7 @@ def stripe_webhook():
         debug_log(f"✅ Checkout completed for {email} | Stripe ID: {customer_id}")
 
         # Save email and customer_id to your database
-        conn = get_db_connection()
+        conn = psycopg2.connect(os.environ["DATABASE_URL"])
         with conn:
             debug_log(f"📥 Saving user: {email} | Stripe ID: {customer_id}")
             conn.execute(
@@ -172,7 +171,7 @@ def stripe_webhook():
     elif event['type'] == 'customer.subscription.deleted':
         customer_id = event['data']['object']['customer']
         debug_log(f"❌ Subscription cancelled for {customer_id}")
-        conn = get_db_connection()
+        conn = psycopg2.connect(os.environ["DATABASE_URL"])
         with conn:
             conn.execute(
                 "UPDATE public.users SET subscription_status = %s WHERE stripe_id = %s",
