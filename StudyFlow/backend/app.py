@@ -360,7 +360,8 @@ def generate_explanation():
 def api_focusflow():
     try:
         from StudyFlow.backend.ocr_logic import (
-            fallback_structure, convert_answers_list_to_dict, merge_ai_and_fallback
+            fallback_structure, 
+            merge_ai_and_fallback
         )
         ai_structure_layout = merge_ai_and_fallback
         
@@ -397,7 +398,6 @@ def api_focusflow():
         fb_json = fallback_structure(mapping, expected)
 
         if ai_json and fb_json.get("answers"):
-            ai_json = convert_answers_list_to_dict(ai_json)
             merged = merge_ai_and_fallback(ai_json, fb_json, mapping)
         else:
             merged = ai_json or fb_json
