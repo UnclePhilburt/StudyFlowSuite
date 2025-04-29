@@ -20,7 +20,7 @@ from StudyFlow.logging_utils import debug_log
 from StudyFlow.backend.submit_button_storage import register_submit_button_upload
 from StudyFlow.backend.tasks import process_question_async, celery_app
 from StudyFlow.backend import tasks  # 🧠 registers the Celery task
-BACKEND_URL = os.environ.get("BACKEND_URL", "http://localhost:5000")
+BACKEND_URL = os.environ.get("BACKEND_URL", "https://studyflowsuite.onrender.com")
 
 
 # Import AI clients
