@@ -163,8 +163,9 @@ def stripe_webhook():
         # Save email and customer_id to your database
         conn = get_db_connection()
         with conn:
+            debug_log(f"📥 Saving user: {email} | Stripe ID: {customer_id}")
             conn.execute(
-                "INSERT INTO users (email, stripe_id) VALUES (%s, %s) ON CONFLICT (email) DO NOTHING",
+                "INSERT INTO public.users (email, stripe_id) VALUES (%s, %s) ON CONFLICT (email) DO NOTHING",
                 (email, customer_id)
             )
 
@@ -173,7 +174,7 @@ def stripe_webhook():
         debug_log(f"❌ Subscription cancelled for {customer_id}")
         conn = get_db_connection()
         with conn:
-            conn.execute("DELETE FROM users WHERE stripe_id = %s", (customer_id,))
+            conn.execute("DELETE FROM public.users WHERE stripe_id = %s", (customer_id,))
 
     elif event['type'] == 'invoice.paid':
         debug_log("💵 Invoice paid")
