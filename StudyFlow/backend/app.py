@@ -11,6 +11,8 @@ import cv2
 import numpy as np
 import psycopg2
 import traceback
+import requests
+
 
 from StudyFlow.backend.image_processing import preprocess_image
 from StudyFlow.config import TESSERACT_PATH
@@ -18,6 +20,8 @@ from StudyFlow.logging_utils import debug_log
 from StudyFlow.backend.submit_button_storage import register_submit_button_upload
 from StudyFlow.backend.tasks import process_question_async, celery_app
 from StudyFlow.backend import tasks  # 🧠 registers the Celery task
+BACKEND_URL = os.environ.get("BACKEND_URL", "http://localhost:5000")
+
 
 # Import AI clients
 from StudyFlow.backend.ai_manager import triple_call_ai_api_json_final
@@ -359,54 +363,68 @@ def generate_explanation():
 @app.route("/api/focusflow", methods=["POST"])
 def api_focusflow():
     try:
-        from StudyFlow.backend.ocr_logic import (
-            fallback_structure, 
-            merge_ai_and_fallback
-        )
-        ai_structure_layout = merge_ai_and_fallback
-        
+        # Helpers for fallback and merging
+        from StudyFlow.backend.ocr_logic import fallback_structure, merge_ai_and_fallback
+
+        # 1️⃣ Read and validate region
         region = request.json.get("region")
         if not isinstance(region, list) or len(region) != 4:
             return jsonify({"error": "Missing or invalid region"}), 400
+
+        # 2️⃣ Grab & preprocess the screen region
         from StudyFlow.backend.screen_grab import grab_screen_region
         img = grab_screen_region(tuple(region))
         proc = preprocess_image(img)
-        txt = pytesseract.image_to_string(proc)
-        data = pytesseract.image_to_data(proc, output_type=pytesseract.Output.DICT)
+
+        # 3️⃣ OCR → build mapping and tagged string
+        ocr_data = pytesseract.image_to_data(proc, output_type=pytesseract.Output.DICT)
         mapping = {}
         tag = 1
-        for i, t in enumerate(data["text"]):
-            w = t.strip()
+        for i, txt in enumerate(ocr_data["text"]):
+            word = txt.strip()
             try:
-                conf = float(data["conf"][i])
+                conf = float(ocr_data["conf"][i])
             except:
                 continue
-            if w and conf > 0:
+            if word and conf > 0:
                 mapping[str(tag)] = {
-                    "text": w,
-                    "left": data["left"][i],
-                    "top": data["top"][i],
-                    "width": data["width"][i],
-                    "height": data["height"][i],
-                    "line_num": data["line_num"][i]
+                    "text": word,
+                    "left": ocr_data["left"][i],
+                    "top": ocr_data["top"][i],
+                    "width": ocr_data["width"][i],
+                    "height": ocr_data["height"][i],
+                    "line_num": ocr_data["line_num"][i]
                 }
                 tag += 1
         tagged = " ".join(f"[{k}] {v['text']}" for k, v in mapping.items())
 
-        ai_json = ai_structure_layout(tagged)
-        expected = len(ai_json.get("answers", [])) if ai_json else 4
-        fb_json = fallback_structure(mapping, expected)
+        # 4️⃣ Ask our /api/layout endpoint to parse question + answers
+        layout_resp = requests.post(
+            f"{BACKEND_URL}/api/layout",
+            json={"text": tagged}
+        )
+        if layout_resp.status_code != 200:
+            return jsonify({
+                "error": "Layout API failed",
+                "details": layout_resp.text
+            }), 500
+        ai_json = layout_resp.json().get("structured_ai", {})
 
+        # 5️⃣ Build fallback JSON and merge with AI result
+        expected = len(ai_json.get("answers", {})) if ai_json else 4
+        fb_json = fallback_structure(mapping, expected)
         if ai_json and fb_json.get("answers"):
             merged = merge_ai_and_fallback(ai_json, fb_json, mapping)
         else:
             merged = ai_json or fb_json
 
+        # 6️⃣ Do the triple-vote and generate an explanation
         idx = triple_call_ai_api_json_final(merged)
         from StudyFlow.backend.explanation_generator import generate_explanation_for_index
         explanation = generate_explanation_for_index(merged, idx)
         full = merged["answers"].get(str(idx), {}).get("text", "Unknown")
 
+        # 7️⃣ Return everything to the front end
         return jsonify({
             "full_answer": full,
             "explanation": explanation,
@@ -417,6 +435,7 @@ def api_focusflow():
     except Exception as e:
         debug_log(f"🔥 /api/focusflow error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
+
 
 
 @app.route("/api/find_button", methods=["POST"])
