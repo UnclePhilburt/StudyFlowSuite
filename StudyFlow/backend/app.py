@@ -427,14 +427,6 @@ def api_focusflow():
             "tagged_text": tagged
         }), 200
 
-
-        return jsonify({
-            "full_answer": full,
-            "explanation": explanation,
-            "merged_json": merged,
-            "tagged_text": tagged
-        }), 200
-
     except Exception as e:
         debug_log(f"🔥 /api/focusflow error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
