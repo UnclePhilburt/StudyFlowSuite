@@ -174,7 +174,11 @@ def stripe_webhook():
         debug_log(f"❌ Subscription cancelled for {customer_id}")
         conn = get_db_connection()
         with conn:
-            conn.execute("DELETE FROM public.users WHERE stripe_id = %s", (customer_id,))
+            conn.execute(
+                "UPDATE public.users SET subscription_status = %s WHERE stripe_id = %s",
+                ('cancelled', customer_id)
+            )
+
 
     elif event['type'] == 'invoice.paid':
         debug_log("💵 Invoice paid")
