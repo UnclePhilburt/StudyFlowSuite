@@ -165,28 +165,46 @@ def stripe_webhook():
     evt_type = event["type"]
     obj      = event["data"]["object"]
 
-    # 4) Handle subscription.created & updated
+    # 4) Handle subscription.created
     if evt_type == "customer.subscription.created":
         cust_id = obj["customer"]
         status  = obj["status"]
-        cur.execute(
-            """
-            INSERT INTO users (stripe_id, subscription_status)
-            VALUES (%s, %s)
-            ON CONFLICT (stripe_id)
-            DO UPDATE SET subscription_status = EXCLUDED.subscription_status
-            """,
-            (cust_id, status)
-        )
-        conn.commit()
-
-            app.logger.info(f"📥 Subscription {evt_type.split('.')[-1]}: {cust_id} → {status}")
+        try:
+            cur.execute(
+                """
+                INSERT INTO users (stripe_id, subscription_status)
+                VALUES (%s, %s)
+                ON CONFLICT (stripe_id)
+                DO UPDATE SET subscription_status = EXCLUDED.subscription_status
+                """,
+                (cust_id, status)
+            )
+            conn.commit()
+            app.logger.info(f"📥 Subscription created: {cust_id} → {status}")
         except Exception as e:
-            app.logger.error(f"❌ Failed to update subscription_status: {e}")
-            cur.close(); conn.close()
+            app.logger.error(f"❌ Failed to upsert subscription_status: {e}")
+            cur.close()
+            conn.close()
             return "", 500
 
-    # 5) Handle subscription.deleted
+    # 5) Handle subscription.updated
+    elif evt_type == "customer.subscription.updated":
+        cust_id = obj["customer"]
+        status  = obj["status"]
+        try:
+            cur.execute(
+                "UPDATE users SET subscription_status = %s WHERE stripe_id = %s",
+                (status, cust_id)
+            )
+            conn.commit()
+            app.logger.info(f"🔄 Subscription updated: {cust_id} → {status}")
+        except Exception as e:
+            app.logger.error(f"❌ Failed to update subscription_status: {e}")
+            cur.close()
+            conn.close()
+            return "", 500
+
+    # 6) Handle subscription.deleted
     elif evt_type == "customer.subscription.deleted":
         cust_id = obj["customer"]
         try:
@@ -198,10 +216,11 @@ def stripe_webhook():
             app.logger.info(f"🗑️ Subscription canceled: {cust_id}")
         except Exception as e:
             app.logger.error(f"❌ Failed to cancel subscription: {e}")
-            cur.close(); conn.close()
+            cur.close()
+            conn.close()
             return "", 500
 
-    # 6) Handle new customers on checkout.session.completed
+    # 7) Handle checkout.session.completed
     elif evt_type == "checkout.session.completed":
         cust_id = obj["customer"]
         email   = obj["customer_details"]["email"]
@@ -218,15 +237,15 @@ def stripe_webhook():
             app.logger.info(f"🎉 New user created: {email} | {cust_id}")
         except Exception as e:
             app.logger.error(f"❌ Failed to insert new user: {e}")
-            cur.close(); conn.close()
+            cur.close()
+            conn.close()
             return "", 500
 
-    # 7) Clean up
+    # 8) Clean up & return
     cur.close()
     conn.close()
-
-    # 8) Return success
     return jsonify({"received": True}), 200
+
 
 
 @app.route("/api/deepflow_question", methods=["POST"])
