@@ -54,6 +54,7 @@ except Exception as e:
 app = Flask(__name__)
 
 def send_access_key_email(to_email: str, stripe_id: str) -> bool:
+    # Build your message bodies
     html_content = (
         "<p>Welcome to StudyFlow!</p>"
         "<p>Your access key is:</p>"
@@ -66,22 +67,29 @@ def send_access_key_email(to_email: str, stripe_id: str) -> bool:
         "Keep it safe—enter it when launching the app."
     )
 
+    # Create the SendGrid client from env var
+    sg = SendGridAPIClient(os.getenv("SENDGRID_API_KEY"))
+
+    # Construct the Mail object
     message = Mail(
-        from_email=Email("noreply@studyflowsuite.com", "StudyFlow Suite"),
+        from_email=Email("info@studyflowsuite.com", "StudyFlow Suite"),
         to_emails=to_email,
         subject="Your StudyFlow Access Key",
-        html_content=html_content,
-        plain_text_content=plain_text_content
+        plain_text_content=plain_text_content,
+        html_content=html_content
     )
-    # make absolutely sure sandbox is off
+    # Make sure sandbox is off
     message.mail_settings = MailSettings(sandbox_mode=SandBoxMode(enable=False))
 
     try:
-        response = sg_client.send(message)
-        app.logger.info(f"📧 Sent access key to {to_email} (HTTP {response.status_code})")
+        app.logger.debug(f"➤ Sending access key email to {to_email}")
+        response = sg.send(message)
+        app.logger.info(f"✔️  SendGrid replied {response.status_code}")
+        app.logger.debug(f"   body: {response.body}")
+        app.logger.debug(f"   headers: {response.headers}")
         return True
     except Exception as e:
-        app.logger.error(f"❌ Failed to send access key to {to_email}: {e}")
+        app.logger.error("❌  SendGrid error sending access key email", exc_info=e)
         return False
 
 import logging
