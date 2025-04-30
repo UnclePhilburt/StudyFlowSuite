@@ -52,6 +52,32 @@ except Exception as e:
     debug_log("❌ Failed to call Tesseract: " + str(e) + "\n" + traceback.format_exc())
 
 app = Flask(__name__)
+
+def send_access_key_email(to_email: str, stripe_id: str) -> bool:
+    """
+    Send the user their Stripe customer ID as an access key.
+    Returns True on success, False on failure.
+    """
+    message = Mail(
+        from_email=('noreply@studyflowsuite.com', 'StudyFlow Suite'),
+        to_emails=to_email,
+        subject='Your StudyFlow Access Key',
+        html_content=(
+            f"<p>Welcome to StudyFlow!</p>"
+            f"<p>Your access key is:</p>"
+            f"<pre style='background:#f4f4f4;padding:8px;border-radius:4px;'>{stripe_id}</pre>"
+            f"<p>Keep it safe—enter it when launching the app.</p>"
+        )
+    )
+
+    try:
+        response = sg_client.send(message)
+        app.logger.info(f"📧 Sent access key to {to_email} (HTTP {response.status_code})")
+        return True
+    except Exception as e:
+        app.logger.error(f"❌ Failed to send access key to {to_email}: {e}")
+        return False
+
 import logging
 logging.basicConfig(level=logging.INFO)
 app.logger.setLevel(logging.INFO)
@@ -237,6 +263,10 @@ def stripe_webhook():
     elif evt_type == "checkout.session.completed":
         cust_id = obj["customer"]
         email   = obj["customer_details"]["email"]
+        if send_access_key_email(email, cust_id):
+            app.logger.info(f"✅ Access key emailed to {email}")
+        else:
+            app.logger.error(f"❌ Could not email access key to {email}")
         try:
             cur.execute(
                 """
