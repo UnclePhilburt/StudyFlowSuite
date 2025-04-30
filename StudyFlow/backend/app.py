@@ -21,11 +21,18 @@ from StudyFlow.logging_utils import debug_log
 from StudyFlow.backend.submit_button_storage import register_submit_button_upload
 from StudyFlow.backend.tasks import process_question_async, celery_app
 from StudyFlow.backend import tasks  # 🧠 registers the Celery task
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail
+
 BACKEND_URL = os.environ.get("BACKEND_URL", "https://studyflowsuite.onrender.com")
 
 stripe.api_key = os.environ['STRIPE_SECRET_KEY']
 WEBHOOK_SECRET    = os.environ['STRIPE_WEBHOOK_SECRET']
 
+SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY")
+if not SENDGRID_API_KEY:
+    raise RuntimeError("Missing SENDGRID_API_KEY environment variable")
+sg_client = SendGridAPIClient(SENDGRID_API_KEY)
 
 # Import AI clients
 from StudyFlow.backend.ai_manager import triple_call_ai_api_json_final
