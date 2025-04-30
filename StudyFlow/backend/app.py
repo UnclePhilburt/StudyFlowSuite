@@ -142,77 +142,86 @@ from StudyFlow.logging_utils import debug_log
 
 @app.route("/api/stripe_webhook", methods=["POST"])
 def stripe_webhook():
-    # 1) Grab the raw body & Stripe signature header
+    # 1) Raw body + signature header
     payload    = request.get_data()
     sig_header = request.headers.get("Stripe-Signature")
 
-    # 2) Verify signature & parse event
+    # 2) Verify & parse
     try:
-        event = stripe.Webhook.construct_event(
-            payload, sig_header, WEBHOOK_SECRET
-        )
+        event = stripe.Webhook.construct_event(payload, sig_header, WEBHOOK_SECRET)
         app.logger.info(f"✅ Stripe webhook verified: {event['id']} → {event['type']}")
-    except Exception as e:
-        app.logger.error(f"⚠️ Webhook error: {e}")
+    except (ValueError, stripe.error.SignatureVerificationError) as e:
+        app.logger.error(f"⚠️ Webhook validation failed: {e}")
         return "", 400
 
-    # 3) Pull out common info
+    # 3) Connect to Postgres
+    try:
+        conn = psycopg2.connect(os.environ["DATABASE_URL"])
+        cur  = conn.cursor()
+    except Exception as db_err:
+        app.logger.error(f"❌ DB connection error: {db_err}")
+        return "", 500
+
     evt_type = event["type"]
     obj      = event["data"]["object"]
 
-    # 4) Connect to Postgres
-    conn = psycopg2.connect(os.environ["DATABASE_URL"])
-    cur  = conn.cursor()
-
-    # 5) Handle the events you care about
+    # 4) Handle subscription.created & updated
     if evt_type in ("customer.subscription.created", "customer.subscription.updated"):
         cust_id = obj["customer"]
-        status  = obj["status"]           # e.g. "active", "trialing", etc.
-        app.logger.info(f"📥 Subscription {evt_type.split('.')[-1]}: {cust_id} → {status}")
-        cur.execute(
-            """
-            UPDATE users
-            SET subscription_status = %s
-            WHERE stripe_customer_id = %s
-            """,
-            (status, cust_id)
-        )
-        conn.commit()
+        status  = obj["status"]  # e.g. "active", "trialing"
+        try:
+            cur.execute(
+                "UPDATE users SET subscription_status = %s WHERE stripe_id = %s",
+                (status, cust_id)
+            )
+            conn.commit()
+            app.logger.info(f"📥 Subscription {evt_type.split('.')[-1]}: {cust_id} → {status}")
+        except Exception as e:
+            app.logger.error(f"❌ Failed to update subscription_status: {e}")
+            cur.close(); conn.close()
+            return "", 500
 
+    # 5) Handle subscription.deleted
     elif evt_type == "customer.subscription.deleted":
         cust_id = obj["customer"]
-        app.logger.info(f"🗑️ Subscription cancelled: {cust_id}")
-        cur.execute(
-            """
-            UPDATE users
-            SET subscription_status = %s
-            WHERE stripe_customer_id = %s
-            """,
-            ("canceled", cust_id)
-        )
-        conn.commit()
+        try:
+            cur.execute(
+                "UPDATE users SET subscription_status = %s WHERE stripe_id = %s",
+                ("canceled", cust_id)
+            )
+            conn.commit()
+            app.logger.info(f"🗑️ Subscription canceled: {cust_id}")
+        except Exception as e:
+            app.logger.error(f"❌ Failed to cancel subscription: {e}")
+            cur.close(); conn.close()
+            return "", 500
 
-    # (Optionally handle checkout.session.completed if you need to create new users)
+    # 6) Handle new customers on checkout.session.completed
     elif evt_type == "checkout.session.completed":
-        sess       = obj
-        cust_id    = sess["customer"]
-        email      = sess["customer_details"]["email"]
-        app.logger.info(f"🎉 Checkout completed: {email} | {cust_id}")
-        cur.execute(
-            """
-            INSERT INTO users (email, stripe_customer_id, subscription_status)
-            VALUES (%s, %s, %s)
-            ON CONFLICT (stripe_customer_id) DO NOTHING
-            """,
-            (email, cust_id, "active")
-        )
-        conn.commit()
+        cust_id = obj["customer"]
+        email   = obj["customer_details"]["email"]
+        try:
+            cur.execute(
+                """
+                INSERT INTO users (email, stripe_id, subscription_status)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (stripe_id) DO NOTHING
+                """,
+                (email, cust_id, "active")
+            )
+            conn.commit()
+            app.logger.info(f"🎉 New user created: {email} | {cust_id}")
+        except Exception as e:
+            app.logger.error(f"❌ Failed to insert new user: {e}")
+            cur.close(); conn.close()
+            return "", 500
 
-    # 6) Clean up & return
+    # 7) Clean up
     cur.close()
     conn.close()
-    return jsonify({"received": True}), 200
 
+    # 8) Return success
+    return jsonify({"received": True}), 200
 
 
 @app.route("/api/deepflow_question", methods=["POST"])
