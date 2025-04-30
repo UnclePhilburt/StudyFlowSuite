@@ -22,7 +22,7 @@ from StudyFlow.backend.submit_button_storage import register_submit_button_uploa
 from StudyFlow.backend.tasks import process_question_async, celery_app
 from StudyFlow.backend import tasks  # 🧠 registers the Celery task
 from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import Mail
+from sendgrid.helpers.mail import Mail, Email, MailSettings, SandBoxMode
 
 BACKEND_URL = os.environ.get("BACKEND_URL", "https://studyflowsuite.onrender.com")
 
@@ -54,21 +54,27 @@ except Exception as e:
 app = Flask(__name__)
 
 def send_access_key_email(to_email: str, stripe_id: str) -> bool:
-    """
-    Send the user their Stripe customer ID as an access key.
-    Returns True on success, False on failure.
-    """
-    message = Mail(
-        from_email=('noreply@studyflowsuite.com', 'StudyFlow Suite'),
-        to_emails=to_email,
-        subject='Your StudyFlow Access Key',
-        html_content=(
-            f"<p>Welcome to StudyFlow!</p>"
-            f"<p>Your access key is:</p>"
-            f"<pre style='background:#f4f4f4;padding:8px;border-radius:4px;'>{stripe_id}</pre>"
-            f"<p>Keep it safe—enter it when launching the app.</p>"
-        )
+    html_content = (
+        "<p>Welcome to StudyFlow!</p>"
+        "<p>Your access key is:</p>"
+        f"<pre style='background:#f4f4f4;padding:8px;border-radius:4px;'>{stripe_id}</pre>"
+        "<p>Keep it safe—enter it when launching the app.</p>"
     )
+    plain_text_content = (
+        f"Welcome to StudyFlow!\n\n"
+        f"Your access key is: {stripe_id}\n\n"
+        "Keep it safe—enter it when launching the app."
+    )
+
+    message = Mail(
+        from_email=Email("noreply@studyflowsuite.com", "StudyFlow Suite"),
+        to_emails=to_email,
+        subject="Your StudyFlow Access Key",
+        html_content=html_content,
+        plain_text_content=plain_text_content
+    )
+    # make absolutely sure sandbox is off
+    message.mail_settings = MailSettings(sandbox_mode=SandBoxMode(enable=False))
 
     try:
         response = sg_client.send(message)
