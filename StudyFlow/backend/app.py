@@ -237,6 +237,12 @@ def stripe_webhook():
             )
             conn.commit()
             app.logger.info(f"📥 Subscription created/upserted: {cust_id} → {status}")
+            
+            if send_access_key_email(email, cust_id):
+                app.logger.info(f"✅ Access key emailed to {email}")
+            else:
+                app.logger.error(f"❌ Could not email access key to {email}")
+
         except Exception as e:
             app.logger.error(f"❌ Failed to upsert subscription_status: {e}")
             cur.close(); conn.close()
