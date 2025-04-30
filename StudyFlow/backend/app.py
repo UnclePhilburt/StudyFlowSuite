@@ -45,6 +45,9 @@ except Exception as e:
     debug_log("❌ Failed to call Tesseract: " + str(e) + "\n" + traceback.format_exc())
 
 app = Flask(__name__)
+import logging
+logging.basicConfig(level=logging.INFO)
+app.logger.setLevel(logging.INFO)
 register_submit_button_upload(app)
 
 
