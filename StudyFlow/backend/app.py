@@ -166,15 +166,20 @@ def stripe_webhook():
     obj      = event["data"]["object"]
 
     # 4) Handle subscription.created & updated
-    if evt_type in ("customer.subscription.created", "customer.subscription.updated"):
+    if evt_type == "customer.subscription.created":
         cust_id = obj["customer"]
-        status  = obj["status"]  # e.g. "active", "trialing"
-        try:
-            cur.execute(
-                "UPDATE users SET subscription_status = %s WHERE stripe_id = %s",
-                (status, cust_id)
-            )
-            conn.commit()
+        status  = obj["status"]
+        cur.execute(
+            """
+            INSERT INTO users (stripe_id, subscription_status)
+            VALUES (%s, %s)
+            ON CONFLICT (stripe_id)
+            DO UPDATE SET subscription_status = EXCLUDED.subscription_status
+            """,
+            (cust_id, status)
+        )
+        conn.commit()
+
             app.logger.info(f"📥 Subscription {evt_type.split('.')[-1]}: {cust_id} → {status}")
         except Exception as e:
             app.logger.error(f"❌ Failed to update subscription_status: {e}")
