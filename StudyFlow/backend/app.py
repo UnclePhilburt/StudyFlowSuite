@@ -12,6 +12,7 @@ import numpy as np
 import psycopg2
 import traceback
 import requests
+import stripe
 
 
 from StudyFlow.backend.image_processing import preprocess_image
@@ -21,6 +22,9 @@ from StudyFlow.backend.submit_button_storage import register_submit_button_uploa
 from StudyFlow.backend.tasks import process_question_async, celery_app
 from StudyFlow.backend import tasks  # 🧠 registers the Celery task
 BACKEND_URL = os.environ.get("BACKEND_URL", "https://studyflowsuite.onrender.com")
+
+stripe.api_key = os.environ['STRIPE_SECRET_KEY']
+WEBHOOK_SECRET    = os.environ['STRIPE_WEBHOOK_SECRET']
 
 
 # Import AI clients
@@ -131,58 +135,80 @@ def process_data():
         debug_log(f"🔥 Error in /api/process: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
-import stripe
 from StudyFlow.logging_utils import debug_log
-
-# Set your webhook secret as an environment variable
-import os
-STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
 
 @app.route("/api/stripe_webhook", methods=["POST"])
 def stripe_webhook():
-    payload = request.data
-    sig_header = request.headers.get('Stripe-Signature')
+    # 1) Grab the raw body & Stripe signature header
+    payload    = request.get_data()
+    sig_header = request.headers.get("Stripe-Signature")
 
+    # 2) Verify signature & parse event
     try:
-        event = stripe.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
-    except ValueError as e:
-        debug_log(f"⚠️ Invalid payload: {e}")
-        return "Invalid payload", 400
-    except stripe.error.SignatureVerificationError as e:
-        debug_log(f"⚠️ Invalid signature: {e}")
-        return "Invalid signature", 400
+        event = stripe.Webhook.construct_event(
+            payload, sig_header, WEBHOOK_SECRET
+        )
+        app.logger.info(f"✅ Stripe webhook verified: {event['id']} → {event['type']}")
+    except Exception as e:
+        app.logger.error(f"⚠️ Webhook error: {e}")
+        return "", 400
 
-    # Handle the events you selected
-    if event['type'] == 'checkout.session.completed':
-        session = event['data']['object']
-        email = session['customer_details']['email']
-        customer_id = session['customer']
-        debug_log(f"✅ Checkout completed for {email} | Stripe ID: {customer_id}")
+    # 3) Pull out common info
+    evt_type = event["type"]
+    obj      = event["data"]["object"]
 
-        # Save email and customer_id to your database
-        conn = psycopg2.connect(os.environ["DATABASE_URL"])
-        with conn:
-            debug_log(f"📥 Saving user: {email} | Stripe ID: {customer_id}")
-            conn.execute(
-                "INSERT INTO public.users (email, stripe_id) VALUES (%s, %s) ON CONFLICT (email) DO NOTHING",
-                (email, customer_id)
-            )
+    # 4) Connect to Postgres
+    conn = psycopg2.connect(os.environ["DATABASE_URL"])
+    cur  = conn.cursor()
 
-    elif event['type'] == 'customer.subscription.deleted':
-        customer_id = event['data']['object']['customer']
-        debug_log(f"❌ Subscription cancelled for {customer_id}")
-        conn = psycopg2.connect(os.environ["DATABASE_URL"])
-        with conn:
-            conn.execute(
-                "UPDATE public.users SET subscription_status = %s WHERE stripe_id = %s",
-                ('cancelled', customer_id)
-            )
+    # 5) Handle the events you care about
+    if evt_type in ("customer.subscription.created", "customer.subscription.updated"):
+        cust_id = obj["customer"]
+        status  = obj["status"]           # e.g. "active", "trialing", etc.
+        app.logger.info(f"📥 Subscription {evt_type.split('.')[-1]}: {cust_id} → {status}")
+        cur.execute(
+            """
+            UPDATE users
+            SET subscription_status = %s
+            WHERE stripe_customer_id = %s
+            """,
+            (status, cust_id)
+        )
+        conn.commit()
 
+    elif evt_type == "customer.subscription.deleted":
+        cust_id = obj["customer"]
+        app.logger.info(f"🗑️ Subscription cancelled: {cust_id}")
+        cur.execute(
+            """
+            UPDATE users
+            SET subscription_status = %s
+            WHERE stripe_customer_id = %s
+            """,
+            ("canceled", cust_id)
+        )
+        conn.commit()
 
-    elif event['type'] == 'invoice.paid':
-        debug_log("💵 Invoice paid")
+    # (Optionally handle checkout.session.completed if you need to create new users)
+    elif evt_type == "checkout.session.completed":
+        sess       = obj
+        cust_id    = sess["customer"]
+        email      = sess["customer_details"]["email"]
+        app.logger.info(f"🎉 Checkout completed: {email} | {cust_id}")
+        cur.execute(
+            """
+            INSERT INTO users (email, stripe_customer_id, subscription_status)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (stripe_customer_id) DO NOTHING
+            """,
+            (email, cust_id, "active")
+        )
+        conn.commit()
 
-    return jsonify(success=True)
+    # 6) Clean up & return
+    cur.close()
+    conn.close()
+    return jsonify({"received": True}), 200
 
 
 
