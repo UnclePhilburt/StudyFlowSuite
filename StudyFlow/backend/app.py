@@ -165,26 +165,34 @@ def stripe_webhook():
     evt_type = event["type"]
     obj      = event["data"]["object"]
 
-    # 4) Handle subscription.created
+    # 4) Handle subscription.created (with email fetch + upsert)
     if evt_type == "customer.subscription.created":
         cust_id = obj["customer"]
         status  = obj["status"]
+        # fetch customer email
+        try:
+            customer = stripe.Customer.retrieve(cust_id)
+            email = customer.get("email")
+        except Exception as e:
+            app.logger.error(f"❌ Failed to retrieve customer email: {e}")
+            cur.close(); conn.close()
+            return "", 500
+
         try:
             cur.execute(
                 """
-                INSERT INTO users (stripe_id, subscription_status)
-                VALUES (%s, %s)
+                INSERT INTO users (email, stripe_id, subscription_status)
+                VALUES (%s, %s, %s)
                 ON CONFLICT (stripe_id)
                 DO UPDATE SET subscription_status = EXCLUDED.subscription_status
                 """,
-                (cust_id, status)
+                (email, cust_id, status)
             )
             conn.commit()
-            app.logger.info(f"📥 Subscription created: {cust_id} → {status}")
+            app.logger.info(f"📥 Subscription created/upserted: {cust_id} → {status}")
         except Exception as e:
             app.logger.error(f"❌ Failed to upsert subscription_status: {e}")
-            cur.close()
-            conn.close()
+            cur.close(); conn.close()
             return "", 500
 
     # 5) Handle subscription.updated
@@ -200,8 +208,7 @@ def stripe_webhook():
             app.logger.info(f"🔄 Subscription updated: {cust_id} → {status}")
         except Exception as e:
             app.logger.error(f"❌ Failed to update subscription_status: {e}")
-            cur.close()
-            conn.close()
+            cur.close(); conn.close()
             return "", 500
 
     # 6) Handle subscription.deleted
@@ -216,11 +223,10 @@ def stripe_webhook():
             app.logger.info(f"🗑️ Subscription canceled: {cust_id}")
         except Exception as e:
             app.logger.error(f"❌ Failed to cancel subscription: {e}")
-            cur.close()
-            conn.close()
+            cur.close(); conn.close()
             return "", 500
 
-    # 7) Handle checkout.session.completed
+    # 7) Handle checkout.session.completed (new customers)
     elif evt_type == "checkout.session.completed":
         cust_id = obj["customer"]
         email   = obj["customer_details"]["email"]
@@ -237,16 +243,13 @@ def stripe_webhook():
             app.logger.info(f"🎉 New user created: {email} | {cust_id}")
         except Exception as e:
             app.logger.error(f"❌ Failed to insert new user: {e}")
-            cur.close()
-            conn.close()
+            cur.close(); conn.close()
             return "", 500
 
     # 8) Clean up & return
     cur.close()
     conn.close()
     return jsonify({"received": True}), 200
-
-
 
 @app.route("/api/deepflow_question", methods=["POST"])
 def deepflow_question():
