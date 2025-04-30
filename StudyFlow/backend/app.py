@@ -271,6 +271,32 @@ def deepflow_question():
         debug_log(f"🔥 Error in /api/deepflow_question: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
+@app.route("/api/check_subscription")
+def check_subscription():
+    sid = request.args.get("stripe_id")
+    if not sid:
+        return jsonify({"error": "Missing stripe_id"}), 400
+
+    try:
+        conn = psycopg2.connect(os.environ["DATABASE_URL"])
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT subscription_status FROM users WHERE stripe_id = %s",
+            (sid,)
+        )
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+
+        if not row:
+            return jsonify({"error": "Unknown customer"}), 404
+
+        return jsonify({"subscription_status": row[0]}), 200
+
+    except Exception as e:
+        app.logger.error(f"❌ check_subscription error: {e}")
+        return jsonify({"error": "Server error"}), 500
+
 
 @app.route("/ocr", methods=["POST"])
 def ocr_endpoint():
