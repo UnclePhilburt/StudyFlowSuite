@@ -42,6 +42,7 @@ VISION_API_URL = f"{BASE_URL}/api/vision"
 
 # Track previous screenshot hash for change detection
 _previous_hash = None
+_last_success = False  # Only skip if last attempt was successful
 
 
 def encode_image_to_base64(image):
@@ -123,7 +124,7 @@ def process_quiz_hybrid():
     - method: 'cache' | 'text_api' | 'vision_api'
     - error: str (if failed)
     """
-    global _previous_hash
+    global _previous_hash, _last_success
 
     # 1. Capture and optimize screenshot
     debug_log("HYBRID: Capturing screen...")
@@ -137,16 +138,17 @@ def process_quiz_hybrid():
     scale_y = original_height / optimized_height
     debug_log(f"HYBRID: Scale factors: x={scale_x:.2f}, y={scale_y:.2f}")
 
-    # 2. Check for screen change
+    # 2. Check for screen change - only skip if last attempt was successful
     current_hash = get_image_hash(optimized)
-    if images_are_similar(current_hash, _previous_hash):
-        debug_log("HYBRID: Screen unchanged, skipping...")
+    if _last_success and images_are_similar(current_hash, _previous_hash):
+        debug_log("HYBRID: Screen unchanged (after success), skipping...")
         return {
             "success": False,
             "error": "Screen unchanged",
             "skip": True
         }
     _previous_hash = current_hash
+    _last_success = False  # Reset until we succeed
 
     # 3. Run local OCR
     debug_log("HYBRID: Running local OCR...")
@@ -262,6 +264,9 @@ def process_quiz_hybrid():
             int(button_coords[1] * scale_y)
         )
         debug_log(f"HYBRID: Scaled button coords to {button_coords}")
+
+    # Mark as successful so we skip unchanged screens after this
+    _last_success = True
 
     return {
         "success": True,
