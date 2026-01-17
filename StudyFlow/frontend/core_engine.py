@@ -24,11 +24,11 @@ import random
 
 # Import overlay state for real-time UI updates
 try:
-    from StudyFlow.frontend.assistant_overlay import overlay_state
+    from StudyFlow.frontend.assistant_overlay import get_overlay_state
     OVERLAY_AVAILABLE = True
 except ImportError:
     OVERLAY_AVAILABLE = False
-    overlay_state = None
+    get_overlay_state = None
 
 # Global state variables (you may later refactor these to a proper state manager)
 emergency_stop = False
@@ -183,14 +183,14 @@ def process_quiz_vision_mode():
     debug_log("🚀 Starting Vision Mode quiz processing...")
 
     # Set overlay to idle initially
-    if OVERLAY_AVAILABLE and overlay_state:
-        overlay_state.set_idle()
+    if OVERLAY_AVAILABLE and get_overlay_state:
+        get_overlay_state().set_idle()
 
     while True:
         if emergency_stop:
             debug_log("🛑 Emergency stop detected. Exiting quiz loop.")
-            if OVERLAY_AVAILABLE and overlay_state:
-                overlay_state.set_error("Emergency stop")
+            if OVERLAY_AVAILABLE and get_overlay_state:
+                get_overlay_state().set_error("Emergency stop")
             break
 
         # Process the screen with vision
@@ -199,8 +199,8 @@ def process_quiz_vision_mode():
         debug_log(f"{'='*50}")
 
         # Update overlay to processing state
-        if OVERLAY_AVAILABLE and overlay_state:
-            overlay_state.set_processing("Analyzing screen...")
+        if OVERLAY_AVAILABLE and get_overlay_state:
+            get_overlay_state().set_processing("Analyzing screen...")
 
         result = process_quiz_with_vision()
 
@@ -214,8 +214,8 @@ def process_quiz_vision_mode():
             error_msg = result.get("error", "Unknown error")
             debug_log(f"❌ Vision processing failed: {error_msg}")
             error_messages.append(f"Vision error: {error_msg}")
-            if OVERLAY_AVAILABLE and overlay_state:
-                overlay_state.set_error(error_msg)
+            if OVERLAY_AVAILABLE and get_overlay_state:
+                get_overlay_state().set_error(error_msg)
             break
 
         # Log what we found
@@ -228,8 +228,8 @@ def process_quiz_vision_mode():
         debug_log(f"🔒 Confidence: {result['confidence']}")
 
         # Update overlay with answer
-        if OVERLAY_AVAILABLE and overlay_state:
-            overlay_state.set_answered(
+        if OVERLAY_AVAILABLE and get_overlay_state:
+            get_overlay_state().set_answered(
                 question=result.get('question', ''),
                 answer=result.get('correct_answer', ''),
                 reasoning=result.get('reasoning', ''),

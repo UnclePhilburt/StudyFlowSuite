@@ -27,12 +27,17 @@ class OverlayState(QObject):
     state_changed = Signal(str, dict)  # (state, data)
 
     _instance = None
+    _initialized = False
 
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
-            QObject.__init__(cls._instance)
         return cls._instance
+
+    def __init__(self):
+        if not OverlayState._initialized:
+            super().__init__()
+            OverlayState._initialized = True
 
     def set_idle(self):
         self.state_changed.emit("idle", {})
@@ -53,8 +58,15 @@ class OverlayState(QObject):
         self.state_changed.emit("error", {"message": message})
 
 
-# Global state instance
-overlay_state = OverlayState()
+# Global state instance - lazy initialization
+overlay_state = None
+
+def get_overlay_state():
+    """Get the overlay state singleton (lazy init to avoid import issues)."""
+    global overlay_state
+    if overlay_state is None:
+        overlay_state = OverlayState()
+    return overlay_state
 
 
 # ============ Dark Panel Background ============
@@ -150,7 +162,7 @@ class AssistantOverlay(QWidget):
         self.setup_ui()
 
         # Connect to state manager
-        overlay_state.state_changed.connect(self.on_state_changed)
+        get_overlay_state().state_changed.connect(self.on_state_changed)
 
         # Drop shadow effect
         shadow = QGraphicsDropShadowEffect(self)
