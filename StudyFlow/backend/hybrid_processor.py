@@ -128,7 +128,14 @@ def process_quiz_hybrid():
     # 1. Capture and optimize screenshot
     debug_log("HYBRID: Capturing screen...")
     screenshot = pyautogui.screenshot()
+    original_width, original_height = screenshot.size
     optimized = optimize_screenshot(screenshot)
+    optimized_width, optimized_height = optimized.size
+
+    # Calculate scale factor to convert coordinates back to original size
+    scale_x = original_width / optimized_width
+    scale_y = original_height / optimized_height
+    debug_log(f"HYBRID: Scale factors: x={scale_x:.2f}, y={scale_y:.2f}")
 
     # 2. Check for screen change
     current_hash = get_image_hash(optimized)
@@ -240,6 +247,21 @@ def process_quiz_hybrid():
     # Also try result's button text
     if not button_coords and result.get('button_text'):
         button_coords = find_text_coordinates(result['button_text'], words)
+
+    # Scale coordinates back to original screen size
+    if answer_coords:
+        answer_coords = (
+            int(answer_coords[0] * scale_x),
+            int(answer_coords[1] * scale_y)
+        )
+        debug_log(f"HYBRID: Scaled answer coords to {answer_coords}")
+
+    if button_coords:
+        button_coords = (
+            int(button_coords[0] * scale_x),
+            int(button_coords[1] * scale_y)
+        )
+        debug_log(f"HYBRID: Scaled button coords to {button_coords}")
 
     return {
         "success": True,
