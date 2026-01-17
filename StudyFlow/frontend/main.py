@@ -1,7 +1,7 @@
 import os
 import pytesseract
 from StudyFlow.config import TESSERACT_PATH
-from StudyFlow.studyflow_menu import main as launch_menu
+from StudyFlow.frontend.studyflow_menu import main as launch_menu
 from StudyFlow.logging_utils import debug_log
 
 # Set Tesseract command path early

@@ -1,4 +1,9 @@
 import sys
+import os
+
+# Get the Media directory path (works on Mac and Windows)
+MEDIA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "Media")
+
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QPushButton, QVBoxLayout, QLabel,
     QScrollArea, QStatusBar, QHBoxLayout, QGraphicsDropShadowEffect
@@ -8,10 +13,11 @@ from PySide6.QtCore import Qt, QPoint, QRect
 
 # Attempt to import your StudyFlow functions; otherwise, define dummy versions.
 try:
-    from StudyFlow.core_engine import start_quiz
-    from StudyFlow.button_capture import capture_button_template
+    from StudyFlow.frontend.core_engine import start_quiz
+    from StudyFlow.frontend.button_capture import capture_button_template
     from StudyFlow.logging_utils import debug_log
-except ImportError:
+except ImportError as e:
+    print(f"Warning: Import error in gui.py: {e}")
     def start_quiz(widget):
         print("DEBUG: Start Quiz function called")
     def capture_button_template(widget):
@@ -123,7 +129,7 @@ class MainWindow(QMainWindow):
         header_layout = QVBoxLayout()
         # Logo
         logo_label = QLabel(content)
-        logo_path = r"C:\StudyFlowSuite\StudyFlow\Media\FreeFlow.png"  # Update to your logo path.
+        logo_path = os.path.join(MEDIA_DIR, "FreeFlow.png")
         pixmap = QPixmap(logo_path)
         if pixmap.isNull():
             debug_log(f"Failed to load image at {logo_path}")

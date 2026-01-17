@@ -2,12 +2,11 @@
 Flask
 gunicorn
 gevent
-openai
+openai>=1.0.0
 anthropic
 cohere
 python-dotenv
 Pillow
-openai==0.28
 pytesseract
 opencv-python-headless
 scikit-image

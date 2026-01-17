@@ -1,8 +1,17 @@
-import openai
+from openai import OpenAI
 import re
 import traceback
 from StudyFlow import config  # Ensures the OpenAI key is set globally
 from StudyFlow.logging_utils import debug_log
+
+# Initialize the OpenAI client
+_client = None
+
+def _get_client():
+    global _client
+    if _client is None:
+        _client = OpenAI()
+    return _client
 
 def get_openai_answer(ocr_json):
     prompt = (
@@ -14,12 +23,13 @@ def get_openai_answer(ocr_json):
     debug_log("🟢 Sending prompt to OpenAI: " + prompt)
 
     try:
-        response = openai.ChatCompletion.create(
+        client = _get_client()
+        response = client.chat.completions.create(
             model="gpt-4o",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.0
         )
-        ai_response = response['choices'][0]['message']['content'].strip()
+        ai_response = response.choices[0].message.content.strip()
         debug_log("📨 Extracted OpenAI response: " + ai_response)
 
         match = re.fullmatch(r'\s*(\d+)\s*', ai_response)

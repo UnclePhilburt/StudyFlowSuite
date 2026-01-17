@@ -9,7 +9,7 @@ import numpy as np
 import cv2
 from io import BytesIO
 
-TEMPLATE_DIR = "/mnt/data/button_templates"
+TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "static", "button_templates")
 INDEX_FILE = os.path.join(TEMPLATE_DIR, "submit_template_index.json")
 
 # Ensure folder exists

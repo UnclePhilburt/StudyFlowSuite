@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QPainter, QColor, QLinearGradient, QBrush, QPixmap
 from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve
 # Import the DeepFlow logic; adjust the import as needed for your package structure.
-from .deepflow import get_deepflow_question
+from StudyFlow.backend.deepflow import get_deepflow_question
 
 class GradientWidget(QWidget):
     def paintEvent(self, event):
@@ -202,6 +202,9 @@ class DeepFlowWindow(QMainWindow):
 
     def check_answer(self, selected_index):
         """Checks the answer and displays feedback."""
+        if self.current_question_data is None:
+            self.question_label.setText("No question loaded. Please start a quiz first.")
+            return
         correct_index = self.current_question_data.get("correct_index", -1)
         explanation = self.current_question_data.get("explanation", "")
         if selected_index == correct_index:
@@ -213,6 +216,10 @@ class DeepFlowWindow(QMainWindow):
 
     def show_explanation(self):
         """Shows the explanation for the current question."""
+        if self.current_question_data is None:
+            self.explanation_label.setText("No question loaded yet.")
+            self.explanation_label.setVisible(True)
+            return
         explanation = self.current_question_data.get("explanation", "")
         self.explanation_label.setText(explanation)
         self.explanation_label.setVisible(True)

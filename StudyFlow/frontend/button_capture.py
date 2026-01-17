@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QMessageBox
 from PySide6.QtCore import Qt
 import pyautogui
-from StudyFlow.screen_interaction import get_center
+from StudyFlow.frontend.screen_interaction import get_center
 from StudyFlow.logging_utils import debug_log
 
 # Global variables (assuming these are used elsewhere)
@@ -39,13 +39,16 @@ class CaptureCornersDialog(QDialog):
             self.bottom_right = pyautogui.position()
             x1, y1 = self.top_left
             x2, y2 = self.bottom_right
-            region = (min(x1, x2), min(y1, y2), abs(x2 - x1), abs(y2 - y1))
+            left, top = min(x1, x2), min(y1, y2)
+            width, height = abs(x2 - x1), abs(y2 - y1)
+            region = (left, top, width, height)
             button_image = pyautogui.screenshot(region=region)
             button_template_path = "submit_button.png"
             button_image.save(button_template_path)
-            submit_button_x, _ = get_center(region)
-            submit_button_top = min(y1, y2)
-            submit_button_bottom = max(y1, y2)
+            # Calculate center correctly (region is x, y, width, height)
+            submit_button_x = left + width // 2
+            submit_button_top = top
+            submit_button_bottom = top + height
             QMessageBox.information(self, "Success", f"Button template saved at {button_template_path}")
             debug_log(f"Captured button template from region: {region}")
             self.accept()  # Close the dialog

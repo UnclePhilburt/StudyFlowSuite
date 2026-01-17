@@ -5,9 +5,12 @@ import os
 import time
 import difflib  # new import for fuzzy matching
 from StudyFlow.logging_utils import debug_log
-from StudyFlow.image_processing import preprocess_image
+from StudyFlow.backend.image_processing import preprocess_image
 import pytesseract
-from StudyFlow.ocr_extraction import get_tagged_words_from_region  # ensure OCR function is available
+from StudyFlow.frontend.ocr_extraction import get_tagged_words_from_region  # ensure OCR function is available
+from StudyFlow.constants import (
+    SCROLL_PIXELS, MAX_SCROLL_ATTEMPTS, SCROLL_SETTLE_DELAY_SEC, SCROLL_RESET_ATTEMPTS
+)
 
 def human_move_click(x, y, duration=0.5):
     debug_log(f"Moving mouse to ({x}, {y}) over {duration}s and clicking.")
@@ -113,11 +116,17 @@ def click_button(region):
         debug_log("Submit button template image not found.")
         return False
 
-def scroll_all_the_way_up(region, scroll_pixels=100, max_attempts=10):
-    debug_log("Scrolling all the way up to reset the region...")
+def scroll_all_the_way_up(region, scroll_pixels=SCROLL_PIXELS, max_attempts=SCROLL_RESET_ATTEMPTS):
+    """Scroll to the top of the page to reset for next question."""
+    # Position mouse in region first (required for scroll to work in correct window)
+    center_x = region[0] + region[2] // 2
+    center_y = region[1] + region[3] // 2
+    pyautogui.moveTo(center_x, center_y)
+
+    debug_log("Scrolling to top of page...")
     for _ in range(max_attempts):
-        pyautogui.scroll(scroll_pixels)
-        time.sleep(0.5)
+        pyautogui.scroll(scroll_pixels)  # Positive = scroll up
+        time.sleep(SCROLL_SETTLE_DELAY_SEC)
     debug_log("Finished scrolling up.")
 
 # New functions to detect additional text by scrolling down.
@@ -160,4 +169,80 @@ def submit_button_visible(region):
         word = ocr_data['text'][i].strip().lower()
         if word and (("submit" in word) or ("next" in word)):
             return True
+    return False
+
+def click_button_by_ocr(region):
+    """
+    Click submit/next button using OCR text detection.
+    Fallback when template matching fails.
+    """
+    screenshot = pyautogui.screenshot(region=region)
+    processed = preprocess_image(screenshot)
+    ocr_data = pytesseract.image_to_data(processed, output_type=pytesseract.Output.DICT,
+                                          config="--psm 6 --oem 3")
+
+    for i in range(len(ocr_data['text'])):
+        word = ocr_data['text'][i].strip().lower()
+        if word and (("submit" in word) or ("next" in word)):
+            # Found button text - calculate click position
+            x = ocr_data['left'][i] + ocr_data['width'][i] // 2
+            y = ocr_data['top'][i] + ocr_data['height'][i] // 2
+            abs_x = region[0] + x
+            abs_y = region[1] + y
+            debug_log(f"Clicking button '{word}' at ({abs_x}, {abs_y}) via OCR")
+            human_move_click(abs_x, abs_y)
+            return True
+    return False
+
+def click_button_with_scroll(region, max_scroll_attempts=MAX_SCROLL_ATTEMPTS):
+    """
+    Smart button clicking that handles scrolling for long questions.
+
+    Flow:
+    1. Move mouse to region center (required for scroll to work)
+    2. Try to click button in current view
+    3. If not found, scroll down and retry
+    4. After success, scroll back up to reset for next question
+    """
+    # Position mouse in center of region for scrolling
+    center_x = region[0] + region[2] // 2
+    center_y = region[1] + region[3] // 2
+    pyautogui.moveTo(center_x, center_y)
+
+    # First attempt without scrolling - try template matching
+    if click_button(region):
+        debug_log("Button found on first attempt (template match)")
+        scroll_all_the_way_up(region)  # Reset for next question
+        return True
+
+    # Try OCR-based detection as backup
+    if submit_button_visible(region):
+        debug_log("Button text detected via OCR, attempting click")
+        if click_button_by_ocr(region):
+            scroll_all_the_way_up(region)
+            return True
+
+    # Scroll down incrementally looking for button
+    debug_log(f"Button not visible, starting scroll search (max {max_scroll_attempts} attempts)")
+    for attempt in range(max_scroll_attempts):
+        debug_log(f"Scroll attempt {attempt + 1}/{max_scroll_attempts}")
+        pyautogui.scroll(-SCROLL_PIXELS)  # Negative = scroll down
+        time.sleep(SCROLL_SETTLE_DELAY_SEC)
+
+        # Try template matching after scroll
+        if click_button(region):
+            debug_log(f"Button found after {attempt + 1} scroll(s) (template match)")
+            scroll_all_the_way_up(region)  # Reset for next question
+            return True
+
+        # Try OCR detection after each scroll
+        if submit_button_visible(region):
+            debug_log(f"Button text detected after {attempt + 1} scroll(s), attempting click")
+            if click_button_by_ocr(region):
+                scroll_all_the_way_up(region)
+                return True
+
+    # Failed - scroll back up and return False
+    debug_log("Button not found after all scroll attempts")
+    scroll_all_the_way_up(region)
     return False

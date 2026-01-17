@@ -674,7 +674,7 @@ def find_button():
 @app.route("/admin/button-templates")
 def admin_view_button_templates():
     try:
-        templates_dir = "/mnt/data/button_templates"
+        templates_dir = os.path.join(os.path.dirname(__file__), "static", "button_templates")
         meta = os.path.join(templates_dir, "submit_template_index.json")
         data = {}
         if os.path.exists(meta):
@@ -710,7 +710,8 @@ def admin_view_button_templates():
 @app.route("/admin/button-image/<path:filename>")
 def serve_button_template(filename):
     try:
-        return send_from_directory("/mnt/data/button_templates", filename)
+        templates_dir = os.path.join(os.path.dirname(__file__), "static", "button_templates")
+        return send_from_directory(templates_dir, filename)
     except Exception as e:
         debug_log(f"🔥 /admin/button-image error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
@@ -1028,6 +1029,104 @@ def admin_home_message():
     """, message=current)
 
 
+
+
+# ============ VISION API ENDPOINT ============
+@app.route("/api/vision", methods=["POST"])
+def vision_analyze():
+    """
+    Analyze a screenshot using GPT-4o Vision.
+    Expects JSON with 'image' field containing base64-encoded PNG.
+    Returns question, answers, correct answer, and button text.
+    """
+    try:
+        data = request.get_json()
+        if not data or 'image' not in data:
+            return jsonify({"error": "No image provided"}), 400
+
+        image_base64 = data['image']
+
+        # Use OpenAI client (v1.0+ style)
+        from openai import OpenAI
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+        prompt = """Analyze this screenshot of a quiz/test interface.
+
+Your task:
+1. Find the quiz QUESTION being asked
+2. Find ALL answer options (usually 2-4 options)
+3. Determine which answer is CORRECT
+4. Identify the Submit/Next button text
+
+Return a JSON object with this EXACT structure:
+{
+    "question": "the full question text",
+    "answers": [
+        {"index": 1, "text": "first answer option text exactly as shown"},
+        {"index": 2, "text": "second answer option text exactly as shown"},
+        {"index": 3, "text": "third answer option text exactly as shown"},
+        {"index": 4, "text": "fourth answer option text exactly as shown"}
+    ],
+    "correct_answer_index": 2,
+    "correct_answer_text": "the exact text of the correct answer",
+    "button_text": "Submit or Next or Continue - exact text shown",
+    "confidence": "high/medium/low",
+    "reasoning": "Brief explanation why this answer is correct"
+}
+
+CRITICAL RULES:
+- correct_answer_index is 1-based (1, 2, 3, or 4)
+- Copy answer text EXACTLY as it appears on screen (needed for clicking)
+- Copy button text EXACTLY as shown
+- If no quiz visible, set question to null
+- Return ONLY valid JSON, no other text"""
+
+        response = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/png;base64,{image_base64}",
+                                "detail": "high"
+                            }
+                        }
+                    ]
+                }
+            ],
+            max_tokens=1000,
+            temperature=0.1
+        )
+
+        response_text = response.choices[0].message.content.strip()
+        debug_log(f"📨 Vision API response received ({len(response_text)} chars)")
+
+        # Parse JSON - handle markdown code blocks
+        if "```" in response_text:
+            lines = response_text.split("\n")
+            json_lines = []
+            in_json = False
+            for line in lines:
+                if line.startswith("```json") or line.startswith("```"):
+                    in_json = not in_json
+                    continue
+                if in_json:
+                    json_lines.append(line)
+            response_text = "\n".join(json_lines)
+
+        result = json.loads(response_text)
+        return jsonify(result), 200
+
+    except json.JSONDecodeError as e:
+        debug_log(f"❌ Vision JSON parse error: {e}")
+        return jsonify({"error": "JSON parse failed", "raw": response_text}), 500
+    except Exception as e:
+        debug_log(f"❌ Vision API error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == "__main__":

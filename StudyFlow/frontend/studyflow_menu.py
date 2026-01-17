@@ -1,4 +1,9 @@
 import sys
+import os
+
+# Get the Media directory path (works on Mac and Windows)
+MEDIA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "Media")
+
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QPushButton, QVBoxLayout, QLabel,
     QHBoxLayout, QGraphicsDropShadowEffect, QSplashScreen, QTabBar,
@@ -13,8 +18,9 @@ from PySide6.QtCore import (
 
 # Attempt to import your quiz GUI, or use a placeholder.
 try:
-    from StudyFlow.gui import MainWindow as QuizMainWindow
-except ImportError:
+    from StudyFlow.frontend.gui import MainWindow as QuizMainWindow
+except ImportError as e:
+    print(f"Warning: Could not import QuizMainWindow: {e}")
     class QuizMainWindow(QMainWindow):
         def __init__(self):
             super().__init__()
@@ -69,38 +75,6 @@ class GlowButton(QPushButton):
     def leaveEvent(self, event):
         self.setGraphicsEffect(None)
         super().leaveEvent(event)
-
-###############################################################################
-# FlashcardWidget (kept for legacy or future use, not integrated now)
-###############################################################################
-class FlashcardWidget(QWidget):
-    def __init__(self, question, answer, parent=None):
-        super().__init__(parent)
-        self.question = question
-        self.answer = answer
-        self.init_ui()
-
-    def init_ui(self):
-        layout = QVBoxLayout(self)
-        self.question_label = QLabel(f"Q: {self.question}", self)
-        self.question_label.setWordWrap(True)
-        layout.addWidget(self.question_label)
-        self.answer_label = QLabel(f"A: {self.answer}", self)
-        self.answer_label.setWordWrap(True)
-        self.answer_label.setVisible(False)
-        layout.addWidget(self.answer_label)
-        self.toggle_button = QPushButton("Show Answer", self)
-        self.toggle_button.clicked.connect(self.toggle_answer)
-        layout.addWidget(self.toggle_button)
-        self.setLayout(layout)
-
-    def toggle_answer(self):
-        if self.answer_label.isVisible():
-            self.answer_label.setVisible(False)
-            self.toggle_button.setText("Show Answer")
-        else:
-            self.answer_label.setVisible(True)
-            self.toggle_button.setText("Hide Answer")
 
 ###############################################################################
 # ModernMenu QMainWindow (Main Application Window)
@@ -219,7 +193,7 @@ class ModernMenu(QMainWindow):
         home_layout.setSpacing(20)
 
         self.image_label = QLabel(self.home_page)
-        pixmap = QPixmap(r"C:\StudyFlowSuite\StudyFlow\Media\StudyFlow.png")
+        pixmap = QPixmap(os.path.join(MEDIA_DIR, "StudyFlow.png"))
         pixmap = pixmap.scaled(400, 400, Qt.KeepAspectRatio, Qt.SmoothTransformation)
         self.image_label.setPixmap(pixmap)
         self.image_label.setAlignment(Qt.AlignCenter)
@@ -240,7 +214,7 @@ class ModernMenu(QMainWindow):
         freeflow_layout.setSpacing(20)
 
         self.flowfree_image_label = QLabel(self.freeflow_page)
-        flowfree_pixmap = QPixmap(r"C:\StudyFlowSuite\StudyFlow\Media\FreeFlow.png")
+        flowfree_pixmap = QPixmap(os.path.join(MEDIA_DIR, "FreeFlow.png"))
         flowfree_pixmap = flowfree_pixmap.scaled(300, 300, Qt.KeepAspectRatio, Qt.SmoothTransformation)
         self.flowfree_image_label.setPixmap(flowfree_pixmap)
         self.flowfree_image_label.setAlignment(Qt.AlignCenter)
@@ -260,9 +234,32 @@ class ModernMenu(QMainWindow):
         """)
         freeflow_layout.addWidget(self.flowfree_desc)
 
-        self.flowfree_button = GlowButton("Open FreeFlow", self.freeflow_page)
+        # Buttons layout for FreeFlow options
+        freeflow_buttons = QHBoxLayout()
+        freeflow_buttons.setSpacing(20)
+
+        self.flowfree_button = GlowButton("Classic Mode", self.freeflow_page)
         self.flowfree_button.clicked.connect(self.open_quiz_gui)
-        freeflow_layout.addWidget(self.flowfree_button, alignment=Qt.AlignCenter)
+        freeflow_buttons.addWidget(self.flowfree_button)
+
+        self.vision_button = GlowButton("Vision Mode ✨", self.freeflow_page)
+        self.vision_button.setStyleSheet("""
+            QPushButton {
+                background-color: #5f7fff;
+                color: white;
+                font-size: 16px;
+                font-weight: 600;
+                border-radius: 30px;
+                padding: 6px 12px;
+            }
+            QPushButton:hover {
+                background-color: #3f5fff;
+            }
+        """)
+        self.vision_button.clicked.connect(self.start_vision_mode)
+        freeflow_buttons.addWidget(self.vision_button)
+
+        freeflow_layout.addLayout(freeflow_buttons)
 
         self.freeflow_page.setLayout(freeflow_layout)
         self.stacked_widget.addWidget(self.freeflow_page)  # index 1
@@ -274,7 +271,7 @@ class ModernMenu(QMainWindow):
         focus_layout.setSpacing(20)
 
         self.focusflow_image_label = QLabel(self.focusflow_page)
-        focusflow_pixmap = QPixmap(r"C:\StudyFlowSuite\StudyFlow\Media\FocusFlow.png")
+        focusflow_pixmap = QPixmap(os.path.join(MEDIA_DIR, "FocusFlow.png"))
         focusflow_pixmap = focusflow_pixmap.scaled(300, 300, Qt.KeepAspectRatio, Qt.SmoothTransformation)
         self.focusflow_image_label.setPixmap(focusflow_pixmap)
         self.focusflow_image_label.setAlignment(Qt.AlignCenter)
@@ -307,7 +304,7 @@ class ModernMenu(QMainWindow):
         deep_layout.setSpacing(20)
 
         self.deepflow_image_label = QLabel(self.deepflow_page)
-        deepflow_pixmap = QPixmap(r"C:\StudyFlowSuite\StudyFlow\Media\DeepFlow.png")
+        deepflow_pixmap = QPixmap(os.path.join(MEDIA_DIR, "DeepFlow.png"))
         deepflow_pixmap = deepflow_pixmap.scaled(300, 300, Qt.KeepAspectRatio, Qt.SmoothTransformation)
         self.deepflow_image_label.setPixmap(deepflow_pixmap)
         self.deepflow_image_label.setAlignment(Qt.AlignCenter)
@@ -393,8 +390,7 @@ class ModernMenu(QMainWindow):
     
     def start_focus_flow(self):
         """Starts FocusFlow mode by displaying a separate floating overlay with the full answer and explanation."""
-        from StudyFlow.focusflow import FocusFlowOverlay
-        question = "What is the capital of France?"  # For reference
+        from StudyFlow.frontend.focusflow import FocusFlowOverlay
         full_answer = "FocusFlow"
         explanation = "Because sometimes, all you need is the right nudge in the right moment — FocusFlow delivers clarity when it matters most."
         self.focusflow_overlay = FocusFlowOverlay(full_answer, explanation)
@@ -407,6 +403,47 @@ class ModernMenu(QMainWindow):
         self.deepflow_window = DeepFlowWindow()
         self.deepflow_window.show()
 
+    def start_vision_mode(self):
+        """Starts Vision Mode - AI-powered full-screen quiz solving."""
+        from PySide6.QtWidgets import QMessageBox
+
+        # Show confirmation dialog
+        reply = QMessageBox.question(
+            self,
+            "Start Vision Mode",
+            "Vision Mode will analyze your full screen using AI.\n\n"
+            "Make sure a quiz is visible on screen before starting.\n\n"
+            "The app will hide and start processing in 3 seconds.\n\n"
+            "Press ESC to stop at any time.\n\n"
+            "Start now?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes
+        )
+
+        if reply == QMessageBox.Yes:
+            from StudyFlow.frontend.core_engine import start_quiz_vision
+            # Hide main window and start vision mode
+            self.hide()
+            # Give user time to prepare
+            import time
+            time.sleep(3)
+            # Run vision mode
+            questions, errors = start_quiz_vision()
+            # Show results
+            self.show()
+            if errors:
+                QMessageBox.warning(
+                    self,
+                    "Vision Mode Complete",
+                    f"Answered {questions} questions.\n\nErrors:\n" + "\n".join(errors)
+                )
+            else:
+                QMessageBox.information(
+                    self,
+                    "Vision Mode Complete",
+                    f"Successfully answered {questions} questions!"
+                )
+
 # Prevent garbage collection
 main_window = None
 
@@ -418,7 +455,7 @@ def show_main_window(splash):
 
 def main():
     app = QApplication(sys.argv)
-    splash_pix = QPixmap(r"C:\StudyFlowSuite\StudyFlow\Media\StudyFlow.png")
+    splash_pix = QPixmap(os.path.join(MEDIA_DIR, "StudyFlow.png"))
     splash_pix = splash_pix.scaled(splash_pix.width() * 0.1,
                                    splash_pix.height() * 0.1,
                                    Qt.KeepAspectRatio,

@@ -1,21 +1,28 @@
 from PySide6.QtWidgets import (
-    QDialog, QApplication, QLabel, QVBoxLayout, QHBoxLayout, QPushButton, 
+    QDialog, QApplication, QLabel, QVBoxLayout, QHBoxLayout, QPushButton,
     QGraphicsDropShadowEffect, QGraphicsOpacityEffect
 )
 from PySide6.QtCore import Qt, QRect, QTimer, QPropertyAnimation
 from PySide6.QtGui import QPainter, QPen, QColor, QFont, QPalette
-import time
 import difflib
 
+from StudyFlow.constants import (
+    HIGHLIGHT_DISPLAY_MS, FADE_OUT_DURATION_MS, POLLING_INTERVAL_MS,
+    DEBOUNCE_DELAY_MS, OCR_SIMILARITY_THRESHOLD, OVERLAY_WIDTH, OVERLAY_HEIGHT,
+    OVERLAY_BACKGROUND_ALPHA, OVERLAY_MARGIN, OVERLAY_SPACING,
+    SELECTION_OVERLAY_ALPHA, SELECTION_PEN_WIDTH, HIGHLIGHT_PEN_WIDTH,
+    HIGHLIGHT_CORNER_RADIUS, HIGHLIGHT_COLOR, OVERLAY_BACKGROUND_COLOR
+)
+
 # Import OCR and AI functions from your modules.
-from StudyFlow.ocr_extraction import (
-    get_tagged_words_from_region, 
-    ai_structure_layout, 
-    fallback_structure, 
+from StudyFlow.frontend.ocr_extraction import (
+    get_tagged_words_from_region,
+    ai_structure_layout,
+    fallback_structure,
     merge_ai_and_fallback,
     convert_answers_list_to_dict
 )
-from StudyFlow.ai_manager import triple_call_ai_api_json_final
+from StudyFlow.backend.ai_manager import triple_call_ai_api_json_final
 
 # Global variables to store the selected question region and the last OCR mapping.
 QUESTION_REGION = None
@@ -52,9 +59,9 @@ class RegionSelector(QDialog):
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        painter.fillRect(self.rect(), QColor(0, 0, 0, 100))
+        painter.fillRect(self.rect(), QColor(0, 0, 0, SELECTION_OVERLAY_ALPHA))
         if self.start_point and self.end_point:
-            pen = QPen(Qt.red, 2)
+            pen = QPen(Qt.red, SELECTION_PEN_WIDTH)
             painter.setPen(pen)
             selection_rect = QRect(self.start_point, self.end_point).normalized()
             painter.drawRect(selection_rect)
@@ -75,11 +82,11 @@ class AnswerHighlighter(QDialog):
         self.setGraphicsEffect(self.opacity_effect)
         self.opacity_effect.setOpacity(1.0)
         self.show()
-        QTimer.singleShot(3000, self.start_fade_out)  # Show for 3 seconds
+        QTimer.singleShot(HIGHLIGHT_DISPLAY_MS, self.start_fade_out)
 
     def start_fade_out(self):
         self.anim = QPropertyAnimation(self.opacity_effect, b"opacity")
-        self.anim.setDuration(500)
+        self.anim.setDuration(FADE_OUT_DURATION_MS)
         self.anim.setStartValue(1.0)
         self.anim.setEndValue(0.0)
         self.anim.finished.connect(self.close)
@@ -87,10 +94,10 @@ class AnswerHighlighter(QDialog):
 
     def paintEvent(self, event):
         painter = QPainter(self)
-        pen = QPen(QColor(0, 255, 128, 200), 4)  # Pastel green outline.
+        pen = QPen(QColor(*HIGHLIGHT_COLOR), HIGHLIGHT_PEN_WIDTH)
         painter.setPen(pen)
         painter.setBrush(Qt.NoBrush)
-        painter.drawRoundedRect(self.highlight_rect, 10, 10)
+        painter.drawRoundedRect(self.highlight_rect, HIGHLIGHT_CORNER_RADIUS, HIGHLIGHT_CORNER_RADIUS)
 
 class FocusFlowOverlay(QDialog):
     """
@@ -102,7 +109,7 @@ class FocusFlowOverlay(QDialog):
         super().__init__(None)  # Top-level window
         self.setWindowTitle("FocusFlow Mode")
         self.setWindowFlags(Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint | Qt.Tool)
-        self.setFixedSize(500, 350)
+        self.setFixedSize(OVERLAY_WIDTH, OVERLAY_HEIGHT)
         self._drag_pos = None  # For moving the window
         self.timer = None      # For polling
         self.debounce_timer = None  # For debouncing updates
@@ -116,7 +123,7 @@ class FocusFlowOverlay(QDialog):
 
         # Set up a professional opaque background.
         palette = QPalette()
-        palette.setColor(QPalette.Window, QColor(255, 255, 255, 240))
+        palette.setColor(QPalette.Window, QColor(*OVERLAY_BACKGROUND_COLOR))
         self.setAutoFillBackground(True)
         self.setPalette(palette)
         self.setStyleSheet("""
@@ -154,8 +161,8 @@ class FocusFlowOverlay(QDialog):
         self.explanation = explanation
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(15)
+        layout.setContentsMargins(OVERLAY_MARGIN, OVERLAY_MARGIN, OVERLAY_MARGIN, OVERLAY_MARGIN)
+        layout.setSpacing(OVERLAY_SPACING)
 
         self.answer_label = QLabel(f"Answer:\n{self.full_answer}", self)
         self.answer_label.setWordWrap(True)
@@ -201,7 +208,7 @@ class FocusFlowOverlay(QDialog):
         """Toggle scanning on or off."""
         if not self.scanning_active:
             # Start polling
-            self.start_polling(interval_ms=1000)
+            self.start_polling(interval_ms=POLLING_INTERVAL_MS)
             self.scanning_active = True
             self.toggle_scanning_button.setText("Stop Scanning")
         else:
@@ -215,7 +222,7 @@ class FocusFlowOverlay(QDialog):
         selector = RegionSelector()
         if selector.exec() == QDialog.Accepted:
             QUESTION_REGION = selector.selected_rect
-            full_answer, explanation, merged_json = get_focusflow_data(QUESTION_REGION)
+            full_answer, explanation, merged_json, chosen_index = get_focusflow_data(QUESTION_REGION)
             self.full_answer = full_answer
             self.explanation = explanation
             self.answer_label.setText(f"Answer:\n{self.full_answer}")
@@ -225,7 +232,6 @@ class FocusFlowOverlay(QDialog):
             self.last_tagged_text = new_tagged_text
             # Optionally, create a highlighter overlay.
             try:
-                chosen_index = triple_call_ai_api_json_final(merged_json)
                 chosen_tag = merged_json["answers"][str(chosen_index)]["tag"]
                 global LAST_MAPPING
                 if LAST_MAPPING and chosen_tag in LAST_MAPPING:
@@ -236,7 +242,8 @@ class FocusFlowOverlay(QDialog):
                         word_info['width'],
                         word_info['height']
                     )
-                    AnswerHighlighter(highlight_rect)
+                    # Store reference to prevent garbage collection
+                    self._highlighter = AnswerHighlighter(highlight_rect)
             except Exception as e:
                 print("Error highlighting answer:", e)
 
@@ -247,7 +254,7 @@ class FocusFlowOverlay(QDialog):
             self.debounce_timer = None
         self.update_focusflow_data()
 
-    def start_polling(self, interval_ms=1000):
+    def start_polling(self, interval_ms=POLLING_INTERVAL_MS):
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.check_for_update)
         self.timer.start(interval_ms)
@@ -258,21 +265,21 @@ class FocusFlowOverlay(QDialog):
             region_tuple = (QUESTION_REGION.x(), QUESTION_REGION.y(), QUESTION_REGION.width(), QUESTION_REGION.height())
             new_tagged_text, mapping = get_tagged_words_from_region(region_tuple)
             # If there's no previous text or the new text is significantly different.
-            if self.last_tagged_text is None or difflib.SequenceMatcher(None, self.last_tagged_text, new_tagged_text).ratio() < 0.90:
+            if self.last_tagged_text is None or difflib.SequenceMatcher(None, self.last_tagged_text, new_tagged_text).ratio() < OCR_SIMILARITY_THRESHOLD:
                 self.pending_tagged_text = new_tagged_text
-                # Only start a new debounce timer if one isn’t already running.
+                # Only start a new debounce timer if one isn't already running.
                 if not self.debounce_timer or not self.debounce_timer.isActive():
                     self.debounce_timer = QTimer(self)
                     self.debounce_timer.setSingleShot(True)
                     self.debounce_timer.timeout.connect(self.update_focusflow_data)
-                    self.debounce_timer.start(2000)  # 2-second delay
+                    self.debounce_timer.start(DEBOUNCE_DELAY_MS)
 
     def update_focusflow_data(self):
         global QUESTION_REGION
         if QUESTION_REGION:
             region_tuple = (QUESTION_REGION.x(), QUESTION_REGION.y(), QUESTION_REGION.width(), QUESTION_REGION.height())
             current_tagged_text, mapping = get_tagged_words_from_region(region_tuple)
-            if difflib.SequenceMatcher(None, self.pending_tagged_text, current_tagged_text).ratio() >= 0.90:
+            if difflib.SequenceMatcher(None, self.pending_tagged_text, current_tagged_text).ratio() >= OCR_SIMILARITY_THRESHOLD:
                 full_answer, explanation, _ = get_focusflow_data(QUESTION_REGION)
                 if full_answer != self.full_answer or explanation != self.explanation:
                     self.full_answer = full_answer
@@ -320,13 +327,14 @@ def get_explanation(ocr_json, chosen_index):
         " is correct. Provide a concise explanation (max 100 words)."
     )
     try:
-        import openai
-        response = openai.ChatCompletion.create(
+        from openai import OpenAI
+        client = OpenAI()
+        response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.0
         )
-        explanation = response['choices'][0]['message']['content'].strip()
+        explanation = response.choices[0].message.content.strip()
     except Exception as e:
         explanation = "Error generating explanation: " + str(e)
     return explanation
@@ -336,13 +344,13 @@ LAST_MAPPING = None
 
 def get_focusflow_data(region):
     """
-    Uses OCR/AI processing on the given region to return the full answer, explanation, and merged JSON.
+    Uses OCR/AI processing on the given region to return the full answer, explanation, merged JSON, and correct index.
     This function integrates your existing OCR extraction and AI functions.
     """
     global LAST_MAPPING
     # Convert region (a QRect) to a tuple (x, y, width, height) as expected by pyautogui.
     region_tuple = (region.x(), region.y(), region.width(), region.height())
-    
+
     tagged_text, mapping = get_tagged_words_from_region(region_tuple)
     LAST_MAPPING = mapping
     ai_json = ai_structure_layout(tagged_text)
@@ -357,9 +365,9 @@ def get_focusflow_data(region):
     try:
         full_answer = merged_json["answers"][str(correct_index)]["text"]
     except Exception as e:
-        full_answer = "Paris"  # Fallback dummy
+        full_answer = "Unknown"  # Fallback
     explanation = get_explanation(merged_json, correct_index)
-    return full_answer, explanation, merged_json
+    return full_answer, explanation, merged_json, correct_index
 
 def launch_focus_flow(parent_window):
     """
@@ -373,13 +381,12 @@ def launch_focus_flow(parent_window):
         selector = RegionSelector()
         if selector.exec() == QDialog.Accepted:
             QUESTION_REGION = selector.selected_rect
-    full_answer, explanation, merged_json = get_focusflow_data(QUESTION_REGION)
+    full_answer, explanation, merged_json, correct_index = get_focusflow_data(QUESTION_REGION)
     overlay = FocusFlowOverlay(full_answer, explanation, parent=parent_window)
     overlay.show()
 
     # Attempt to highlight the correct answer.
     try:
-        correct_index = triple_call_ai_api_json_final(merged_json)
         chosen_tag = merged_json["answers"][str(correct_index)]["tag"]
         global LAST_MAPPING
         if LAST_MAPPING and chosen_tag in LAST_MAPPING:
@@ -390,8 +397,9 @@ def launch_focus_flow(parent_window):
                 word_info['width'],
                 word_info['height']
             )
-            AnswerHighlighter(highlight_rect)
+            # Store reference on overlay to prevent garbage collection
+            overlay._highlighter = AnswerHighlighter(highlight_rect)
     except Exception as e:
         print("Error highlighting answer:", e)
-    
+
     return overlay

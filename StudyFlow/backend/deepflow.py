@@ -1,15 +1,24 @@
 # deepflow.py
-import openai
+from openai import OpenAI
 import json
+
+# Initialize the OpenAI client
+_client = None
+
+def _get_client():
+    global _client
+    if _client is None:
+        _client = OpenAI()
+    return _client
 
 def get_deepflow_question(topic, previous_questions):
     """
     Generates a multiple-choice question using the OpenAI API.
-    
+
     Args:
         topic (str): The topic the user wants to learn about.
         previous_questions (list): List of previously asked questions to avoid repeats.
-        
+
     Returns:
         dict: A dictionary with keys "question", "options", "correct_index", and "explanation",
               or None if an error occurs.
@@ -23,13 +32,14 @@ def get_deepflow_question(topic, previous_questions):
         "  - 'correct_index': the 0-indexed number of the correct option\n"
         "  - 'explanation': a brief explanation of why that answer is correct.\n"
     )
-    
+
     # If there are previous questions, include them to avoid repetition.
     if previous_questions:
         prompt += "Do not repeat any of the following questions: " + ", ".join(previous_questions) + "."
-    
+
     try:
-        response = openai.ChatCompletion.create(
+        client = _get_client()
+        response = client.chat.completions.create(
             model="gpt-4-turbo",
             messages=[{"role": "system", "content": prompt}],
             max_tokens=300,
@@ -39,7 +49,7 @@ def get_deepflow_question(topic, previous_questions):
         print("Error calling OpenAI API:", e)
         return None
 
-    result_text = response.choices[0].message["content"]
+    result_text = response.choices[0].message.content
     
     try:
         result = json.loads(result_text)

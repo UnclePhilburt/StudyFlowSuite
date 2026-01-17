@@ -3,10 +3,58 @@ import json
 import re
 import difflib
 import pyautogui
-from StudyFlow.image_processing import preprocess_image, preprocess_image_custom
+from StudyFlow.backend.image_processing import preprocess_image, preprocess_image_custom
 from StudyFlow.logging_utils import debug_log
+from StudyFlow.constants import (
+    IMAGE_CONTRAST_FACTOR, IMAGE_THRESHOLD_VALUE,
+    QUESTION_WAIT_MIN_SEC, QUESTION_WAIT_MAX_SEC
+)
 import time
 import random
+
+# Patterns to filter out debug/log text from OCR
+DEBUG_PATTERNS = [
+    r'\[\d{2}:\d{2}:\d{2}\]',  # Timestamps like [08:47:44]
+    r'\(\d{2}:\d{2}:\d{2}\)',  # Timestamps like (08:47:44)
+    r'debug[:\s]',             # debug: or debug
+    r'info[:\s]',              # info: or info
+    r'error[:\s]',             # error: or error
+    r'warning[:\s]',           # warning: or warning
+    r'majority\s*vote',        # "majority vote" log message
+    r'falling\s*back',         # "falling back" log message
+    r'api\s*call\s*attempt',   # "API call attempt" log message
+    r'waiting\s*\d+\.?\d*\s*seconds',  # "Waiting X seconds" log message
+    r'starting\s*i[mn]age',    # "Starting image" log message
+    r'processed.*saved',       # "Processed...saved" log message
+    r'rechecking',             # "Rechecking" log message
+]
+
+def is_debug_text(text):
+    """Check if text matches common debug/log patterns."""
+    text_lower = text.lower()
+    for pattern in DEBUG_PATTERNS:
+        if re.search(pattern, text_lower):
+            return True
+    return False
+
+def filter_debug_words(words):
+    """Filter out words that are part of debug/log output."""
+    filtered = []
+    skip_until_line = -1
+
+    for w in words:
+        # If we detected a debug line, skip all words on that line
+        if w['line_num'] == skip_until_line:
+            continue
+
+        # Check if this word looks like debug output
+        if is_debug_text(w['text']):
+            skip_until_line = w['line_num']  # Skip rest of this line
+            continue
+
+        filtered.append(w)
+
+    return filtered
 
 def get_tagged_words_from_processed(processed):
     data = pytesseract.image_to_data(processed, output_type=pytesseract.Output.DICT,
@@ -32,6 +80,7 @@ def get_tagged_words_from_processed(processed):
             }
             words.append(word_info)
     words.sort(key=lambda w: (w['line_num'], w['left']))
+    words = filter_debug_words(words)  # Filter out debug/log text
     for w in words:
         mapping[tag_number] = w
         tagged_words.append(f"[{tag_number}] {w['text']}")
@@ -65,45 +114,13 @@ def get_tagged_words_from_region(region):
             }
             words.append(word_info)
     words.sort(key=lambda w: (w['line_num'], w['left']))
+    words = filter_debug_words(words)  # Filter out debug/log text
     for w in words:
         mapping[tag_number] = w
         tagged_words.append(f"[{tag_number}] {w['text']}")
         tag_number += 1
     tagged_text = " ".join(tagged_words)
     return tagged_text, mapping
-
-def get_best_tagged_words_from_region(region):
-    screenshot = pyautogui.screenshot(region=region)
-    settings = [(3.0, 130), (4.0, 120), (2.5, 140)]
-    candidates = []
-    for (contrast_factor, threshold_val) in settings:
-        processed = preprocess_image_custom(screenshot, contrast_factor, threshold_val)
-        tagged_text, mapping = get_tagged_words_from_processed(processed)
-        candidates.append((tagged_text, mapping))
-    
-    combined_prompt = "Below are three OCR candidate outputs for the same question:\n\n"
-    for i, (tagged_text, _) in enumerate(candidates, start=1):
-        combined_prompt += f"Candidate {i}:\n{tagged_text}\n\n"
-    combined_prompt += (
-        "Based on clarity and completeness, which candidate best represents the actual question text? "
-        "Return only the candidate number (1, 2, or 3) with no extra text."
-    )
-    
-    debug_log("Sending combined OCR candidates to OpenAI for selection.")
-    try:
-        import openai
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": combined_prompt}],
-            temperature=0.0
-        )
-        ai_choice = response['choices'][0]['message']['content'].strip()
-        debug_log(f"AI chose candidate: {ai_choice}")
-        chosen_candidate = int(re.findall(r'\d+', ai_choice)[0])
-    except Exception as e:
-        debug_log(f"Error selecting best candidate: {e}")
-        chosen_candidate = 1
-    return candidates[chosen_candidate - 1]
 
 def ai_structure_layout(ocr_text):
     prompt = (
@@ -115,13 +132,14 @@ def ai_structure_layout(ocr_text):
     )
     debug_log("Sending OCR text to OpenAI for layout correction.")
     try:
-        import openai
-        response = openai.ChatCompletion.create(
+        from openai import OpenAI
+        client = OpenAI()
+        response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.0
         )
-        ai_response = response['choices'][0]['message']['content'].strip()
+        ai_response = response.choices[0].message.content.strip()
         debug_log("AI layout correction response: " + ai_response)
         structured = json.loads(ai_response)
         return structured
@@ -205,7 +223,7 @@ def validate_and_correct(merged_json, region, expected_answers):
     if missing_tags:
         debug_log(f"Missing tags for answers: {missing_tags}. Initiating correction process.")
         screenshot = pyautogui.screenshot(region=region)
-        processed_alt = preprocess_image_custom(screenshot, contrast_factor=4.0, threshold_val=120)
+        processed_alt = preprocess_image_custom(screenshot, contrast_factor=IMAGE_CONTRAST_FACTOR, threshold_val=IMAGE_THRESHOLD_VALUE)
         new_tagged_text, new_mapping = get_tagged_words_from_processed(processed_alt)
         fallback_alt = fallback_structure(new_mapping, expected_answers)
         ai_json = {"question": merged_json.get("question", ""), "answers": merged_json.get("answers", {})}
@@ -217,20 +235,10 @@ def normalize_text(text):
     return re.sub(r'\W+', ' ', text).strip().lower()
 
 def wait_for_text_change(region, last_text, poll_interval=5, similarity_threshold=1):
-    # Instead of checking for text change, wait a random duration between 7 and 10 seconds.
-    delay = random.uniform(7, 10)
+    # Instead of checking for text change, wait a random duration.
+    delay = random.uniform(QUESTION_WAIT_MIN_SEC, QUESTION_WAIT_MAX_SEC)
     debug_log(f"Waiting {delay:.2f} seconds for the new question to load...")
     time.sleep(delay)
     current_text, _ = get_tagged_words_from_region(region)
     return current_text
 
-def reprocess_and_combine_ocr(region, attempts=3):
-    combined_texts = []
-    combined_mapping = {}
-    for i in range(attempts):
-        tagged_text, mapping = get_best_tagged_words_from_region(region)
-        combined_texts.append(tagged_text)
-        combined_mapping.update(mapping)
-        time.sleep(0.5)
-    combined_text = " ".join(combined_texts)
-    return combined_text, combined_mapping

@@ -13,15 +13,27 @@ if COHERE_API_KEY is None:
 def get_cohere_answer(ocr_json, cohere_client_instance=None):
     if cohere_client_instance is None:
         cohere_client_instance = cohere.ClientV2(api_key=COHERE_API_KEY)
-    
-    prompt = (
-        "Here is the OCR output in JSON format:\n" +
-        str(ocr_json) +
-        "\nBased on the above, which answer option is correct? "
-        "Return only the number corresponding to the correct answer with no extra text."
-    )
+
+    # Build a clearer prompt with explicit option numbering
+    question = ocr_json.get("question", "")
+    answers = ocr_json.get("answers", {})
+
+    options_text = ""
+    for key in sorted(answers.keys(), key=lambda x: int(x)):
+        text = answers[key].get("text", "")
+        options_text += f"Option {key}: {text}\n"
+
+    prompt = f"""You are answering a multiple choice question.
+
+Question: {question}
+
+{options_text}
+Which option number (1, 2, 3, or 4) is the correct answer?
+
+IMPORTANT: Reply with ONLY a single digit: 1, 2, 3, or 4. Nothing else."""
+
     debug_log("🟢 Sending prompt to Cohere: " + prompt)
-    
+
     try:
         response = cohere_client_instance.chat(
             model="command-r-plus-08-2024",
@@ -45,7 +57,7 @@ def get_cohere_answer(ocr_json, cohere_client_instance=None):
             content = first_message.message.content
         elif isinstance(first_message, dict):
             content = first_message.get("content", "")
-        
+
         # Normalize list to string
         if isinstance(content, list):
             content = " ".join(
@@ -57,18 +69,28 @@ def get_cohere_answer(ocr_json, cohere_client_instance=None):
 
         debug_log("📨 Extracted Cohere response: " + content)
 
-        # Match strictly a number
-        match = re.fullmatch(r'\s*(\d+)\s*', content)
-        if match:
-            return int(match.group(1))
+        # Only accept 1, 2, 3, or 4 as valid answers
+        # First try exact match
+        if content in ["1", "2", "3", "4"]:
+            return int(content)
 
-        # Try to grab any digit fallback
-        numbers = re.findall(r'\d+', content)
-        if numbers:
-            return int(numbers[0])
-        else:
-            debug_log("❓ Cohere response format error. Raw: " + content)
-            return None
+        # Look for option references like "Option 4" or "option 4"
+        option_match = re.search(r'[Oo]ption\s*(\d)', content)
+        if option_match and option_match.group(1) in ["1", "2", "3", "4"]:
+            return int(option_match.group(1))
+
+        # Look for standalone 1-4 at start of response
+        start_match = re.match(r'^[^\d]*([1-4])[^\d]', content + " ")
+        if start_match:
+            return int(start_match.group(1))
+
+        # Last resort: find any 1-4 in the response
+        valid_numbers = re.findall(r'[1-4]', content)
+        if valid_numbers:
+            return int(valid_numbers[0])
+
+        debug_log("❓ Cohere response format error. Raw: " + content)
+        return None
 
     except Exception as e:
         debug_log("🔥 Cohere API error: " + str(e))
