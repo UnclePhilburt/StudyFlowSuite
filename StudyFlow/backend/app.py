@@ -1031,6 +1031,98 @@ def admin_home_message():
 
 
 
+# ============ TEXT-ONLY ANSWER ENDPOINT (CHEAP) ============
+@app.route("/api/answer", methods=["POST"])
+def answer_question():
+    """
+    Answer a quiz question using text only (no image).
+    MUCH cheaper than Vision API - use this when OCR extraction works.
+
+    Expects JSON:
+    {
+        "question": "What is the capital of France?",
+        "answers": ["London", "Paris", "Berlin", "Madrid"]
+    }
+
+    Returns:
+    {
+        "correct_answer_index": 2,
+        "correct_answer_text": "Paris",
+        "confidence": "high",
+        "reasoning": "Paris is the capital..."
+    }
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No JSON provided"}), 400
+
+        question = data.get("question", "")
+        answers = data.get("answers", [])
+
+        if not question or not answers:
+            return jsonify({"error": "Missing question or answers"}), 400
+
+        # Format answers for the prompt
+        answers_text = "\n".join(f"{i+1}. {a}" for i, a in enumerate(answers))
+
+        prompt = f"""You are answering a quiz question. Analyze carefully and select the correct answer.
+
+Question: {question}
+
+Answer options:
+{answers_text}
+
+Return a JSON object with this EXACT structure:
+{{
+    "correct_answer_index": <number 1-{len(answers)}>,
+    "correct_answer_text": "<exact text of correct answer>",
+    "confidence": "high/medium/low",
+    "reasoning": "<brief explanation why this is correct>"
+}}
+
+RULES:
+- correct_answer_index is 1-based (1, 2, 3, etc.)
+- Return ONLY valid JSON, no other text"""
+
+        # Use GPT-3.5-turbo (cheap) or GPT-4o-mini for text
+        from openai import OpenAI
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",  # Fast and cheap for text-only
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=300,
+            temperature=0.1
+        )
+
+        response_text = response.choices[0].message.content.strip()
+
+        # Parse JSON - handle markdown code blocks
+        if "```" in response_text:
+            lines = response_text.split("\n")
+            json_lines = []
+            in_json = False
+            for line in lines:
+                if line.startswith("```json") or line.startswith("```"):
+                    in_json = not in_json
+                    continue
+                if in_json:
+                    json_lines.append(line)
+            response_text = "\n".join(json_lines)
+
+        result = json.loads(response_text)
+        debug_log(f"TEXT API: Answer={result.get('correct_answer_index')}, Confidence={result.get('confidence')}")
+        return jsonify(result), 200
+
+    except json.JSONDecodeError as e:
+        debug_log(f"TEXT API JSON parse error: {e}")
+        return jsonify({"error": "JSON parse failed"}), 500
+    except Exception as e:
+        debug_log(f"TEXT API error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 # ============ VISION API ENDPOINT ============
 @app.route("/api/vision", methods=["POST"])
 def vision_analyze():

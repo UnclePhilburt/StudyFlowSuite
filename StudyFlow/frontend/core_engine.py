@@ -192,6 +192,9 @@ def process_quiz_vision_mode():
             break
 
         # Log what we found
+        method = result.get('method', 'unknown')
+        method_emoji = {'cache': '⚡', 'text_api': '💬', 'vision_api': '👁️'}.get(method, '❓')
+        debug_log(f"{method_emoji} Method: {method.upper()}")
         debug_log(f"📋 Question: {result['question'][:80]}...")
         debug_log(f"🎯 Correct answer #{result['correct_index']}: {result['correct_answer'][:50]}...")
         debug_log(f"💭 Reasoning: {result['reasoning']}")

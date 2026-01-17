@@ -50,3 +50,15 @@ SCROLL_PIXELS = 100                  # Pixels to scroll per attempt
 MAX_SCROLL_ATTEMPTS = 5              # Max scroll attempts before giving up
 SCROLL_SETTLE_DELAY_SEC = 0.3        # Wait for page to settle after scroll
 SCROLL_RESET_ATTEMPTS = 8            # Scrolls to reset to top of page
+
+# ============ Smart Image Processing ============
+IMAGE_MAX_WIDTH = 1280               # Downscale images wider than this
+IMAGE_HASH_SIZE = 16                 # Perceptual hash size (larger = more precise)
+CHANGE_DETECTION_THRESHOLD = 5      # Hash difference threshold for "same" image
+CACHE_MAX_SIZE = 100                 # Maximum cached questions
+
+# ============ Hybrid Processing ============
+OCR_CONFIDENCE_THRESHOLD = 60       # Minimum OCR confidence to trust
+MIN_ANSWER_OPTIONS = 2               # Minimum answers to consider valid quiz
+MAX_ANSWER_OPTIONS = 6               # Maximum reasonable answer options
+QUIZ_DETECTION_KEYWORDS = ["?", "which", "what", "select", "choose", "answer"]

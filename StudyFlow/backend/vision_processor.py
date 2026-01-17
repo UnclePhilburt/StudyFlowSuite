@@ -3,6 +3,10 @@
 Vision-based quiz processing using GPT-4o.
 Analyzes full screen to identify questions, answers, and buttons automatically.
 Uses the Render server endpoint so API key stays on server.
+
+Now supports HYBRID MODE which uses:
+1. Local OCR + cheap text API (90% of cases)
+2. Vision API only as fallback (expensive)
 """
 
 import base64
@@ -17,6 +21,9 @@ from StudyFlow.backend.image_processing import preprocess_image
 
 # Server URL for vision API
 VISION_API_URL = os.getenv("VISION_API_URL", "https://studyflowsuite.onrender.com/api/vision")
+
+# Processing mode: 'hybrid' (smart/cheap) or 'vision' (always use Vision API)
+PROCESSING_MODE = os.getenv("PROCESSING_MODE", "hybrid")
 
 
 def encode_image_to_base64(image):
@@ -157,6 +164,10 @@ def process_quiz_with_vision():
     """
     Main function: Capture screen, analyze with vision, return actionable data.
 
+    Now supports HYBRID MODE (default):
+    - Uses local OCR + cheap text API for most cases
+    - Falls back to expensive Vision API only when needed
+
     Returns:
         dict with:
         - success: bool
@@ -165,9 +176,21 @@ def process_quiz_with_vision():
         - question: str
         - correct_answer: str
         - reasoning: str
+        - method: 'cache' | 'text_api' | 'vision_api'
         - error: str (if failed)
     """
-    debug_log("📸 Capturing full screen for vision analysis...")
+    # Use hybrid mode by default (cheaper)
+    if PROCESSING_MODE == "hybrid":
+        debug_log("🔄 Using HYBRID mode (smart/cheap)...")
+        try:
+            from StudyFlow.backend.hybrid_processor import process_quiz_hybrid
+            return process_quiz_hybrid()
+        except ImportError as e:
+            debug_log(f"⚠️ Hybrid processor not available: {e}")
+            debug_log("⚠️ Falling back to Vision-only mode")
+
+    # Vision-only mode (original behavior)
+    debug_log("📸 Using VISION mode (expensive)...")
     screenshot = pyautogui.screenshot()
 
     # Analyze with GPT-4o Vision
@@ -206,5 +229,6 @@ def process_quiz_with_vision():
         "button_text": button_text,
         "button_coords": button_coords,
         "confidence": vision_result.get("confidence", "unknown"),
-        "reasoning": vision_result.get("reasoning", "")
+        "reasoning": vision_result.get("reasoning", ""),
+        "method": "vision_api"
     }
