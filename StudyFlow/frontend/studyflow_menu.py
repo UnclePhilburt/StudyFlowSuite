@@ -421,28 +421,35 @@ class ModernMenu(QMainWindow):
         )
 
         if reply == QMessageBox.Yes:
-            from StudyFlow.frontend.core_engine import start_quiz_vision
-            # Hide main window and start vision mode
+            # Hide main window immediately
             self.hide()
-            # Give user time to prepare
-            import time
-            time.sleep(3)
-            # Run vision mode
-            questions, errors = start_quiz_vision()
-            # Show results
-            self.show()
-            if errors:
-                QMessageBox.warning(
-                    self,
-                    "Vision Mode Complete",
-                    f"Answered {questions} questions.\n\nErrors:\n" + "\n".join(errors)
-                )
-            else:
-                QMessageBox.information(
-                    self,
-                    "Vision Mode Complete",
-                    f"Successfully answered {questions} questions!"
-                )
+            # Process events to ensure window actually hides
+            QApplication.processEvents()
+            # Use QTimer to delay start (doesn't block event loop)
+            QTimer.singleShot(3000, self._run_vision_mode)
+
+    def _run_vision_mode(self):
+        """Actually runs vision mode after delay."""
+        from PySide6.QtWidgets import QMessageBox
+        from StudyFlow.frontend.core_engine import start_quiz_vision
+
+        # Run vision mode
+        questions, errors = start_quiz_vision()
+
+        # Show results
+        self.show()
+        if errors:
+            QMessageBox.warning(
+                self,
+                "Vision Mode Complete",
+                f"Answered {questions} questions.\n\nErrors:\n" + "\n".join(errors)
+            )
+        else:
+            QMessageBox.information(
+                self,
+                "Vision Mode Complete",
+                f"Successfully answered {questions} questions!"
+            )
 
 # Prevent garbage collection
 main_window = None
