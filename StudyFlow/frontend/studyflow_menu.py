@@ -406,6 +406,26 @@ class ModernMenu(QMainWindow):
     def start_vision_mode(self):
         """Starts Vision Mode - AI-powered full-screen quiz solving."""
         from PySide6.QtWidgets import QMessageBox
+        from StudyFlow.frontend.button_capture import capture_button_template
+
+        # First, capture the submit button
+        reply = QMessageBox.question(
+            self,
+            "Capture Submit Button",
+            "First, we need to capture your Submit button.\n\n"
+            "Step 1: Click 'Yes' below\n"
+            "Step 2: Hover over the TOP-LEFT corner of the Submit button and press Enter\n"
+            "Step 3: Hover over the BOTTOM-RIGHT corner of the Submit button and press Enter\n\n"
+            "Ready?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes
+        )
+
+        if reply != QMessageBox.Yes:
+            return
+
+        # Capture the button template
+        capture_button_template(self)
 
         # Show confirmation dialog
         reply = QMessageBox.question(

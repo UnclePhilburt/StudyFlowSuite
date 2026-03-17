@@ -7,7 +7,9 @@ from StudyFlow.logging_utils import debug_log
 # Set Tesseract command path early
 if os.path.exists(TESSERACT_PATH):
     pytesseract.pytesseract.tesseract_cmd = TESSERACT_PATH
+    print(f"[DEBUG] Tesseract configured at: {TESSERACT_PATH}")
 else:
+    print(f"[ERROR] Tesseract not found at: {TESSERACT_PATH}")
     raise FileNotFoundError(f"Tesseract not found at {TESSERACT_PATH}")
 
 def main():

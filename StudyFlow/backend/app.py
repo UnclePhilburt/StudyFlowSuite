@@ -1148,7 +1148,8 @@ Your task:
 1. Find the quiz QUESTION being asked
 2. Find ALL answer options (usually 2-4 options)
 3. Determine which answer is CORRECT
-4. Identify the Submit/Next button text
+4. Identify the Submit/Next button
+5. PROVIDE CLICK COORDINATES for the correct answer and the button
 
 Return a JSON object with this EXACT structure:
 {
@@ -1161,15 +1162,21 @@ Return a JSON object with this EXACT structure:
     ],
     "correct_answer_index": 2,
     "correct_answer_text": "the exact text of the correct answer",
+    "answer_click_x": 500,
+    "answer_click_y": 300,
     "button_text": "Submit or Next or Continue - exact text shown",
+    "button_click_x": 800,
+    "button_click_y": 450,
     "confidence": "high/medium/low",
     "reasoning": "Brief explanation why this answer is correct"
 }
 
 CRITICAL RULES:
 - correct_answer_index is 1-based (1, 2, 3, or 4)
-- Copy answer text EXACTLY as it appears on screen (needed for clicking)
-- Copy button text EXACTLY as shown
+- answer_click_x and answer_click_y should be the CENTER of the correct answer option (where to click)
+- button_click_x and button_click_y should be the CENTER of the Submit/Next button
+- Coordinates are in pixels from top-left (0,0) of the image
+- Look for radio buttons or checkboxes next to answers - provide coordinates there
 - If no quiz visible, set question to null
 - Return ONLY valid JSON, no other text"""
 

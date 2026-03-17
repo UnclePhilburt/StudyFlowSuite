@@ -155,6 +155,11 @@ def extract_text_with_positions(image):
             full_text_parts.append(text)
 
     full_text = ' '.join(full_text_parts)
+
+    # Debug: Show what OCR extracted
+    debug_log(f"OCR: Extracted {len(words)} words with confidence >= {OCR_CONFIDENCE_THRESHOLD}")
+    debug_log(f"OCR: Full text preview (first 200 chars): {full_text[:200]}")
+
     return full_text, words
 
 
@@ -165,8 +170,15 @@ def detect_quiz_on_screen(text, words):
     """
     text_lower = text.lower()
 
+    # Debug: Show what text we're analyzing
+    debug_log(f"QUIZ DETECT: Analyzing text (length={len(text)})")
+    debug_log(f"QUIZ DETECT: Text preview: '{text[:300]}'")
+
     # Check for question indicators
-    has_question = any(kw in text_lower for kw in QUIZ_DETECTION_KEYWORDS)
+    found_keywords = [kw for kw in QUIZ_DETECTION_KEYWORDS if kw in text_lower]
+    has_question = len(found_keywords) > 0
+
+    debug_log(f"QUIZ DETECT: Found {len(found_keywords)} keywords: {found_keywords[:5]}")
 
     # Check for answer option patterns (A., B., C. or 1., 2., 3.)
     letter_pattern = re.search(r'\b[A-D]\s*[.:\)]', text)
@@ -174,11 +186,22 @@ def detect_quiz_on_screen(text, words):
 
     has_options = letter_pattern or number_pattern
 
+    if letter_pattern:
+        debug_log(f"QUIZ DETECT: Found letter pattern: {letter_pattern.group()}")
+    if number_pattern:
+        debug_log(f"QUIZ DETECT: Found number pattern: {number_pattern.group()}")
+
     # Check for submit/next button text
     button_keywords = ['submit', 'next', 'continue', 'check', 'done', 'finish']
-    has_button = any(kw in text_lower for kw in button_keywords)
+    found_buttons = [kw for kw in button_keywords if kw in text_lower]
+    has_button = len(found_buttons) > 0
 
-    is_quiz = has_question and (has_options or has_button)
+    if found_buttons:
+        debug_log(f"QUIZ DETECT: Found button keywords: {found_buttons}")
+
+    # More lenient detection: accept if we have question indicators OR multiple choice options
+    # This helps detect quizzes even if OCR misses some text
+    is_quiz = has_question or has_options or has_button
 
     debug_log(f"QUIZ DETECT: question={has_question}, options={has_options}, button={has_button} -> {is_quiz}")
 
@@ -264,17 +287,64 @@ def find_text_coordinates(target_text, words):
 def find_button_coordinates(words):
     """
     Find submit/next button coordinates.
+    Prioritizes Submit/Next over Finish to avoid ending quiz early.
+    Also tries common OCR misreadings of Submit.
     Returns (x, y, button_text) or (None, None, None).
     """
-    button_keywords = ['submit', 'next', 'continue', 'check', 'done', 'finish']
+    # Priority order: prefer Submit/Next/Continue over Finish/Done
+    high_priority_keywords = ['submit', 'next', 'continue', 'check']
+    low_priority_keywords = ['finish', 'done', 'end', 'complete']
 
+    # Common OCR misreadings of "Submit"
+    submit_variations = ['submit', 'submi', 'submlt', 'suhmit', 'subnit']
+
+    found_buttons = []
+
+    # Collect all button candidates
     for word in words:
         word_lower = word['text'].lower()
-        for keyword in button_keywords:
+
+        # Check for Submit variations first (highest priority)
+        for variation in submit_variations:
+            if variation in word_lower:
+                x = word['left'] + word['width'] // 2
+                y = word['top'] + word['height'] // 2
+                found_buttons.append((0, x, y, word['text'], 'submit'))
+                debug_log(f"BUTTON: Found candidate '{word['text']}' (submit variation) at ({x}, {y}), priority=0")
+                break
+
+        # Check other high priority keywords
+        for keyword in high_priority_keywords:
             if keyword in word_lower:
                 x = word['left'] + word['width'] // 2
                 y = word['top'] + word['height'] // 2
-                debug_log(f"BUTTON: Found '{word['text']}' at ({x}, {y})")
-                return (x, y, word['text'])
+                found_buttons.append((1, x, y, word['text'], keyword))
+                debug_log(f"BUTTON: Found candidate '{word['text']}' (keyword: {keyword}) at ({x}, {y}), priority=1")
+                break
 
+        # Check low priority keywords
+        for keyword in low_priority_keywords:
+            if keyword in word_lower:
+                x = word['left'] + word['width'] // 2
+                y = word['top'] + word['height'] // 2
+                found_buttons.append((2, x, y, word['text'], keyword))
+                debug_log(f"BUTTON: Found candidate '{word['text']}' (keyword: {keyword}) at ({x}, {y}), priority=2")
+                break
+
+    # Exclude Finish button if Submit button exists
+    if found_buttons:
+        has_submit = any(b[0] == 0 or (b[0] == 1 and 'submit' in b[4]) for b in found_buttons)
+        if has_submit:
+            # Filter out finish/done buttons
+            found_buttons = [b for b in found_buttons if b[4] not in ['finish', 'done', 'end', 'complete']]
+            debug_log(f"BUTTON: Excluded Finish/Done buttons because Submit was found")
+
+    # Return highest priority button (lowest priority number)
+    if found_buttons:
+        found_buttons.sort(key=lambda b: b[0])  # Sort by priority
+        best = found_buttons[0]
+        debug_log(f"BUTTON: Selected '{best[3]}' at ({best[1]}, {best[2]})")
+        return (best[1], best[2], best[3])
+
+    debug_log("BUTTON: No button found")
     return (None, None, None)

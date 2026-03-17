@@ -23,7 +23,7 @@ from StudyFlow.backend.image_processing import preprocess_image
 VISION_API_URL = os.getenv("VISION_API_URL", "https://studyflowsuite.onrender.com/api/vision")
 
 # Processing mode: 'hybrid' (smart/cheap) or 'vision' (always use Vision API)
-PROCESSING_MODE = os.getenv("PROCESSING_MODE", "hybrid")
+PROCESSING_MODE = os.getenv("PROCESSING_MODE", "vision")
 
 
 def encode_image_to_base64(image):
@@ -210,14 +210,68 @@ def process_quiz_with_vision():
         }
 
     correct_text = vision_result.get("correct_answer_text", "")
-    button_text = vision_result.get("button_text", "Submit")
+    correct_index = vision_result.get("correct_answer_index", 1)
 
-    # Find where to click using OCR
-    debug_log(f"🔎 Looking for answer text: '{correct_text[:40]}...'")
-    answer_coords = find_text_on_screen(correct_text, screenshot)
+    # FIRST: Try to use coordinates from Vision API (most reliable!)
+    answer_coords = None
+    if "answer_click_x" in vision_result and "answer_click_y" in vision_result:
+        answer_coords = (vision_result["answer_click_x"], vision_result["answer_click_y"])
+        debug_log(f"✅ Using Vision API coordinates for answer: {answer_coords}")
+    else:
+        # Fallback: Try OCR-based finding (less reliable)
+        debug_log(f"🔎 Vision API didn't provide coordinates, falling back to OCR...")
+        debug_log(f"🔎 Looking for answer text: '{correct_text[:40]}...'")
+        answer_coords = find_text_on_screen(correct_text, screenshot)
 
-    debug_log(f"🔎 Looking for button: '{button_text}'")
-    button_coords = find_button_on_screen(button_text, screenshot)
+        # If full text not found, try finding by answer option letter/number
+        if not answer_coords:
+            # Try common answer formats: A., B., C., D. or 1., 2., 3., 4.
+            option_letters = ['A', 'B', 'C', 'D', 'E', 'F']
+            if correct_index <= len(option_letters):
+                option_letter = option_letters[correct_index - 1]
+                debug_log(f"🔎 Trying to find answer by option letter: '{option_letter}.'")
+                answer_coords = find_text_on_screen(f"{option_letter}.", screenshot)
+
+                if not answer_coords:
+                    debug_log(f"🔎 Trying to find answer by number: '{correct_index}.'")
+                    answer_coords = find_text_on_screen(f"{correct_index}.", screenshot)
+
+    # FIRST: Try to use button coordinates from Vision API (most reliable!)
+    button_coords = None
+    if "button_click_x" in vision_result and "button_click_y" in vision_result:
+        button_coords = (vision_result["button_click_x"], vision_result["button_click_y"])
+        debug_log(f"✅ Using Vision API coordinates for button: {button_coords}")
+    else:
+        # Fallback: Use template matching for button
+        debug_log("🔎 Vision API didn't provide button coordinates, using template matching...")
+        try:
+            import os
+            import cv2
+            import numpy as np
+
+            template_path = "submit_button.png"
+            if os.path.exists(template_path):
+                # Load the captured button template
+                template = cv2.imread(template_path)
+                screenshot_np = np.array(screenshot)
+                screenshot_cv = cv2.cvtColor(screenshot_np, cv2.COLOR_RGB2BGR)
+
+                # Find the button on screen using template matching
+                result = cv2.matchTemplate(screenshot_cv, template, cv2.TM_CCOEFF_NORMED)
+                min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
+
+                if max_val > 0.6:  # 60% confidence threshold
+                    h, w = template.shape[:2]
+                    button_x = max_loc[0] + w // 2
+                    button_y = max_loc[1] + h // 2
+                    button_coords = (button_x, button_y)
+                    debug_log(f"✅ Found button via template matching at {button_coords} (confidence: {max_val:.2f})")
+                else:
+                    debug_log(f"⚠️ Template match confidence too low: {max_val:.2f}")
+            else:
+                debug_log("⚠️ No button template found - Vision API should provide coordinates")
+        except Exception as e:
+            debug_log(f"❌ Button template matching failed: {e}")
 
     return {
         "success": True,
@@ -226,7 +280,7 @@ def process_quiz_with_vision():
         "correct_index": vision_result.get("correct_answer_index"),
         "correct_answer": correct_text,
         "answer_coords": answer_coords,
-        "button_text": button_text,
+        "button_text": "Submit",
         "button_coords": button_coords,
         "confidence": vision_result.get("confidence", "unknown"),
         "reasoning": vision_result.get("reasoning", ""),

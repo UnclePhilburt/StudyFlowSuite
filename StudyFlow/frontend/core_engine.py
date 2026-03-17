@@ -184,7 +184,13 @@ def process_quiz_vision_mode():
 
     # Set overlay to idle initially
     if OVERLAY_AVAILABLE and get_overlay_state:
-        get_overlay_state().set_idle()
+        try:
+            overlay_state = get_overlay_state()
+            debug_log(f"📺 Got overlay state: {overlay_state}")
+            overlay_state.set_idle()
+            debug_log("📺 Overlay set to idle")
+        except Exception as e:
+            debug_log(f"⚠️ Failed to set overlay idle: {e}")
 
     while True:
         if emergency_stop:
@@ -296,9 +302,15 @@ def start_quiz_vision(root=None):
     if OVERLAY_AVAILABLE:
         try:
             from StudyFlow.frontend.assistant_overlay import show_overlay, hide_overlay
+            debug_log("📺 Showing assistant overlay...")
             overlay = show_overlay()
+            debug_log(f"✅ Overlay created: {overlay}")
         except Exception as e:
             debug_log(f"⚠️ Could not show overlay: {e}")
+            import traceback
+            debug_log(traceback.format_exc())
+    else:
+        debug_log("⚠️ OVERLAY_AVAILABLE is False - overlay disabled")
 
     # Hide main window if provided
     if root:

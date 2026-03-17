@@ -152,14 +152,23 @@ def process_quiz_hybrid():
 
     # 3. Run local OCR
     debug_log("HYBRID: Running local OCR...")
-    full_text, words = extract_text_with_positions(optimized)
+    try:
+        full_text, words = extract_text_with_positions(optimized)
+    except Exception as e:
+        debug_log(f"HYBRID: OCR failed with error: {e}")
+        return {
+            "success": False,
+            "error": f"OCR error: {e}"
+        }
 
     if not full_text.strip():
-        debug_log("HYBRID: No text detected on screen")
+        debug_log("HYBRID: No text detected on screen (empty OCR result)")
         return {
             "success": False,
             "error": "No text detected on screen"
         }
+
+    debug_log(f"HYBRID: OCR successful - extracted {len(full_text)} characters")
 
     # 4. Detect if this is a quiz
     if not detect_quiz_on_screen(full_text, words):
@@ -223,14 +232,33 @@ def process_quiz_hybrid():
             "error": "No quiz detected in result"
         }
 
-    # 9. Find click coordinates locally
+    # 9. Find click coordinates - use ORIGINAL screenshot for better accuracy
     correct_text = result.get('correct_answer_text', '')
     correct_index = result.get('correct_answer_index', 1)
 
-    # Try to find answer coordinates
+    debug_log(f"HYBRID: Finding click coords for: '{correct_text[:50]}'")
+
+    # Re-run OCR on original screenshot for accurate coordinate finding
+    debug_log("HYBRID: Re-running OCR on full-resolution screenshot for click coordinates...")
+    full_res_text, full_res_words = extract_text_with_positions(screenshot)
+
+    # Try to find answer coordinates on full resolution
     answer_coords = None
     if correct_text:
-        answer_coords = find_text_coordinates(correct_text, words)
+        answer_coords = find_text_coordinates(correct_text, full_res_words)
+        if answer_coords:
+            debug_log(f"HYBRID: Found answer at {answer_coords} (full resolution)")
+
+    # If exact match fails, try partial matching with first few words
+    if not answer_coords and correct_text:
+        # Try matching just the first significant word
+        words_in_answer = [w for w in correct_text.split() if len(w) > 3][:3]
+        if words_in_answer:
+            partial_search = ' '.join(words_in_answer)
+            debug_log(f"HYBRID: Trying partial match with: '{partial_search}'")
+            answer_coords = find_text_coordinates(partial_search, full_res_words)
+            if answer_coords:
+                debug_log(f"HYBRID: Found answer via partial match at {answer_coords}")
 
     # If we used local structure, try using the answer from there
     if not answer_coords and local_structure:
@@ -238,32 +266,30 @@ def process_quiz_hybrid():
             idx = correct_index - 1  # Convert to 0-based
             if 0 <= idx < len(local_structure['answers']):
                 ans_text = local_structure['answers'][idx]['text']
-                answer_coords = find_text_coordinates(ans_text, words)
+                answer_coords = find_text_coordinates(ans_text, full_res_words)
         except (IndexError, KeyError):
             pass
 
-    # Find button coordinates
-    btn_x, btn_y, btn_text = find_button_coordinates(words)
-    button_coords = (btn_x, btn_y) if btn_x else None
+    # Find button coordinates on full resolution
+    # Prioritize Vision API's button suggestion if available
+    button_coords = None
+    if result.get('button_text'):
+        debug_log(f"HYBRID: Vision API suggests button: '{result['button_text']}'")
+        button_coords = find_text_coordinates(result['button_text'], full_res_words)
+        if button_coords:
+            debug_log(f"HYBRID: Found Vision API's suggested button at {button_coords}")
 
-    # Also try result's button text
-    if not button_coords and result.get('button_text'):
-        button_coords = find_text_coordinates(result['button_text'], words)
+    # Fall back to OCR-based button detection
+    if not button_coords:
+        debug_log("HYBRID: Vision API button not found, trying OCR detection...")
+        btn_x, btn_y, btn_text = find_button_coordinates(full_res_words)
+        button_coords = (btn_x, btn_y) if btn_x else None
 
-    # Scale coordinates back to original screen size
+    # No need to scale - coordinates are already in original resolution
     if answer_coords:
-        answer_coords = (
-            int(answer_coords[0] * scale_x),
-            int(answer_coords[1] * scale_y)
-        )
-        debug_log(f"HYBRID: Scaled answer coords to {answer_coords}")
-
+        debug_log(f"HYBRID: Answer coords (original resolution): {answer_coords}")
     if button_coords:
-        button_coords = (
-            int(button_coords[0] * scale_x),
-            int(button_coords[1] * scale_y)
-        )
-        debug_log(f"HYBRID: Scaled button coords to {button_coords}")
+        debug_log(f"HYBRID: Button coords (original resolution): {button_coords}")
 
     # Mark as successful so we skip unchanged screens after this
     _last_success = True
