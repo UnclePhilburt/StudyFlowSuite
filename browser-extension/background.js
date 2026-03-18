@@ -2,6 +2,8 @@
 const BACKEND_URL = 'https://studyflowsuite.onrender.com';
 
 let isRunning = false;
+let isPaused = false;
+let waitingForNavigation = false;
 let questionCount = 0;
 let errorCount = 0;
 let lastQuestionText = null;
@@ -13,7 +15,6 @@ let latestAnswer = null;
 let quizSettings = {
   totalQuestions: null,
   targetTime: null, // in minutes
-  skipEssays: false,
   onePageMode: false
 };
 let quizStartTime = null;
@@ -29,11 +30,27 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   } else if (request.action === 'getStatus') {
     sendResponse({
       isRunning,
+      isPaused,
+      waitingForNavigation,
       questionCount,
       errorCount,
       currentQuestion: lastQuestionText?.substring(0, 100),
       latestAnswer
     });
+  } else if (request.action === 'resume') {
+    // Resume from waiting state
+    if (waitingForNavigation) {
+      console.log('Resuming from waiting state...');
+      waitingForNavigation = false;
+      isPaused = false;
+
+      // Reset answered questions for new page
+      chrome.tabs.sendMessage(currentTabId, { action: 'resetAnsweredQuestions' });
+
+      sendResponse({ success: true });
+    } else {
+      sendResponse({ success: false, error: 'Not in waiting state' });
+    }
   }
   return true;
 });
@@ -42,6 +59,8 @@ function startQuizMode(tabId, settings = {}) {
   if (isRunning) return;
 
   isRunning = true;
+  isPaused = false;
+  waitingForNavigation = false;
   currentTabId = tabId;
   questionCount = 0;
   errorCount = 0;
@@ -62,8 +81,10 @@ function startQuizMode(tabId, settings = {}) {
 
 function stopQuizMode() {
   isRunning = false;
+  isPaused = false;
+  waitingForNavigation = false;
   currentTabId = null;
-  quizSettings = { totalQuestions: null, targetTime: null, skipEssays: false, onePageMode: false };
+  quizSettings = { totalQuestions: null, targetTime: null, onePageMode: false };
   quizStartTime = null;
   console.log('Quiz mode stopped');
   updateBadge('', '');
@@ -72,6 +93,13 @@ function stopQuizMode() {
 async function runQuizLoop() {
   while (isRunning) {
     try {
+      // If waiting for user to navigate, pause the loop
+      if (waitingForNavigation) {
+        updateBadge('⏸', '#ffc107');
+        await sleep(1000);
+        continue;
+      }
+
       // Detect quiz on current tab
       const quiz = await new Promise((resolve) => {
         chrome.tabs.sendMessage(currentTabId, {
@@ -90,17 +118,16 @@ async function runQuizLoop() {
       if (!quiz || !quiz.found) {
         // Check if this is the end of a one-page quiz
         if (quiz && quiz.debug && quiz.debug.includes('One-page quiz: all questions completed')) {
-          console.log('✅ One-page quiz completed! All questions answered.');
-          console.log('Clicking submit button...');
+          console.log('✅ All questions on this page completed!');
 
-          // Click submit for the whole quiz
-          await new Promise((resolve) => {
-            chrome.tabs.sendMessage(currentTabId, { action: 'clickSubmit' }, resolve);
-          });
+          // Pause and wait for user to navigate
+          console.log('⏸ Waiting for user to navigate to next page...');
+          waitingForNavigation = true;
+          isPaused = true;
+          updateBadge('⏸', '#ffc107');
 
-          await sleep(2000);
-          stopQuizMode();
-          break;
+          // Wait in the loop for user to click resume
+          continue;
         }
 
         console.log('No quiz found, waiting...');
@@ -113,15 +140,7 @@ async function runQuizLoop() {
 
       // Check if it's an essay question
       if (quiz.isEssay) {
-        console.log('📝 Essay question detected');
-
-        if (quizSettings.skipEssays) {
-          console.log('⏭️ Skipping essay question (skip essays enabled)');
-          await sleep(2000);
-          continue; // Skip this question
-        }
-
-        console.log('Writing AI essay answer...');
+        console.log('📝 Essay question detected - writing AI answer...');
 
         // Get essay answer from AI
         const essayAnswer = await getEssayAnswer(quiz.question);
@@ -131,7 +150,8 @@ async function runQuizLoop() {
         await new Promise((resolve) => {
           chrome.tabs.sendMessage(currentTabId, {
             action: 'fillEssay',
-            essayAnswer: essayAnswer
+            essayAnswer: essayAnswer,
+            essayFieldId: quiz.essayFieldId
           }, resolve);
         });
 
@@ -173,16 +193,14 @@ async function runQuizLoop() {
       const currentQuestionText = quiz.question.substring(0, 200);
       if (currentQuestionText === lastQuestionText) {
         sameQuestionCount++;
-        console.log(`Same question (count: ${sameQuestionCount})`);
+        console.log(`⚠️ Same question detected (count: ${sameQuestionCount}) - question may already be answered or page not changed`);
 
-        if (sameQuestionCount > 10) {
-          console.log('⚠️ Stuck, resetting...');
-          lastQuestionText = null;
-          sameQuestionCount = 0;
+        if (sameQuestionCount > 5) {
+          console.log('⚠️ Stuck on same question after 5 attempts - stopping quiz');
           errorCount++;
           updateBadge('⚠️', '#f44336');
-          await sleep(5000);
-          continue;
+          stopQuizMode();
+          break;
         }
 
         await sleep(2000);
@@ -192,7 +210,7 @@ async function runQuizLoop() {
       // New question!
       sameQuestionCount = 0;
       lastQuestionText = currentQuestionText;
-      console.log('New question detected:', currentQuestionText.substring(0, 50));
+      console.log('✅ New question detected:', currentQuestionText.substring(0, 50));
 
       // Get AI answer
       const answer = await getAIAnswer(quiz);
@@ -228,7 +246,8 @@ async function runQuizLoop() {
       await new Promise((resolve) => {
         chrome.tabs.sendMessage(currentTabId, {
           action: 'clickAnswer',
-          answerIndex: answer.correct_index
+          answerIndex: answer.correct_index,
+          radioGroupId: quiz.radioGroupId
         }, resolve);
       });
 
