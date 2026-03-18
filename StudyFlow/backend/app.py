@@ -192,6 +192,8 @@ def init_users_table():
         conn = psycopg2.connect(os.environ["DATABASE_URL"])
         cur = conn.cursor()
 
+        print("🔧 Starting users table initialization...")
+
         # Create table if it doesn't exist
         cur.execute("""
             CREATE TABLE IF NOT EXISTS users (
@@ -207,6 +209,8 @@ def init_users_table():
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
+        conn.commit()
+        print("✅ Table creation/check complete")
 
         # Add missing columns if table already exists (compatible with older PostgreSQL)
         columns_to_add = [
@@ -219,6 +223,8 @@ def init_users_table():
             ("updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
         ]
 
+        print(f"🔍 Checking {len(columns_to_add)} columns...")
+
         for column_name, column_type in columns_to_add:
             try:
                 # Check if column exists first
@@ -228,19 +234,27 @@ def init_users_table():
                     WHERE table_name='users' AND column_name=%s;
                 """, (column_name,))
 
-                if cur.fetchone() is None:
+                result = cur.fetchone()
+                if result is None:
                     # Column doesn't exist, add it
+                    print(f"➕ Adding missing column: {column_name}")
                     cur.execute(f"ALTER TABLE users ADD COLUMN {column_name} {column_type};")
+                    conn.commit()
                     print(f"✅ Added column: {column_name}")
+                else:
+                    print(f"✓ Column exists: {column_name}")
             except Exception as col_error:
+                conn.rollback()
                 print(f"⚠️ Column {column_name} error: {col_error}")
-                pass
+                import traceback
+                print(traceback.format_exc())
 
-        conn.commit()
         conn.close()
         print("✅ PostgreSQL: users table ready.")
     except Exception as e:
         print(f"❌ Users table init error: {e}")
+        import traceback
+        print(traceback.format_exc())
 
 # Initialize users table
 init_users_table()
