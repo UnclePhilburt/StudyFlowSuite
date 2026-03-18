@@ -27,7 +27,7 @@ async function getAuthToken() {
 
 // Function to logout
 async function logout() {
-  await chrome.storage.local.remove(['authToken', 'user', 'rememberMe']);
+  await chrome.storage.local.remove(['authToken', 'user']);
   window.location.href = 'login.html';
 }
 

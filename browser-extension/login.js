@@ -16,7 +16,6 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
 
   const email = document.getElementById('email').value;
   const password = document.getElementById('password').value;
-  const remember = document.getElementById('remember').checked;
 
   const loginBtn = document.getElementById('loginBtn');
   const errorMessage = document.getElementById('errorMessage');
@@ -41,16 +40,10 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
 
     if (response.ok) {
       // Store token and user data
-      const storageData = {
+      await chrome.storage.local.set({
         authToken: data.token,
         user: data.user
-      };
-
-      if (remember) {
-        storageData.rememberMe = true;
-      }
-
-      await chrome.storage.local.set(storageData);
+      });
 
       // Show success message
       successMessage.textContent = 'Login successful! Redirecting...';
@@ -88,10 +81,3 @@ document.getElementById('signupLink').addEventListener('click', (e) => {
   });
 });
 
-// Handle "Forgot password" link
-document.getElementById('forgotLink').addEventListener('click', (e) => {
-  e.preventDefault();
-  chrome.tabs.create({
-    url: 'https://unclephilburt.github.io/studyflowwebsite/login.html'
-  });
-});
