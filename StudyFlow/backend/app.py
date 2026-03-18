@@ -1123,6 +1123,67 @@ RULES:
         return jsonify({"error": str(e)}), 500
 
 
+# ============ ESSAY ANSWER ENDPOINT ============
+@app.route("/api/essay", methods=["POST"])
+def essay_answer():
+    """
+    Generate an essay answer for a short-answer or essay question.
+
+    Expects JSON:
+    {
+        "question": "Explain the process of photosynthesis."
+    }
+
+    Returns:
+    {
+        "essay_answer": "Photosynthesis is the process by which..."
+    }
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No JSON provided"}), 400
+
+        question = data.get("question", "")
+
+        if not question:
+            return jsonify({"error": "Missing question"}), 400
+
+        prompt = f"""You are answering a quiz question that requires a text response (essay, short answer, or fill-in-the-blank).
+
+Question: {question}
+
+Provide an accurate answer. Follow these rules:
+- For fill-in-the-blank questions (asking for a single word/phrase/number): Give ONLY the answer, no extra text
+- For short answer questions: Provide 2-5 complete sentences
+- For essay questions: Provide 1-3 well-structured paragraphs
+- Be factually accurate and direct
+- Use a natural, student-like tone
+- If the question asks for a definition, name, date, or specific term, provide just that without elaboration
+
+Return ONLY the answer text, nothing else."""
+
+        # Use GPT-4o-mini for essay generation
+        from openai import OpenAI
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=500,
+            temperature=0.7
+        )
+
+        essay_answer = response.choices[0].message.content.strip()
+        debug_log(f"ESSAY API: Generated {len(essay_answer)} characters")
+
+        return jsonify({"essay_answer": essay_answer}), 200
+
+    except Exception as e:
+        debug_log(f"ESSAY API error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 # ============ VISION API ENDPOINT ============
 @app.route("/api/vision", methods=["POST"])
 def vision_analyze():
