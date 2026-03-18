@@ -5,6 +5,7 @@ gevent
 openai>=1.50.0
 anthropic
 cohere
+google-generativeai
 python-dotenv
 Pillow
 pytesseract

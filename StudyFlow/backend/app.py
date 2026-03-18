@@ -1085,34 +1085,15 @@ RULES:
 - correct_answer_index is 1-based (1, 2, 3, etc.)
 - Return ONLY valid JSON, no other text"""
 
-        # Use GPT-3.5-turbo (cheap) or GPT-4o-mini for text
-        from openai import OpenAI
-        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        # Use Gemini 1.5 Flash - much faster and cheaper than GPT-4o-mini
+        from StudyFlow.backend.ai_clients.gemini_client import get_gemini_answer
 
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",  # Fast and cheap for text-only
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=300,
-            temperature=0.1
-        )
+        result = get_gemini_answer(question, answers)
 
-        response_text = response.choices[0].message.content.strip()
+        if result is None:
+            return jsonify({"error": "AI processing failed"}), 500
 
-        # Parse JSON - handle markdown code blocks
-        if "```" in response_text:
-            lines = response_text.split("\n")
-            json_lines = []
-            in_json = False
-            for line in lines:
-                if line.startswith("```json") or line.startswith("```"):
-                    in_json = not in_json
-                    continue
-                if in_json:
-                    json_lines.append(line)
-            response_text = "\n".join(json_lines)
-
-        result = json.loads(response_text)
-        debug_log(f"TEXT API: Answer={result.get('correct_answer_index')}, Confidence={result.get('confidence')}")
+        debug_log(f"TEXT API (Gemini): Answer={result.get('correct_answer_index')}, Confidence={result.get('confidence')}")
         return jsonify(result), 200
 
     except json.JSONDecodeError as e:
@@ -1163,19 +1144,15 @@ Provide an accurate answer. Follow these rules:
 
 Return ONLY the answer text, nothing else."""
 
-        # Use GPT-4o-mini for essay generation
-        from openai import OpenAI
-        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        # Use Gemini 1.5 Flash for essay generation
+        from StudyFlow.backend.ai_clients.gemini_client import get_gemini_essay
 
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=500,
-            temperature=0.7
-        )
+        essay_answer = get_gemini_essay(question)
 
-        essay_answer = response.choices[0].message.content.strip()
-        debug_log(f"ESSAY API: Generated {len(essay_answer)} characters")
+        if essay_answer is None:
+            return jsonify({"error": "AI processing failed"}), 500
+
+        debug_log(f"ESSAY API (Gemini): Generated {len(essay_answer)} characters")
 
         return jsonify({"essay_answer": essay_answer}), 200
 
