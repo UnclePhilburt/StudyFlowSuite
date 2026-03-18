@@ -14,6 +14,7 @@ scikit-image
 rapidfuzz
 imagehash
 celery
+flower
 redis
 psycopg2-binary>=2.9.9
 requests
