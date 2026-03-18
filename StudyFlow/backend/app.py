@@ -212,6 +212,7 @@ def init_users_table():
         columns_to_add = [
             ("name", "VARCHAR(255)"),
             ("password_hash", "VARCHAR(255)"),
+            ("stripe_customer_id", "VARCHAR(255)"),
             ("stripe_subscription_id", "VARCHAR(255)"),
             ("trial_ends_at", "TIMESTAMP"),
             ("created_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
