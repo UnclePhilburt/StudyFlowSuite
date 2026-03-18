@@ -52,8 +52,8 @@ RULES:
 - correct_answer_index is 1-based (1, 2, 3, etc.)
 - Return ONLY valid JSON, no other text"""
 
-        # Use Gemini 2.0 Flash - fastest and cheapest
-        model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        # Use Gemini 2.5 Flash - latest stable model
+        model = genai.GenerativeModel('gemini-2.5-flash')
 
         response = model.generate_content(
             prompt,
@@ -185,8 +185,8 @@ Provide an accurate answer. Follow these rules:
 
 Return ONLY the answer text, nothing else."""
 
-        # Use Gemini 2.0 Flash
-        model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        # Use Gemini 2.5 Flash - latest stable model
+        model = genai.GenerativeModel('gemini-2.5-flash')
 
         response = model.generate_content(
             prompt,
