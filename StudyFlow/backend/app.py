@@ -1035,7 +1035,7 @@ def admin_home_message():
 @app.route("/api/answer", methods=["POST"])
 def answer_question():
     """
-    Answer a quiz question using text only (no image).
+    Answer a quiz question using text only (no image). Uses OpenAI API.
     MUCH cheaper than Vision API - use this when OCR extraction works.
 
     Expects JSON:
