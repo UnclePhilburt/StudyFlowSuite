@@ -1086,15 +1086,45 @@ RULES:
 - correct_answer_index is 1-based (1, 2, 3, etc.)
 - Return ONLY valid JSON, no other text"""
 
-        # Use Gemini API with selected model
-        from StudyFlow.backend.ai_clients.gemini_client import get_gemini_answer
+        # Use OpenAI API (gpt-4o-mini for speed/cost, gpt-4o for accuracy)
+        from openai import OpenAI
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-        result = get_gemini_answer(question, answers, model=model)
+        # Map model names
+        openai_model = "gpt-4o-mini" if "flash" in model.lower() else "gpt-4o"
 
-        if result is None:
+        answers_text = "\n".join(f"{i+1}. {a}" for i, a in enumerate(answers))
+
+        prompt = f"""Answer this quiz question and return ONLY a JSON object.
+
+Question: {question}
+
+Options:
+{answers_text}
+
+Return this exact JSON format:
+{{
+    "correct_answer_index": <number 1-{len(answers)}>,
+    "correct_answer_text": "<answer text>",
+    "confidence": "high",
+    "reasoning": "<brief explanation>"
+}}
+
+Return ONLY valid JSON, no markdown, no other text."""
+
+        response = client.chat.completions.create(
+            model=openai_model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.1,
+            response_format={"type": "json_object"}
+        )
+
+        result = json.loads(response.choices[0].message.content)
+
+        if not result or not result.get('correct_answer_index'):
             return jsonify({"error": "AI processing failed"}), 500
 
-        debug_log(f"TEXT API (Gemini): Answer={result.get('correct_answer_index')}, Confidence={result.get('confidence')}")
+        debug_log(f"TEXT API (OpenAI {openai_model}): Answer={result.get('correct_answer_index')}, Confidence={result.get('confidence')}")
         return jsonify(result), 200
 
     except json.JSONDecodeError as e:
@@ -1146,15 +1176,26 @@ Provide an accurate answer. Follow these rules:
 
 Return ONLY the answer text, nothing else."""
 
-        # Use Gemini API for essay generation with selected model
-        from StudyFlow.backend.ai_clients.gemini_client import get_gemini_essay
+        # Use OpenAI API for essay generation
+        from openai import OpenAI
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-        essay_answer = get_gemini_essay(question, model=model)
+        # Map model names - use gpt-4o-mini for speed/cost
+        openai_model = "gpt-4o-mini" if "flash" in model.lower() else "gpt-4o"
 
-        if essay_answer is None:
+        response = client.chat.completions.create(
+            model=openai_model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.7,
+            max_tokens=500
+        )
+
+        essay_answer = response.choices[0].message.content.strip()
+
+        if not essay_answer:
             return jsonify({"error": "AI processing failed"}), 500
 
-        debug_log(f"ESSAY API (Gemini): Generated {len(essay_answer)} characters")
+        debug_log(f"ESSAY API (OpenAI {openai_model}): Generated {len(essay_answer)} characters")
 
         return jsonify({"essay_answer": essay_answer}), 200
 

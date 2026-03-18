@@ -16,7 +16,7 @@ let quizSettings = {
   totalQuestions: null,
   targetTime: null, // in minutes
   onePageMode: false,
-  aiModel: 'gemini-2.5-flash' // default model
+  aiModel: 'gpt-4o-mini' // default model
 };
 let quizStartTime = null;
 
@@ -85,7 +85,7 @@ function stopQuizMode() {
   isPaused = false;
   waitingForNavigation = false;
   currentTabId = null;
-  quizSettings = { totalQuestions: null, targetTime: null, onePageMode: false, aiModel: 'gemini-2.5-flash' };
+  quizSettings = { totalQuestions: null, targetTime: null, onePageMode: false, aiModel: 'gpt-4o-mini' };
   quizStartTime = null;
   console.log('Quiz mode stopped');
   updateBadge('', '');
@@ -378,7 +378,7 @@ async function getEssayAnswer(question) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       question: question,
-      model: quizSettings.aiModel || 'gemini-2.5-flash'
+      model: quizSettings.aiModel || 'gpt-4o-mini'
     })
   });
 
