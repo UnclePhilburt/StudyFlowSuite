@@ -482,6 +482,37 @@ def get_current_user():
         app.logger.error(f"❌ Get user error: {e}\n{traceback.format_exc()}")
         return jsonify({'error': 'Failed to get user info'}), 500
 
+@app.route("/api/create-portal-session", methods=["POST"])
+@token_required
+def create_portal_session():
+    """Create a Stripe Customer Portal session for managing subscription"""
+    try:
+        # Get user's stripe_customer_id
+        conn = psycopg2.connect(os.environ["DATABASE_URL"])
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT stripe_customer_id FROM users WHERE id = %s
+        """, (request.user_id,))
+        result = cur.fetchone()
+        conn.close()
+
+        if not result or not result[0]:
+            return jsonify({'error': 'No active subscription found'}), 404
+
+        stripe_customer_id = result[0]
+
+        # Create Stripe Customer Portal session
+        session = stripe.billing_portal.Session.create(
+            customer=stripe_customer_id,
+            return_url='https://unclephilburt.github.io/studyflowwebsite/dashboard.html'
+        )
+
+        return jsonify({'url': session.url}), 200
+
+    except Exception as e:
+        app.logger.error(f"❌ Create portal session error: {e}\n{traceback.format_exc()}")
+        return jsonify({'error': 'Failed to create portal session'}), 500
+
 # ============================================================================
 # END USER AUTHENTICATION & SUBSCRIPTION ROUTES
 # ============================================================================
