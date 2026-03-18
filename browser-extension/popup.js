@@ -24,7 +24,34 @@ async function initUserProfile() {
     // Set user plan
     const planText = user.subscription_status === 'active' || user.subscription_status === 'trialing' ? 'Pro Plan' : 'Free Plan';
     document.getElementById('userPlan').textContent = planText;
+
+    // Check if we should show welcome animation
+    const result = await chrome.storage.local.get(['showWelcome']);
+    if (result.showWelcome) {
+      showWelcomeAnimation(user.name || user.email.split('@')[0]);
+      // Clear the flag
+      await chrome.storage.local.remove(['showWelcome']);
+    }
   }
+}
+
+// Show welcome animation
+function showWelcomeAnimation(name) {
+  // Create welcome overlay
+  const overlay = document.createElement('div');
+  overlay.className = 'welcome-overlay';
+  overlay.innerHTML = `
+    <div class="welcome-content">
+      <div class="welcome-title">Hello!</div>
+      <div class="welcome-name">${name}</div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  // Remove overlay after animation
+  setTimeout(() => {
+    overlay.remove();
+  }, 2500);
 }
 
 // Handle logout

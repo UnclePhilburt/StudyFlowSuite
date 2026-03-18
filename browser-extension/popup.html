@@ -364,65 +364,135 @@
 
     /* User Profile */
     .user-profile {
-      padding: 12px 20px;
+      padding: 16px 20px;
       border-bottom: 1px solid #e2e8f0;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      background: #f8fafc;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
     }
 
     .user-info {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 12px;
+      flex: 1;
     }
 
     .user-avatar {
-      width: 32px;
-      height: 32px;
+      width: 40px;
+      height: 40px;
       border-radius: 50%;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: rgba(255, 255, 255, 0.2);
+      backdrop-filter: blur(10px);
       display: flex;
       align-items: center;
       justify-content: center;
       color: white;
-      font-weight: 600;
-      font-size: 14px;
+      font-weight: 700;
+      font-size: 16px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
     }
 
     .user-details {
       display: flex;
       flex-direction: column;
+      gap: 2px;
     }
 
     .user-name {
-      font-size: 12px;
+      font-size: 14px;
       font-weight: 600;
-      color: #1e293b;
+      color: white;
     }
 
     .user-plan {
-      font-size: 10px;
-      color: #64748b;
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.8);
       text-transform: uppercase;
       letter-spacing: 0.5px;
+      font-weight: 500;
     }
 
     .logout-btn {
-      background: transparent;
+      background: rgba(255, 255, 255, 0.15);
       border: none;
-      color: #64748b;
+      color: white;
       font-size: 11px;
       cursor: pointer;
-      padding: 4px 8px;
-      border-radius: 4px;
+      padding: 6px 12px;
+      border-radius: 6px;
       transition: all 0.2s;
+      font-weight: 500;
     }
 
     .logout-btn:hover {
-      background: #e2e8f0;
-      color: #1e293b;
+      background: rgba(255, 255, 255, 0.25);
+    }
+
+    /* Welcome Animation */
+    .welcome-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      animation: fadeOut 0.5s ease 2s forwards;
+    }
+
+    .welcome-content {
+      text-align: center;
+      color: white;
+      animation: slideUp 0.6s ease;
+    }
+
+    .welcome-title {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      animation: fadeInUp 0.6s ease;
+    }
+
+    .welcome-name {
+      font-size: 20px;
+      font-weight: 600;
+      opacity: 0.9;
+      animation: fadeInUp 0.6s ease 0.2s backwards;
+    }
+
+    @keyframes fadeOut {
+      to {
+        opacity: 0;
+        visibility: hidden;
+      }
+    }
+
+    @keyframes slideUp {
+      from {
+        transform: translateY(20px);
+        opacity: 0;
+      }
+      to {
+        transform: translateY(0);
+        opacity: 1;
+      }
+    }
+
+    @keyframes fadeInUp {
+      from {
+        transform: translateY(15px);
+        opacity: 0;
+      }
+      to {
+        transform: translateY(0);
+        opacity: 1;
+      }
     }
 
     /* Loading animation */

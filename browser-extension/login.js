@@ -42,7 +42,8 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
       // Store token and user data
       await chrome.storage.local.set({
         authToken: data.token,
-        user: data.user
+        user: data.user,
+        showWelcome: true  // Flag to show welcome animation
       });
 
       // Show success message
@@ -52,7 +53,7 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
       // Redirect to main popup after a short delay
       setTimeout(() => {
         window.location.href = 'popup.html';
-      }, 1000);
+      }, 800);
     } else {
       // Show error message
       errorMessage.textContent = data.error || 'Login failed. Please try again.';
