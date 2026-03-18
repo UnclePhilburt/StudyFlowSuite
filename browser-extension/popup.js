@@ -9,6 +9,34 @@ let setupData = {
   submitSelector: null
 };
 
+// Initialize user profile
+async function initUserProfile() {
+  const user = await window.auth.getCurrentUser();
+
+  if (user) {
+    // Set user avatar (first letter of name or email)
+    const initial = (user.name || user.email).charAt(0).toUpperCase();
+    document.getElementById('userAvatar').textContent = initial;
+
+    // Set user name
+    document.getElementById('userName').textContent = user.name || user.email;
+
+    // Set user plan
+    const planText = user.subscription_status === 'active' || user.subscription_status === 'trialing' ? 'Pro Plan' : 'Free Plan';
+    document.getElementById('userPlan').textContent = planText;
+  }
+}
+
+// Handle logout
+document.getElementById('logoutBtn').addEventListener('click', () => {
+  if (confirm('Are you sure you want to logout?')) {
+    window.auth.logout();
+  }
+});
+
+// Initialize on page load
+initUserProfile();
+
 // Settings validation
 document.getElementById('totalQuestions').addEventListener('input', (e) => {
   const totalQuestions = parseInt(e.target.value);
