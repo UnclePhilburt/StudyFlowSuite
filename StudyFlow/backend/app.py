@@ -208,10 +208,11 @@ def init_users_table():
             );
         """)
 
-        # Add missing columns if table already exists
+        # Add missing columns if table already exists (compatible with older PostgreSQL)
         columns_to_add = [
             ("name", "VARCHAR(255)"),
             ("password_hash", "VARCHAR(255)"),
+            ("stripe_subscription_id", "VARCHAR(255)"),
             ("trial_ends_at", "TIMESTAMP"),
             ("created_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
             ("updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
@@ -219,12 +220,19 @@ def init_users_table():
 
         for column_name, column_type in columns_to_add:
             try:
-                cur.execute(f"""
-                    ALTER TABLE users
-                    ADD COLUMN IF NOT EXISTS {column_name} {column_type};
-                """)
+                # Check if column exists first
+                cur.execute("""
+                    SELECT column_name
+                    FROM information_schema.columns
+                    WHERE table_name='users' AND column_name=%s;
+                """, (column_name,))
+
+                if cur.fetchone() is None:
+                    # Column doesn't exist, add it
+                    cur.execute(f"ALTER TABLE users ADD COLUMN {column_name} {column_type};")
+                    print(f"✅ Added column: {column_name}")
             except Exception as col_error:
-                # Column might already exist, ignore
+                print(f"⚠️ Column {column_name} error: {col_error}")
                 pass
 
         conn.commit()
