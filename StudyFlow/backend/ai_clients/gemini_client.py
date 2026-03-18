@@ -46,24 +46,22 @@ def get_gemini_answer_single(question, answers, attempt_num=1, model_name='gemin
         # Format answers
         answers_text = "\n".join(f"{i+1}. {a}" for i, a in enumerate(answers))
 
-        prompt = f"""You are answering a quiz question. Analyze carefully and select the correct answer.
+        prompt = f"""Answer this quiz question and return ONLY a JSON object.
 
 Question: {question}
 
-Answer options:
+Options:
 {answers_text}
 
-Return a JSON object with this EXACT structure:
+Return this exact JSON format:
 {{
     "correct_answer_index": <number 1-{len(answers)}>,
-    "correct_answer_text": "<exact text of correct answer>",
-    "confidence": "high/medium/low",
-    "reasoning": "<brief explanation why this is correct>"
+    "correct_answer_text": "<answer text>",
+    "confidence": "high",
+    "reasoning": "<10 words max>"
 }}
 
-RULES:
-- correct_answer_index is 1-based (1, 2, 3, etc.)
-- Return ONLY valid JSON, no other text"""
+Rules: Index is 1-based. Keep reasoning under 10 words. Return ONLY valid JSON."""
 
         # Use specified Gemini model
         model = genai.GenerativeModel(actual_model_name)
@@ -72,7 +70,7 @@ RULES:
             prompt,
             generation_config={
                 'temperature': 0.1,
-                'max_output_tokens': 150,  # Reduced from 300 to prevent truncation
+                'max_output_tokens': 100,  # Reduced to prevent truncation issues
             }
         )
 
