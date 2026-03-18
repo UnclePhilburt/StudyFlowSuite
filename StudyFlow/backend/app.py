@@ -1090,8 +1090,8 @@ RULES:
         from openai import OpenAI
         client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-        # Map model names
-        openai_model = "gpt-4o-mini" if "flash" in model.lower() else "gpt-4o"
+        # Use model name directly (extension sends gpt-4o-mini or gpt-4o)
+        openai_model = model if model in ["gpt-4o-mini", "gpt-4o"] else "gpt-4o-mini"
 
         answers_text = "\n".join(f"{i+1}. {a}" for i, a in enumerate(answers))
 
@@ -1180,8 +1180,8 @@ Return ONLY the answer text, nothing else."""
         from openai import OpenAI
         client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-        # Map model names - use gpt-4o-mini for speed/cost
-        openai_model = "gpt-4o-mini" if "flash" in model.lower() else "gpt-4o"
+        # Use model name directly (extension sends gpt-4o-mini or gpt-4o)
+        openai_model = model if model in ["gpt-4o-mini", "gpt-4o"] else "gpt-4o-mini"
 
         response = client.chat.completions.create(
             model=openai_model,
