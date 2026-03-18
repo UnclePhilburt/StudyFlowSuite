@@ -198,11 +198,22 @@ function stopStatusPolling() {
 }
 
 function updateStatus(message, type) {
-  const statusCard = document.getElementById('statusCard');
   const statusText = document.getElementById('statusText');
+  const statusDot = document.getElementById('statusDot');
 
   statusText.textContent = message;
-  statusCard.className = `status-card ${type}`;
+
+  // Update status dot
+  statusDot.className = 'status-dot';
+  if (type === 'running') {
+    statusDot.classList.add('running');
+  } else if (type === 'idle') {
+    statusDot.classList.add('idle');
+  } else if (type === 'success') {
+    // Keep green animated for success
+  } else {
+    statusDot.classList.add('idle');
+  }
 }
 
 // Listen for element selection from content script
