@@ -153,7 +153,12 @@ async function runQuizLoop() {
             action: 'fillEssay',
             essayAnswer: essayAnswer,
             essayFieldId: quiz.essayFieldId
-          }, resolve);
+          }, (response) => {
+            if (chrome.runtime.lastError) {
+              console.error('Error filling essay:', chrome.runtime.lastError);
+            }
+            resolve(response);
+          });
         });
 
         await sleep(1500);
@@ -161,7 +166,12 @@ async function runQuizLoop() {
         // Only click submit if NOT a one-page quiz
         if (!isOnePageQuiz) {
           await new Promise((resolve) => {
-            chrome.tabs.sendMessage(currentTabId, { action: 'clickSubmit' }, resolve);
+            chrome.tabs.sendMessage(currentTabId, { action: 'clickSubmit' }, (response) => {
+              if (chrome.runtime.lastError) {
+                console.error('Error clicking submit:', chrome.runtime.lastError);
+              }
+              resolve(response);
+            });
           });
         }
 
@@ -249,7 +259,12 @@ async function runQuizLoop() {
           action: 'clickAnswer',
           answerIndex: answer.correct_index,
           radioGroupId: quiz.radioGroupId
-        }, resolve);
+        }, (response) => {
+          if (chrome.runtime.lastError) {
+            console.error('Error clicking answer:', chrome.runtime.lastError);
+          }
+          resolve(response);
+        });
       });
 
       await sleep(1500);
@@ -257,7 +272,12 @@ async function runQuizLoop() {
       // Only click submit if NOT a one-page quiz
       if (!isOnePageQuiz) {
         await new Promise((resolve) => {
-          chrome.tabs.sendMessage(currentTabId, { action: 'clickSubmit' }, resolve);
+          chrome.tabs.sendMessage(currentTabId, { action: 'clickSubmit' }, (response) => {
+            if (chrome.runtime.lastError) {
+              console.error('Error clicking submit:', chrome.runtime.lastError);
+            }
+            resolve(response);
+          });
         });
       }
 
@@ -272,7 +292,12 @@ async function runQuizLoop() {
         // If one-page quiz, click submit now
         if (isOnePageQuiz) {
           await new Promise((resolve) => {
-            chrome.tabs.sendMessage(currentTabId, { action: 'clickSubmit' }, resolve);
+            chrome.tabs.sendMessage(currentTabId, { action: 'clickSubmit' }, (response) => {
+              if (chrome.runtime.lastError) {
+                console.error('Error clicking submit:', chrome.runtime.lastError);
+              }
+              resolve(response);
+            });
           });
         }
 
@@ -298,7 +323,12 @@ async function runQuizLoop() {
         // Click submit to move to next question
         try {
           await new Promise((resolve) => {
-            chrome.tabs.sendMessage(currentTabId, { action: 'clickSubmit' }, resolve);
+            chrome.tabs.sendMessage(currentTabId, { action: 'clickSubmit' }, (response) => {
+              if (chrome.runtime.lastError) {
+                console.error('Error clicking submit:', chrome.runtime.lastError);
+              }
+              resolve(response);
+            });
           });
           await sleep(2000);
         } catch (e) {
@@ -315,18 +345,24 @@ async function runQuizLoop() {
 }
 
 async function getAIAnswer(quiz) {
+  const requestData = {
+    question: quiz.question,
+    answers: quiz.answers.map(a => a.text),
+    model: quizSettings.aiModel || 'gemini-2.5-flash'
+  };
+
+  console.log('Sending to API:', requestData);
+
   const response = await fetch(`${BACKEND_URL}/api/answer`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      question: quiz.question,
-      answers: quiz.answers.map(a => a.text),
-      model: quizSettings.aiModel || 'gemini-2.5-flash'
-    })
+    body: JSON.stringify(requestData)
   });
 
   if (!response.ok) {
-    throw new Error('Failed to get AI answer');
+    const errorText = await response.text();
+    console.error('API Error Response:', response.status, errorText);
+    throw new Error(`Failed to get AI answer: ${response.status} - ${errorText}`);
   }
 
   const data = await response.json();

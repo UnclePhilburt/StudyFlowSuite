@@ -12,16 +12,37 @@ function detectOnePageQuiz() {
   const questionContainers = document.querySelectorAll('.question, [class*="question"]');
 
   for (const container of questionContainers) {
-    // Skip if we've already answered this question
+    // Skip if container is not visible
+    if (container.offsetParent === null || container.offsetHeight === 0 || container.offsetWidth === 0) {
+      console.log('⏭️ Skipping hidden question container');
+      continue;
+    }
+
+    // Create a unique question ID
     const questionId = container.getAttribute('data-question-id') || container.textContent.substring(0, 100);
+
+    // Skip if we've already processed this question in this session
     if (answeredQuestions.has(questionId)) {
       console.log('⏭️ Skipping already answered question');
       continue;
     }
 
     // Find the question text within this container
-    const questionText = container.querySelector('.question-text, .question-number + div, strong, b, h3, h4, h5')?.textContent?.trim()
-      || container.textContent.trim().split('\n')[0];
+    const questionTextElement = container.querySelector('.question_text, .question-text, .questionText, .qtext, [class*="question_text"]');
+    let questionText = '';
+
+    if (questionTextElement) {
+      questionText = questionTextElement.textContent.trim();
+    } else {
+      // Fallback: try to find the question text from common patterns
+      const fallbackElement = container.querySelector('strong, b, h3, h4, h5, p');
+      if (fallbackElement) {
+        questionText = fallbackElement.textContent.trim();
+      } else {
+        // Last resort: get first substantial text from container
+        questionText = container.textContent.trim().split('\n').find(line => line.length > 10) || '';
+      }
+    }
 
     if (!questionText || questionText.length < 10) continue;
 
@@ -29,9 +50,19 @@ function detectOnePageQuiz() {
     const textInputs = container.querySelectorAll('textarea, input[type="text"]');
     if (textInputs.length > 0) {
       for (const field of textInputs) {
-        if (field.offsetParent !== null && field.value.trim() === '') {
+        if (field.offsetParent !== null) {
+          // Skip if field already has a value (don't add to answeredQuestions - just skip this field)
+          if (field.value.trim() !== '') {
+            console.log('⏭️ Text field already filled, skipping without tracking');
+            continue; // Skip to next field
+          }
+
           // Found unanswered text question
           console.log('✅ Found unanswered TEXT question:', questionText.substring(0, 100));
+
+          // Mark the field with a unique identifier
+          const fieldId = `studyflow-field-${Date.now()}`;
+          field.setAttribute('data-studyflow-field-id', fieldId);
 
           // Mark as answered (will be filled)
           container.setAttribute('data-question-id', questionId);
@@ -42,7 +73,7 @@ function detectOnePageQuiz() {
             answers: [],
             found: true,
             isEssay: true,
-            essayField: field,
+            essayFieldId: fieldId,
             questionElement: container,
             debug: ['One-page quiz: text question']
           };
@@ -53,11 +84,10 @@ function detectOnePageQuiz() {
     // Check if it's a multiple choice question
     const radioInputs = container.querySelectorAll('input[type="radio"], input[type="checkbox"]');
     if (radioInputs.length > 0) {
-      // Check if any answer is already selected
+      // Check if any answer is already selected (don't add to answeredQuestions - just skip this question)
       const isAnswered = Array.from(radioInputs).some(input => input.checked);
       if (isAnswered) {
-        console.log('⏭️ Question already answered, skipping');
-        answeredQuestions.add(questionId);
+        console.log('⏭️ Radio button already checked, skipping without tracking');
         continue;
       }
 
@@ -65,7 +95,13 @@ function detectOnePageQuiz() {
       console.log('✅ Found unanswered MULTIPLE CHOICE question:', questionText.substring(0, 100));
 
       const answers = [];
+      const radioGroupId = `studyflow-radio-${Date.now()}`;
+
       radioInputs.forEach((input, index) => {
+        // Mark each input with a unique group identifier
+        input.setAttribute('data-studyflow-radio-group', radioGroupId);
+        input.setAttribute('data-studyflow-radio-index', index);
+
         // Find label text
         let answerText = '';
         if (input.id) {
@@ -105,7 +141,7 @@ function detectOnePageQuiz() {
         answers: answers,
         found: true,
         isEssay: false,
-        essayField: null,
+        radioGroupId: radioGroupId,
         questionElement: container,
         debug: ['One-page quiz: multiple choice']
       };
@@ -231,8 +267,12 @@ function detectQuiz() {
         const fieldText = (field.placeholder || field.name || field.id || '').toLowerCase();
         if (fieldText.includes('search') || fieldText.includes('filter') || fieldText.includes('find')) continue;
 
+        // Mark the field with a unique identifier
+        const fieldId = `studyflow-field-${Date.now()}`;
+        field.setAttribute('data-studyflow-field-id', fieldId);
+
         quizData.isEssay = true;
-        quizData.essayField = field;
+        quizData.essayFieldId = fieldId;
 
         // Determine if it's fill-in-the-blank (short) or essay (long)
         const isFillInBlank = field.tagName === 'INPUT' && field.offsetHeight < 100;
@@ -329,18 +369,28 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     sendResponse({ success: true });
   } else if (request.action === 'clickAnswer') {
     const answerIndex = request.answerIndex;
-    const inputs = document.querySelectorAll('input[type="radio"], input[type="checkbox"]');
+    const radioGroupId = request.radioGroupId;
 
-    if (inputs[answerIndex - 1]) {
+    let input;
+    if (radioGroupId) {
+      // One-page mode: find the specific radio button by group ID and index
+      input = document.querySelector(`[data-studyflow-radio-group="${radioGroupId}"][data-studyflow-radio-index="${answerIndex - 1}"]`);
+    } else {
+      // Sequential mode: use all radio buttons on page
+      const inputs = document.querySelectorAll('input[type="radio"], input[type="checkbox"]');
+      input = inputs[answerIndex - 1];
+    }
+
+    if (input) {
       // Scroll into view
-      inputs[answerIndex - 1].scrollIntoView({ behavior: 'smooth', block: 'center' });
+      input.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
       // Wait a bit then click
       setTimeout(() => {
-        inputs[answerIndex - 1].click();
+        input.click();
 
         // Highlight the answer briefly
-        const parent = inputs[answerIndex - 1].closest('label') || inputs[answerIndex - 1].parentElement;
+        const parent = input.closest('label') || input.parentElement;
         if (parent) {
           parent.style.backgroundColor = '#90EE90';
           parent.style.transition = 'background-color 0.3s';
@@ -352,6 +402,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         sendResponse({ success: true });
       }, 500);
     } else {
+      console.error('Radio button not found. answerIndex:', answerIndex, 'radioGroupId:', radioGroupId);
       sendResponse({ success: false, error: 'Answer not found' });
     }
 
@@ -359,10 +410,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   } else if (request.action === 'fillEssay') {
     // Fill in essay answer
     const essayAnswer = request.essayAnswer;
-    const essayFields = document.querySelectorAll('textarea, input[type="text"][class*="essay"], input[type="text"][id*="essay"], div[contenteditable="true"]');
+    const essayFieldId = request.essayFieldId;
 
-    if (essayFields.length > 0) {
-      const field = essayFields[0];
+    // Find the specific field by its ID
+    const field = document.querySelector(`[data-studyflow-field-id="${essayFieldId}"]`);
+
+    if (field) {
       field.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
       setTimeout(() => {
@@ -387,6 +440,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         sendResponse({ success: true });
       }, 500);
     } else {
+      console.error('Essay field not found with ID:', essayFieldId);
       sendResponse({ success: false, error: 'Essay field not found' });
     }
 

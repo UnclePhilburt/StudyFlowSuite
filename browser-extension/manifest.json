@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "StudyFlowSuite",
-  "version": "0.6.0",
-  "description": "AI-powered automated quiz assistant with Apple-inspired design",
+  "version": "0.0.8",
+  "description": "Automated quiz completion assistant",
   "permissions": [
     "activeTab",
     "scripting",
