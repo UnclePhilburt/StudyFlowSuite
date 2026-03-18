@@ -4,17 +4,19 @@ Uses Gemini 1.5 Flash for fast, cheap responses
 """
 import os
 import json
+from collections import Counter
 import google.generativeai as genai
 from StudyFlow.logging_utils import debug_log
 
 
-def get_gemini_answer(question, answers):
+def get_gemini_answer_single(question, answers, attempt_num=1):
     """
-    Get answer from Gemini 1.5 Flash.
+    Get a single answer from Gemini 1.5 Flash.
 
     Args:
         question (str): The quiz question text
         answers (list): List of answer choices
+        attempt_num (int): Attempt number for logging
 
     Returns:
         dict: Answer response with index, text, confidence, reasoning
@@ -78,17 +80,74 @@ RULES:
             response_text = "\n".join(json_lines)
 
         result = json.loads(response_text)
-        debug_log(f"🤖 Gemini answer: {result.get('correct_answer_index')}, Confidence: {result.get('confidence')}")
+        debug_log(f"🤖 Gemini attempt {attempt_num}: Answer={result.get('correct_answer_index')}, Confidence={result.get('confidence')}")
 
         return result
 
     except json.JSONDecodeError as e:
-        debug_log(f"❌ Gemini JSON parse error: {e}")
+        debug_log(f"❌ Gemini attempt {attempt_num} JSON parse error: {e}")
         debug_log(f"Raw response was: {response_text}")
         return None
     except Exception as e:
-        debug_log(f"❌ Gemini API error: {e}")
+        debug_log(f"❌ Gemini attempt {attempt_num} API error: {e}")
         return None
+
+
+def get_gemini_answer(question, answers):
+    """
+    Get answer from Gemini 1.5 Flash with 3-vote system for improved accuracy.
+    Calls Gemini 3 times and returns the majority answer.
+
+    Args:
+        question (str): The quiz question text
+        answers (list): List of answer choices
+
+    Returns:
+        dict: Answer response with index, text, confidence, reasoning
+    """
+    debug_log("🗳️ Starting 3-vote Gemini system...")
+
+    votes = []
+    results = []
+
+    # Get 3 independent answers
+    for i in range(3):
+        result = get_gemini_answer_single(question, answers, attempt_num=i+1)
+        if result and result.get('correct_answer_index'):
+            votes.append(result['correct_answer_index'])
+            results.append(result)
+
+    if not votes:
+        debug_log("❌ All 3 Gemini attempts failed")
+        return None
+
+    # Count votes
+    vote_counts = Counter(votes)
+    winning_answer = vote_counts.most_common(1)[0][0]
+    vote_count = vote_counts[winning_answer]
+
+    debug_log(f"📊 Voting results: {dict(vote_counts)}")
+    debug_log(f"✅ Winner: Answer {winning_answer} with {vote_count}/3 votes")
+
+    # Find the result that matches the winning answer
+    winning_result = None
+    for result in results:
+        if result['correct_answer_index'] == winning_answer:
+            winning_result = result
+            break
+
+    # If we have unanimous or majority vote, increase confidence
+    if vote_count == 3:
+        winning_result['confidence'] = 'high'
+        winning_result['reasoning'] = f"[UNANIMOUS 3/3] {winning_result.get('reasoning', '')}"
+    elif vote_count == 2:
+        winning_result['confidence'] = 'medium'
+        winning_result['reasoning'] = f"[MAJORITY 2/3] {winning_result.get('reasoning', '')}"
+    else:
+        winning_result['confidence'] = 'low'
+        winning_result['reasoning'] = f"[SPLIT VOTE 1/3] {winning_result.get('reasoning', '')}"
+
+    return winning_result
 
 
 def get_gemini_essay(question):
