@@ -313,6 +313,27 @@ async function runQuizLoop() {
       console.error('❌ Error in quiz loop:', error);
       console.error('Error details:', error.message);
       console.error('Stack trace:', error.stack);
+
+      // Check for rate limit error
+      if (error.message && error.message.startsWith('RATE_LIMIT:')) {
+        console.log('🚫 Rate limit reached - stopping assistant');
+        const message = error.message.replace('RATE_LIMIT: ', '');
+
+        // Stop the assistant
+        stopQuizMode();
+
+        // Show error in badge
+        updateBadge('🚫', '#f44336');
+
+        // Alert user (this will show in the browser)
+        chrome.tabs.sendMessage(currentTabId, {
+          action: 'showAlert',
+          message: message
+        });
+
+        break; // Exit the loop
+      }
+
       errorCount++;
 
       // If API failed, skip this question and move on
@@ -353,13 +374,32 @@ async function getAIAnswer(quiz) {
 
   console.log('Sending to API:', requestData);
 
+  // Get auth token from storage
+  const result = await chrome.storage.local.get(['authToken']);
+  const authToken = result.authToken;
+
+  if (!authToken) {
+    throw new Error('Not authenticated. Please log in again.');
+  }
+
   const response = await fetch(`${BACKEND_URL}/api/answer`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${authToken}`
+    },
     body: JSON.stringify(requestData)
   });
 
   if (!response.ok) {
+    // Check for rate limit error
+    if (response.status === 429) {
+      const errorData = await response.json();
+      if (errorData.limit_exceeded) {
+        throw new Error('RATE_LIMIT: You\'ve reached your daily question limit (10 questions for free users). Upgrade to Pro for unlimited questions!');
+      }
+    }
+
     const errorText = await response.text();
     console.error('API Error Response:', response.status, errorText);
     throw new Error(`Failed to get AI answer: ${response.status} - ${errorText}`);
@@ -373,9 +413,20 @@ async function getAIAnswer(quiz) {
 }
 
 async function getEssayAnswer(question) {
+  // Get auth token from storage
+  const result = await chrome.storage.local.get(['authToken']);
+  const authToken = result.authToken;
+
+  if (!authToken) {
+    throw new Error('Not authenticated. Please log in again.');
+  }
+
   const response = await fetch(`${BACKEND_URL}/api/essay`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${authToken}`
+    },
     body: JSON.stringify({
       question: question,
       model: quizSettings.aiModel || 'gpt-4o-mini'
@@ -383,6 +434,14 @@ async function getEssayAnswer(question) {
   });
 
   if (!response.ok) {
+    // Check for rate limit error
+    if (response.status === 429) {
+      const errorData = await response.json();
+      if (errorData.limit_exceeded) {
+        throw new Error('RATE_LIMIT: You\'ve reached your daily question limit (10 questions for free users). Upgrade to Pro for unlimited questions!');
+      }
+    }
+
     throw new Error('Failed to get AI essay answer');
   }
 

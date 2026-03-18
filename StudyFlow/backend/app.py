@@ -170,6 +170,67 @@ def create_token(user_id: int, email: str) -> str:
     }
     return jwt.encode(payload, JWT_SECRET, algorithm='HS256')
 
+def check_question_limit(user_id):
+    """Check if user has exceeded their daily question limit. Returns (can_proceed, remaining_questions)"""
+    try:
+        conn = psycopg2.connect(os.environ["DATABASE_URL"])
+        cur = conn.cursor()
+
+        # Check user's subscription status
+        cur.execute("SELECT subscription_status FROM users WHERE id = %s", (user_id,))
+        user = cur.fetchone()
+        if not user:
+            conn.close()
+            return False, 0
+
+        subscription_status = user[0]
+
+        # Pro/trialing users have unlimited questions
+        if subscription_status in ['active', 'trialing']:
+            conn.close()
+            return True, -1  # -1 means unlimited
+
+        # Free users have 10 questions per day limit
+        today = datetime.utcnow().date()
+
+        # Get or create today's usage record
+        cur.execute("""
+            INSERT INTO question_usage (user_id, question_date, question_count)
+            VALUES (%s, %s, 0)
+            ON CONFLICT (user_id, question_date) DO NOTHING
+        """, (user_id, today))
+
+        cur.execute("""
+            SELECT question_count FROM question_usage
+            WHERE user_id = %s AND question_date = %s
+        """, (user_id, today))
+
+        result = cur.fetchone()
+        current_count = result[0] if result else 0
+
+        FREE_LIMIT = 10
+        remaining = FREE_LIMIT - current_count
+
+        if current_count >= FREE_LIMIT:
+            conn.close()
+            return False, 0
+
+        # Increment count
+        cur.execute("""
+            UPDATE question_usage
+            SET question_count = question_count + 1
+            WHERE user_id = %s AND question_date = %s
+        """, (user_id, today))
+
+        conn.commit()
+        conn.close()
+
+        return True, remaining - 1
+
+    except Exception as e:
+        app.logger.error(f"Error checking question limit: {e}")
+        return True, -1  # Allow on error to not block users
+
 def token_required(f):
     """Decorator to protect routes with JWT authentication"""
     @wraps(f)
@@ -211,6 +272,18 @@ def init_users_table():
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
+
+        # Create question usage tracking table
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS question_usage (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                question_date DATE NOT NULL DEFAULT CURRENT_DATE,
+                question_count INTEGER DEFAULT 0,
+                UNIQUE(user_id, question_date)
+            );
+        """)
+
         conn.commit()
         print("✅ Table creation/check complete")
 
@@ -519,8 +592,21 @@ def create_portal_session():
 
 
 @app.route("/api/process", methods=["POST"])
+@token_required
 def process_data():
     try:
+        # Check rate limit for free users
+        can_proceed, remaining = check_question_limit(request.user_id)
+        if not can_proceed:
+            debug_log(f"❌ Rate limit exceeded for user {request.user_id}")
+            return jsonify({
+                "error": "Daily question limit exceeded",
+                "message": "Free users are limited to 10 questions per day. Upgrade to Pro for unlimited questions!",
+                "limit_exceeded": True
+            }), 429
+
+        debug_log(f"✅ Rate limit check passed. Remaining questions: {remaining if remaining >= 0 else 'unlimited'}")
+
         ocr_json = request.get_json()
         if not ocr_json:
             debug_log("❌ No JSON provided")
@@ -1426,6 +1512,7 @@ def admin_home_message():
 
 # ============ TEXT-ONLY ANSWER ENDPOINT (CHEAP) ============
 @app.route("/api/answer", methods=["POST"])
+@token_required
 def answer_question():
     """
     Answer a quiz question using text only (no image). Uses OpenAI API.
@@ -1446,6 +1533,18 @@ def answer_question():
     }
     """
     try:
+        # Check rate limit for free users
+        can_proceed, remaining = check_question_limit(request.user_id)
+        if not can_proceed:
+            debug_log(f"❌ Rate limit exceeded for user {request.user_id}")
+            return jsonify({
+                "error": "Daily question limit exceeded",
+                "message": "Free users are limited to 10 questions per day. Upgrade to Pro for unlimited questions!",
+                "limit_exceeded": True
+            }), 429
+
+        debug_log(f"✅ Rate limit check passed. Remaining questions: {remaining if remaining >= 0 else 'unlimited'}")
+
         data = request.get_json()
         if not data:
             return jsonify({"error": "No JSON provided"}), 400
@@ -1530,6 +1629,7 @@ Return ONLY valid JSON, no markdown, no other text."""
 
 # ============ ESSAY ANSWER ENDPOINT ============
 @app.route("/api/essay", methods=["POST"])
+@token_required
 def essay_answer():
     """
     Generate an essay answer for a short-answer or essay question.
@@ -1545,6 +1645,18 @@ def essay_answer():
     }
     """
     try:
+        # Check rate limit for free users
+        can_proceed, remaining = check_question_limit(request.user_id)
+        if not can_proceed:
+            debug_log(f"❌ Rate limit exceeded for user {request.user_id}")
+            return jsonify({
+                "error": "Daily question limit exceeded",
+                "message": "Free users are limited to 10 questions per day. Upgrade to Pro for unlimited questions!",
+                "limit_exceeded": True
+            }), 429
+
+        debug_log(f"✅ Rate limit check passed. Remaining questions: {remaining if remaining >= 0 else 'unlimited'}")
+
         data = request.get_json()
         if not data:
             return jsonify({"error": "No JSON provided"}), 400

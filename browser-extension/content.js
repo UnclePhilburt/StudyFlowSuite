@@ -513,6 +513,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 
     return true; // Keep channel open for async response
+  } else if (request.action === 'showAlert') {
+    // Show alert message to user
+    alert(request.message);
+    sendResponse({ success: true });
   }
 });
 
