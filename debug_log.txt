@@ -22875,3 +22875,505 @@ Based on the above, which answer option is correct? Return only the number corre
 [13:44:53] Extracted Cohere response: type='text' text='1'
 [13:44:53] Triple API answers: OpenAI -> 1, Claude -> 1, Cohere -> 1
 [13:44:53] Majority vote selected answer: 1
+[17:10:26] StudyFlow starting up...
+[17:12:31] StudyFlow starting up...
+[17:14:12] StudyFlow starting up...
+[17:14:43] StudyFlow starting up...
+[17:14:53] 🚀 Starting Vision Mode quiz processing...
+[17:14:53] 
+==================================================
+[17:14:53] 📝 Processing question #1
+[17:14:53] ==================================================
+[17:14:53] 🔄 Using HYBRID mode (smart/cheap)...
+[17:14:53] HYBRID: Capturing screen...
+[17:14:53] IMAGE: Downscaled from 3440x1440 to 1280x535
+[17:14:53] HYBRID: Scale factors: x=2.69, y=2.69
+[17:14:53] HYBRID: Running local OCR...
+[17:14:53] QUIZ DETECT: question=False, options=None, button=False -> False
+[17:14:53] HYBRID: No quiz interface detected
+[17:14:53] ❌ Vision processing failed: No quiz interface detected
+[17:14:53] 
+==================================================
+[17:14:53] 📊 Quiz session complete! Answered 0 questions.
+[17:14:53] ⚠️ Errors: ['Vision error: No quiz interface detected']
+[17:14:53] ==================================================
+
+[17:15:29] Launching GUI...
+[17:18:00] StudyFlow starting up...
+[17:18:11] 🚀 Starting Vision Mode quiz processing...
+[17:18:11] 
+==================================================
+[17:18:11] 📝 Processing question #1
+[17:18:11] ==================================================
+[17:18:11] 🔄 Using HYBRID mode (smart/cheap)...
+[17:18:11] HYBRID: Capturing screen...
+[17:18:11] IMAGE: Downscaled from 3440x1440 to 1280x535
+[17:18:11] HYBRID: Scale factors: x=2.69, y=2.69
+[17:18:11] HYBRID: Running local OCR...
+[17:18:11] QUIZ DETECT: question=False, options=<re.Match object; span=(67, 69), match='2.'>, button=False -> <re.Match object; span=(67, 69), match='2.'>
+[17:18:11] LOCAL PARSE: Failed (q=True, answers=0)
+[17:18:11] HYBRID: Local parsing failed or text API failed, using Vision...
+[17:18:11] VISION API: Falling back to Vision (expensive)...
+[17:18:16] VISION API: Success! Answer = 3
+[17:18:16] 👁️ Method: VISION_API
+[17:18:16] 📋 Question: Pumping breast milk in the workplace is protected by:...
+[17:18:16] 🎯 Correct answer #3: One Federal law and many state laws....
+[17:18:16] 💭 Reasoning: The correct answer is based on common knowledge about workplace protections for breastfeeding, which often involve a combination of federal and state laws.
+[17:18:16] 🔒 Confidence: medium
+[17:18:16] ⚠️ Could not find answer coordinates on screen
+[17:18:16] 
+==================================================
+[17:18:16] 📊 Quiz session complete! Answered 0 questions.
+[17:18:16] ⚠️ Errors: ['Could not locate answer text on screen']
+[17:18:16] ==================================================
+
+[17:19:54] StudyFlow starting up...
+[17:20:04] 🚀 Starting Vision Mode quiz processing...
+[17:20:04] 
+==================================================
+[17:20:04] 📝 Processing question #1
+[17:20:04] ==================================================
+[17:20:04] 🔄 Using HYBRID mode (smart/cheap)...
+[17:20:04] HYBRID: Capturing screen...
+[17:20:04] IMAGE: Downscaled from 3440x1440 to 1280x535
+[17:20:04] HYBRID: Scale factors: x=2.69, y=2.69
+[17:20:04] HYBRID: Running local OCR...
+[17:20:04] OCR: Extracted 19 words with confidence >= 30
+[17:20:04] OCR: Full text preview (first 200 chars): Practice Quiz Maternal Newborn Nursing Certification Practice Test 2. Pumping breast kin the workplace a a ee oe an
+[17:20:04] HYBRID: OCR successful - extracted 115 characters
+[17:20:04] QUIZ DETECT: Analyzing text (length=115)
+[17:20:04] QUIZ DETECT: Text preview: 'Practice Quiz Maternal Newborn Nursing Certification Practice Test 2. Pumping breast kin the workplace a a ee oe an'
+[17:20:04] QUIZ DETECT: Found 0 keywords: []
+[17:20:04] QUIZ DETECT: Found number pattern: 2.
+[17:20:04] QUIZ DETECT: question=False, options=<re.Match object; span=(67, 69), match='2.'>, button=False -> <re.Match object; span=(67, 69), match='2.'>
+[17:20:04] LOCAL PARSE: Failed (q=True, answers=0)
+[17:20:04] HYBRID: Local parsing failed or text API failed, using Vision...
+[17:20:04] VISION API: Falling back to Vision (expensive)...
+[17:20:11] VISION API: Success! Answer = 3
+[17:20:11] 👁️ Method: VISION_API
+[17:20:11] 📋 Question: Pumping breast milk in the workplace is protected by:...
+[17:20:11] 🎯 Correct answer #3: C. One Federal law and many state laws....
+[17:20:11] 💭 Reasoning: The correct answer is based on the common understanding that there is federal protection for breastfeeding, such as the Break Time for Nursing Mothers law, along with various state laws.
+[17:20:11] 🔒 Confidence: medium
+[17:20:11] ⚠️ Could not find answer coordinates on screen
+[17:20:11] 
+==================================================
+[17:20:11] 📊 Quiz session complete! Answered 0 questions.
+[17:20:11] ⚠️ Errors: ['Could not locate answer text on screen']
+[17:20:11] ==================================================
+
+[17:21:34] StudyFlow starting up...
+[17:21:43] 🚀 Starting Vision Mode quiz processing...
+[17:21:43] 
+==================================================
+[17:21:43] 📝 Processing question #1
+[17:21:43] ==================================================
+[17:21:43] 🔄 Using HYBRID mode (smart/cheap)...
+[17:21:43] HYBRID: Capturing screen...
+[17:21:43] IMAGE: Downscaled from 3440x1440 to 2560x1071
+[17:21:43] HYBRID: Scale factors: x=1.34, y=1.34
+[17:21:43] HYBRID: Running local OCR...
+[17:21:44] OCR: Extracted 82 words with confidence >= 30
+[17:21:44] OCR: Full text preview (first 200 chars): ° © Practice Quiz Resources Practice Tests Flashcards About us FAQs Login Home / Maternal Newborn Nursing Certification Practice Test / Test Mode / Questions Maternal Newborn Nursing Certification Pra
+[17:21:44] HYBRID: OCR successful - extracted 465 characters
+[17:21:44] QUIZ DETECT: Analyzing text (length=465)
+[17:21:44] QUIZ DETECT: Text preview: '° © Practice Quiz Resources Practice Tests Flashcards About us FAQs Login Home / Maternal Newborn Nursing Certification Practice Test / Test Mode / Questions Maternal Newborn Nursing Certification Practice Test Time Left - 02:37:06 Finish now 2. Pumping breast milk in the workplace is protected by: '
+[17:21:44] QUIZ DETECT: Found 0 keywords: []
+[17:21:44] QUIZ DETECT: Found letter pattern: A.
+[17:21:44] QUIZ DETECT: Found number pattern: 2.
+[17:21:44] QUIZ DETECT: Found button keywords: ['finish']
+[17:21:44] QUIZ DETECT: question=False, options=<re.Match object; span=(300, 302), match='A.'>, button=True -> <re.Match object; span=(300, 302), match='A.'>
+[17:21:44] LOCAL PARSE: Failed (q=True, answers=0)
+[17:21:44] HYBRID: Local parsing failed or text API failed, using Vision...
+[17:21:44] VISION API: Falling back to Vision (expensive)...
+[17:21:49] VISION API: Success! Answer = 3
+[17:21:49] HYBRID: Finding click coords for: 'C. One Federal law and many state laws.'
+[17:21:49] HYBRID: Re-running OCR on full-resolution screenshot for click coordinates...
+[17:21:50] OCR: Extracted 95 words with confidence >= 30
+[17:21:50] OCR: Full text preview (first 200 chars): Pa practicequiz.com, © a P ra ct I ce Q u I Z Resources Practice Tests Flashcards About us FAQs Login Home / Maternal Newborn Nursing Certification Practice Test / Test Mode / Questions . Maternal New
+[17:21:50] COORDS: Found 'C. One Federal law and many st' at (1097, 719)
+[17:21:50] HYBRID: Found answer at (1097, 719) (full resolution)
+[17:21:50] BUTTON: Found 'Finish' at (2353, 458)
+[17:21:50] HYBRID: Answer coords (original resolution): (1097, 719)
+[17:21:50] HYBRID: Button coords (original resolution): (2353, 458)
+[17:21:50] 👁️ Method: VISION_API
+[17:21:50] 📋 Question: Pumping breast milk in the workplace is protected by:...
+[17:21:50] 🎯 Correct answer #3: C. One Federal law and many state laws....
+[17:21:50] 💭 Reasoning: The correct answer is based on the fact that there are federal protections for pumping breast milk, such as the Break Time for Nursing Mothers law, and various state laws that provide additional protections.
+[17:21:50] 🔒 Confidence: high
+[17:21:50] 🖱️ Clicking answer at (1097, 719)
+[17:21:50] Moving mouse to (1097, 719) over 0.5s and clicking.
+[17:21:51] 🖱️ Clicking 'Finish' button at (2353, 458)
+[17:21:51] Moving mouse to (2353, 458) over 0.5s and clicking.
+[17:21:52] ✅ Question #1 completed!
+[17:21:52] ⏳ Waiting 7.3s for next question...
+[17:23:42] StudyFlow starting up...
+[17:23:55] 🚀 Starting Vision Mode quiz processing...
+[17:23:55] 
+==================================================
+[17:23:55] 📝 Processing question #1
+[17:23:55] ==================================================
+[17:23:55] 🔄 Using HYBRID mode (smart/cheap)...
+[17:23:55] HYBRID: Capturing screen...
+[17:23:55] IMAGE: Downscaled from 3440x1440 to 2560x1071
+[17:23:55] HYBRID: Scale factors: x=1.34, y=1.34
+[17:23:55] HYBRID: Running local OCR...
+[17:23:56] OCR: Extracted 89 words with confidence >= 30
+[17:23:56] OCR: Full text preview (first 200 chars): ° © Practice Quiz Resources Practice Tests Flashcards About us FAQs Login Home / Maternal Newborn Nursing Certification Practice Test / Test Mode / Questions Maternal Newborn Nursing Certification Pra
+[17:23:56] HYBRID: OCR successful - extracted 535 characters
+[17:23:56] QUIZ DETECT: Analyzing text (length=535)
+[17:23:56] QUIZ DETECT: Text preview: '° © Practice Quiz Resources Practice Tests Flashcards About us FAQs Login Home / Maternal Newborn Nursing Certification Practice Test / Test Mode / Questions Maternal Newborn Nursing Certification Practice Test Time Left - 02:59:28 Finish now 1. An IV solution of 10% glucose and mannitol are adminis'
+[17:23:56] QUIZ DETECT: Found 2 keywords: ['nurse', 'should']
+[17:23:56] QUIZ DETECT: Found letter pattern: A.
+[17:23:56] QUIZ DETECT: Found number pattern: 1.
+[17:23:56] QUIZ DETECT: Found button keywords: ['finish']
+[17:23:56] QUIZ DETECT: question=True, options=<re.Match object; span=(430, 432), match='A.'>, button=True -> True
+[17:23:56] LOCAL PARSE: Failed (q=True, answers=0)
+[17:23:56] HYBRID: Local parsing failed or text API failed, using Vision...
+[17:23:56] VISION API: Falling back to Vision (expensive)...
+[17:24:00] VISION API: Success! Answer = 2
+[17:24:00] HYBRID: Finding click coords for: 'fluid volume excess'
+[17:24:00] HYBRID: Re-running OCR on full-resolution screenshot for click coordinates...
+[17:24:01] OCR: Extracted 110 words with confidence >= 30
+[17:24:01] OCR: Full text preview (first 200 chars): Pa practicequiz.com, © a P ra ct I Cc e Q u I Z Resources Practice Tests Flashcards About us FAQs Login Home / Maternal Newborn Nursing Certification Practice Test / Test Mode / Questions . Maternal N
+[17:24:01] COORDS: Found 'fluid volume excess' at (1128, 709)
+[17:24:01] HYBRID: Found answer at (1128, 709) (full resolution)
+[17:24:01] BUTTON: Found candidate 'Finish' (keyword: finish) at (2353, 458), priority=2
+[17:24:01] BUTTON: Selected 'Finish' at (2353, 458)
+[17:24:01] HYBRID: Answer coords (original resolution): (1128, 709)
+[17:24:01] HYBRID: Button coords (original resolution): (2353, 458)
+[17:24:01] 👁️ Method: VISION_API
+[17:24:01] 📋 Question: An IV solution of 10% glucose and mannitol are administered to an infant with Re...
+[17:24:01] 🎯 Correct answer #2: fluid volume excess...
+[17:24:01] 💭 Reasoning: Mannitol can cause fluid volume excess due to its osmotic diuretic effect, requiring monitoring of vital signs.
+[17:24:01] 🔒 Confidence: high
+[17:24:01] 🖱️ Clicking answer at (1128, 709)
+[17:24:01] Moving mouse to (1128, 709) over 0.5s and clicking.
+[17:24:02] 🖱️ Clicking 'Finish' button at (2353, 458)
+[17:24:02] Moving mouse to (2353, 458) over 0.5s and clicking.
+[17:24:03] ✅ Question #1 completed!
+[17:24:03] ⏳ Waiting 9.2s for next question...
+[17:24:12] 
+==================================================
+[17:24:12] 📝 Processing question #2
+[17:24:12] ==================================================
+[17:24:12] 🔄 Using HYBRID mode (smart/cheap)...
+[17:24:12] HYBRID: Capturing screen...
+[17:24:12] IMAGE: Downscaled from 3440x1440 to 2560x1071
+[17:24:12] HYBRID: Scale factors: x=1.34, y=1.34
+[17:24:12] IMAGE: Similar to previous (diff=0)
+[17:24:12] HYBRID: Screen unchanged (after success), skipping...
+[17:24:12] ⏭️ Screen unchanged, waiting...
+[17:24:13] 
+==================================================
+[17:24:13] 📝 Processing question #2
+[17:24:13] ==================================================
+[17:24:13] 🔄 Using HYBRID mode (smart/cheap)...
+[17:24:13] HYBRID: Capturing screen...
+[17:24:13] IMAGE: Downscaled from 3440x1440 to 2560x1071
+[17:24:13] HYBRID: Scale factors: x=1.34, y=1.34
+[17:24:13] IMAGE: Similar to previous (diff=0)
+[17:24:13] HYBRID: Screen unchanged (after success), skipping...
+[17:24:13] ⏭️ Screen unchanged, waiting...
+[17:28:34] StudyFlow starting up...
+[17:28:54] Captured button template from region: (2274, 857, 103, 49)
+[17:28:59] 🚀 Starting Vision Mode quiz processing...
+[17:28:59] 
+==================================================
+[17:28:59] 📝 Processing question #1
+[17:28:59] ==================================================
+[17:28:59] 📸 Using VISION mode (expensive)...
+[17:28:59] 🔍 Analyzing screen with Vision API...
+[17:28:59] 📡 Using server: https://studyflowsuite.onrender.com/api/vision
+[17:29:04] ✅ Parsed: Q='A nurse is assessing a newborn infant who was born...' Answer=3
+[17:29:04] 🔎 Looking for answer text: 'Lethargy...'
+[17:29:04] 🔧 Starting image preprocessing.
+[17:29:04] ✅ Processed image saved to debug\processed_1773786544.png
+[17:29:04] 📍 Found 'lethargy' at (1147, 756)
+[17:29:04] 🔎 Looking for button using captured template...
+[17:29:04] ✅ Found button via template matching at (2325, 881) (confidence: 1.00)
+[17:29:04] 👁️ Method: VISION_API
+[17:29:04] 📋 Question: A nurse is assessing a newborn infant who was born to a mother who is addicted t...
+[17:29:04] 🎯 Correct answer #3: Lethargy...
+[17:29:04] 💭 Reasoning: Newborns exposed to drugs in utero often exhibit symptoms such as irritability, difficulty in consoling, and incessant crying. Lethargy is less commonly associated with drug withdrawal in newborns.
+[17:29:04] 🔒 Confidence: high
+[17:29:04] 🖱️ Clicking answer at (1147, 756)
+[17:29:04] Moving mouse to (1147, 756) over 0.5s and clicking.
+[17:29:06] 🖱️ Clicking 'Submit' button at (2325, 881)
+[17:29:06] Moving mouse to (2325, 881) over 0.5s and clicking.
+[17:29:06] ✅ Question #1 completed!
+[17:29:06] ⏳ Waiting 10.0s for next question...
+[17:29:16] 
+==================================================
+[17:29:16] 📝 Processing question #2
+[17:29:16] ==================================================
+[17:29:16] 📸 Using VISION mode (expensive)...
+[17:29:16] 🔍 Analyzing screen with Vision API...
+[17:29:16] 📡 Using server: https://studyflowsuite.onrender.com/api/vision
+[17:29:22] ✅ Parsed: Q='The nurse assesses a female newborn. The assessmen...' Answer=2
+[17:29:22] 🔎 Looking for answer text: 'Between 37 and 40 weeks...'
+[17:29:22] 🔧 Starting image preprocessing.
+[17:29:22] ✅ Processed image saved to debug\processed_1773786562.png
+[17:29:22] 📍 Found 'between and weeks' at (1146, 699)
+[17:29:22] 🔎 Looking for button using captured template...
+[17:29:23] ✅ Found button via template matching at (2325, 916) (confidence: 1.00)
+[17:29:23] 👁️ Method: VISION_API
+[17:29:23] 📋 Question: The nurse assesses a female newborn. The assessment reveals an unusually small a...
+[17:29:23] 🎯 Correct answer #2: Between 37 and 40 weeks...
+[17:29:23] 💭 Reasoning: The description of the newborn's clinical appearance, such as long fingernails and dry, peeling skin, is consistent with a full-term baby, which is typically between 37 and 40 weeks of gestation.
+[17:29:23] 🔒 Confidence: medium
+[17:29:23] 🖱️ Clicking answer at (1146, 699)
+[17:29:23] Moving mouse to (1146, 699) over 0.5s and clicking.
+[17:29:24] 🖱️ Clicking 'Submit' button at (2325, 916)
+[17:29:24] Moving mouse to (2325, 916) over 0.5s and clicking.
+[17:29:25] ✅ Question #2 completed!
+[17:29:25] ⏳ Waiting 7.7s for next question...
+[17:29:33] 
+==================================================
+[17:29:33] 📝 Processing question #3
+[17:29:33] ==================================================
+[17:29:33] 📸 Using VISION mode (expensive)...
+[17:29:33] 🔍 Analyzing screen with Vision API...
+[17:29:33] 📡 Using server: https://studyflowsuite.onrender.com/api/vision
+[17:29:37] ✅ Parsed: Q='Anatomically, it is expected that an infant should...' Answer=3
+[17:29:37] 🔎 Looking for answer text: '14 to 18 cm...'
+[17:29:37] 🔧 Starting image preprocessing.
+[17:29:37] ✅ Processed image saved to debug\processed_1773786577.png
+[17:29:37] ⚠️ Could not find '14 to 18 cm...' on screen
+[17:29:37] 🔎 Looking for button using captured template...
+[17:29:38] ✅ Found button via template matching at (2325, 846) (confidence: 1.00)
+[17:29:38] 👁️ Method: VISION_API
+[17:29:38] 📋 Question: Anatomically, it is expected that an infant should grow how many cm in length by...
+[17:29:38] 🎯 Correct answer #3: 14 to 18 cm...
+[17:29:38] 💭 Reasoning: Infants typically grow about 14 to 18 cm in length by 6 months of age.
+[17:29:38] 🔒 Confidence: high
+[17:29:38] ⚠️ Could not find answer coordinates on screen
+[17:29:38] 
+==================================================
+[17:29:38] 📊 Quiz session complete! Answered 2 questions.
+[17:29:38] ⚠️ Errors: ['Could not locate answer text on screen']
+[17:29:38] ==================================================
+
+[17:31:40] StudyFlow starting up...
+[17:31:52] Captured button template from region: (2275, 822, 101, 45)
+[17:31:57] 📺 Showing assistant overlay...
+[17:31:57] ✅ Overlay created: <StudyFlow.frontend.assistant_overlay.AssistantOverlay(0x1fc1f1f10e0) at 0x000001FC20CF00C0>
+[17:31:57] 🚀 Starting Vision Mode quiz processing...
+[17:31:57] 📺 Got overlay state: <StudyFlow.frontend.assistant_overlay.OverlayState(0x1fc1a485f80) at 0x000001FC20CF0F40>
+[17:31:57] 📺 Overlay set to idle
+[17:31:57] 
+==================================================
+[17:31:57] 📝 Processing question #1
+[17:31:57] ==================================================
+[17:31:57] 📸 Using VISION mode (expensive)...
+[17:31:57] 🔍 Analyzing screen with Vision API...
+[17:31:57] 📡 Using server: https://studyflowsuite.onrender.com/api/vision
+[17:32:01] ✅ Parsed: Q='Anatomically, it is expected that an infant should...' Answer=3
+[17:32:01] 🔎 Looking for answer text: '14 to 18 cm...'
+[17:32:01] 🔧 Starting image preprocessing.
+[17:32:01] ✅ Processed image saved to debug\processed_1773786721.png
+[17:32:02] ⚠️ Could not find '14 to 18 cm...' on screen
+[17:32:02] 🔎 Trying to find answer by option letter: 'C.'
+[17:32:02] 🔧 Starting image preprocessing.
+[17:32:02] ✅ Processed image saved to debug\processed_1773786722.png
+[17:32:02] ⚠️ Could not find 'C....' on screen
+[17:32:02] 🔎 Trying to find answer by number: '3.'
+[17:32:02] 🔧 Starting image preprocessing.
+[17:32:02] ✅ Processed image saved to debug\processed_1773786722.png
+[17:32:03] ⚠️ Could not find '3....' on screen
+[17:32:03] 🔎 Looking for button using captured template...
+[17:32:03] ✅ Found button via template matching at (2325, 844) (confidence: 1.00)
+[17:32:03] 👁️ Method: VISION_API
+[17:32:03] 📋 Question: Anatomically, it is expected that an infant should grow how many cm in length by...
+[17:32:03] 🎯 Correct answer #3: 14 to 18 cm...
+[17:32:03] 💭 Reasoning: Based on typical infant growth patterns, infants usually grow about 14 to 18 cm in the first 6 months.
+[17:32:03] 🔒 Confidence: medium
+[17:32:03] ⚠️ Could not find answer coordinates on screen
+[17:32:03] 
+==================================================
+[17:32:03] 📊 Quiz session complete! Answered 0 questions.
+[17:32:03] ⚠️ Errors: ['Could not locate answer text on screen']
+[17:32:03] ==================================================
+
+[17:33:22] StudyFlow starting up...
+[17:33:34] Captured button template from region: (2277, 822, 98, 46)
+[17:33:38] 📺 Showing assistant overlay...
+[17:33:38] ✅ Overlay created: <StudyFlow.frontend.assistant_overlay.AssistantOverlay(0x2832332e380) at 0x000002831FD1B900>
+[17:33:38] 🚀 Starting Vision Mode quiz processing...
+[17:33:38] 📺 Got overlay state: <StudyFlow.frontend.assistant_overlay.OverlayState(0x2832357ff00) at 0x0000028324DC1040>
+[17:33:38] 📺 Overlay set to idle
+[17:33:38] 
+==================================================
+[17:33:38] 📝 Processing question #1
+[17:33:38] ==================================================
+[17:33:38] 📸 Using VISION mode (expensive)...
+[17:33:38] 🔍 Analyzing screen with Vision API...
+[17:33:38] 📡 Using server: https://studyflowsuite.onrender.com/api/vision
+[17:33:43] ✅ Parsed: Q='Anatomically, it is expected that an infant should...' Answer=3
+[17:33:43] 🔎 Looking for answer text: '14 to 18 cm...'
+[17:33:43] 🔧 Starting image preprocessing.
+[17:33:43] ✅ Processed image saved to debug\processed_1773786823.png
+[17:33:43] ⚠️ Could not find '14 to 18 cm...' on screen
+[17:33:43] 🔎 Trying to find answer by option letter: 'C.'
+[17:33:43] 🔧 Starting image preprocessing.
+[17:33:43] ✅ Processed image saved to debug\processed_1773786823.png
+[17:33:44] ⚠️ Could not find 'C....' on screen
+[17:33:44] 🔎 Trying to find answer by number: '3.'
+[17:33:44] 🔧 Starting image preprocessing.
+[17:33:44] ✅ Processed image saved to debug\processed_1773786824.png
+[17:33:44] ⚠️ Could not find '3....' on screen
+[17:33:44] 🔎 Using visual detection for answer #3
+[17:33:44] ✅ Found answer via visual detection (radio button) at (1012, 138)
+[17:33:44] 🔎 Looking for button using captured template...
+[17:33:45] ✅ Found button via template matching at (2326, 845) (confidence: 1.00)
+[17:33:45] 👁️ Method: VISION_API
+[17:33:45] 📋 Question: Anatomically, it is expected that an infant should grow how many cm in length by...
+[17:33:45] 🎯 Correct answer #3: 14 to 18 cm...
+[17:33:45] 💭 Reasoning: Based on typical infant growth patterns, infants usually grow about 14 to 18 cm in the first 6 months.
+[17:33:45] 🔒 Confidence: medium
+[17:33:45] 🖱️ Clicking answer at (1012, 138)
+[17:33:45] Moving mouse to (1012, 138) over 0.5s and clicking.
+[17:33:46] 🖱️ Clicking 'Submit' button at (2326, 845)
+[17:33:46] Moving mouse to (2326, 845) over 0.5s and clicking.
+[17:33:47] ✅ Question #1 completed!
+[17:33:47] ⏳ Waiting 7.9s for next question...
+[17:33:55] 
+==================================================
+[17:33:55] 📝 Processing question #2
+[17:33:55] ==================================================
+[17:33:55] 📸 Using VISION mode (expensive)...
+[17:33:55] 🔍 Analyzing screen with Vision API...
+[17:33:55] 📡 Using server: https://studyflowsuite.onrender.com/api/vision
+[17:33:59] ✅ Parsed: Q='Anatomically, it is expected that an infant should...' Answer=3
+[17:33:59] 🔎 Looking for answer text: '14 to 18 cm...'
+[17:33:59] 🔧 Starting image preprocessing.
+[17:33:59] ✅ Processed image saved to debug\processed_1773786839.png
+[17:33:59] ⚠️ Could not find '14 to 18 cm...' on screen
+[17:33:59] 🔎 Trying to find answer by option letter: 'C.'
+[17:33:59] 🔧 Starting image preprocessing.
+[17:33:59] ✅ Processed image saved to debug\processed_1773786839.png
+[17:33:59] ⚠️ Could not find 'C....' on screen
+[17:33:59] 🔎 Trying to find answer by number: '3.'
+[17:33:59] 🔧 Starting image preprocessing.
+[17:33:59] ✅ Processed image saved to debug\processed_1773786839.png
+[17:34:00] ⚠️ Could not find '3....' on screen
+[17:34:00] 🔎 Using visual detection for answer #3
+[17:34:00] ✅ Found answer via visual detection (radio button) at (1012, 138)
+[17:34:00] 🔎 Looking for button using captured template...
+[17:34:00] ✅ Found button via template matching at (2326, 845) (confidence: 1.00)
+[17:34:00] 👁️ Method: VISION_API
+[17:34:00] 📋 Question: Anatomically, it is expected that an infant should grow how many cm in length by...
+[17:34:00] 🎯 Correct answer #3: 14 to 18 cm...
+[17:34:00] 💭 Reasoning: The typical growth in length for an infant by 6 months is approximately 14 to 18 cm.
+[17:34:00] 🔒 Confidence: high
+[17:34:00] 🖱️ Clicking answer at (1012, 138)
+[17:34:00] Moving mouse to (1012, 138) over 0.5s and clicking.
+[17:34:02] 🖱️ Clicking 'Submit' button at (2326, 845)
+[17:34:02] Moving mouse to (2326, 845) over 0.5s and clicking.
+[17:34:02] ✅ Question #2 completed!
+[17:34:02] ⏳ Waiting 8.3s for next question...
+[17:37:03] StudyFlow starting up...
+[17:37:14] Captured button template from region: (2274, 823, 102, 44)
+[17:37:18] 📺 Showing assistant overlay...
+[17:37:18] ✅ Overlay created: <StudyFlow.frontend.assistant_overlay.AssistantOverlay(0x26250d95560) at 0x00000262524CDBC0>
+[17:37:18] 🚀 Starting Vision Mode quiz processing...
+[17:37:18] 📺 Got overlay state: <StudyFlow.frontend.assistant_overlay.OverlayState(0x262587c7970) at 0x00000262565ACE40>
+[17:37:18] 📺 Overlay set to idle
+[17:37:18] 
+==================================================
+[17:37:18] 📝 Processing question #1
+[17:37:18] ==================================================
+[17:37:18] 📸 Using VISION mode (expensive)...
+[17:37:18] 🔍 Analyzing screen with Vision API...
+[17:37:18] 📡 Using server: https://studyflowsuite.onrender.com/api/vision
+[17:37:23] ✅ Parsed: Q='Anatomically, it is expected that an infant should...' Answer=3
+[17:37:23] 🔎 Vision API didn't provide coordinates, falling back to OCR...
+[17:37:23] 🔎 Looking for answer text: '14 to 18 cm...'
+[17:37:23] 🔧 Starting image preprocessing.
+[17:37:23] ✅ Processed image saved to debug\processed_1773787043.png
+[17:37:23] ⚠️ Could not find '14 to 18 cm...' on screen
+[17:37:23] 🔎 Trying to find answer by option letter: 'C.'
+[17:37:23] 🔧 Starting image preprocessing.
+[17:37:23] ✅ Processed image saved to debug\processed_1773787043.png
+[17:37:24] ⚠️ Could not find 'C....' on screen
+[17:37:24] 🔎 Trying to find answer by number: '3.'
+[17:37:24] 🔧 Starting image preprocessing.
+[17:37:24] ✅ Processed image saved to debug\processed_1773787044.png
+[17:37:24] ⚠️ Could not find '3....' on screen
+[17:37:24] 🔎 Vision API didn't provide button coordinates, using template matching...
+[17:37:24] ✅ Found button via template matching at (2325, 845) (confidence: 1.00)
+[17:37:24] 👁️ Method: VISION_API
+[17:37:24] 📋 Question: Anatomically, it is expected that an infant should grow how many cm in length by...
+[17:37:24] 🎯 Correct answer #3: 14 to 18 cm...
+[17:37:24] 💭 Reasoning: The typical growth for an infant by 6 months is approximately 14 to 18 cm.
+[17:37:24] 🔒 Confidence: high
+[17:37:24] ⚠️ Could not find answer coordinates on screen
+[17:37:24] 
+==================================================
+[17:37:24] 📊 Quiz session complete! Answered 0 questions.
+[17:37:24] ⚠️ Errors: ['Could not locate answer text on screen']
+[17:37:24] ==================================================
+
+[17:45:35] StudyFlow starting up...
+[17:45:47] Captured button template from region: (2273, 821, 104, 49)
+[17:45:51] 📺 Showing assistant overlay...
+[17:45:51] ✅ Overlay created: <StudyFlow.frontend.assistant_overlay.AssistantOverlay(0x1f5296a4920) at 0x000001F52B2EC1C0>
+[17:45:51] 🚀 Starting Vision Mode quiz processing...
+[17:45:51] 📺 Got overlay state: <StudyFlow.frontend.assistant_overlay.OverlayState(0x1f52991af60) at 0x000001F52B2ECF40>
+[17:45:51] 📺 Overlay set to idle
+[17:45:51] 
+==================================================
+[17:45:51] 📝 Processing question #1
+[17:45:51] ==================================================
+[17:45:51] 📸 Using VISION mode (expensive)...
+[17:45:51] 🔍 Analyzing screen with Vision API...
+[17:45:51] 📡 Using server: https://studyflowsuite.onrender.com/api/vision
+[17:45:57] ✅ Parsed: Q='Anatomically, it is expected that an infant should...' Answer=3
+[17:45:57] ✅ Using Vision API coordinates for answer: (300, 400)
+[17:45:57] ✅ Using Vision API coordinates for button: (900, 600)
+[17:45:57] 👁️ Method: VISION_API
+[17:45:57] 📋 Question: Anatomically, it is expected that an infant should grow how many cm in length by...
+[17:45:57] 🎯 Correct answer #3: 14 to 18 cm...
+[17:45:57] 💭 Reasoning: The typical growth for an infant by 6 months is approximately 14 to 18 cm.
+[17:45:57] 🔒 Confidence: high
+[17:45:57] 🖱️ Clicking answer at (300, 400)
+[17:45:57] Moving mouse to (300, 400) over 0.5s and clicking.
+[17:45:59] 🖱️ Clicking 'Submit' button at (900, 600)
+[17:45:59] Moving mouse to (900, 600) over 0.5s and clicking.
+[17:45:59] ✅ Question #1 completed!
+[17:45:59] ⏳ Waiting 10.0s for next question...
+[18:01:44] StudyFlow starting up...
+[18:01:44] 🌐 Starting extension bridge server on http://localhost:5555
+[18:01:44] 📡 Extension can now connect and send quiz data
+[18:01:44] ✅ Extension bridge server started on port 5555
+[18:02:02] Captured button template from region: (2273, 857, 105, 45)
+[18:02:07] 📺 Showing assistant overlay...
+[18:02:07] ✅ Overlay created: <StudyFlow.frontend.assistant_overlay.AssistantOverlay(0x1ad5a46abd0) at 0x000001AD5EBF7D00>
+[18:02:07] 🚀 Starting Vision Mode quiz processing...
+[18:02:07] 📺 Got overlay state: <StudyFlow.frontend.assistant_overlay.OverlayState(0x1ad5a4294f0) at 0x000001AD59949E00>
+[18:02:07] 📺 Overlay set to idle
+[18:02:07] 
+==================================================
+[18:02:07] 📝 Processing question #1
+[18:02:07] ==================================================
+[18:02:07] 📸 Using VISION mode (expensive)...
+[18:02:07] 🔍 Analyzing screen with Vision API...
+[18:02:07] 📡 Using server: https://studyflowsuite.onrender.com/api/vision
+[18:02:11] ✅ Parsed: Q='A nurse preparing a plan of care for a newborn inf...' Answer=1
+[18:02:11] ✅ Using Vision API coordinates for answer: (300, 400)
+[18:02:11] ✅ Using Vision API coordinates for button: (900, 600)
+[18:02:11] 👁️ Method: VISION_API
+[18:02:11] 📋 Question: A nurse preparing a plan of care for a newborn infant with fetal alcohol syndrom...
+[18:02:11] 🎯 Correct answer #1: Monitor the newborn infant’s response to feedings ...
+[18:02:11] 💭 Reasoning: Monitoring the infant’s response to feedings and weight gain is crucial for assessing health and development in newborns with FAS.
+[18:02:11] 🔒 Confidence: high
+[18:02:11] 🖱️ Clicking answer at (300, 400)
+[18:02:11] Moving mouse to (300, 400) over 0.5s and clicking.
+[18:02:13] 🖱️ Clicking 'Submit' button at (900, 600)
+[18:02:13] Moving mouse to (900, 600) over 0.5s and clicking.
+[18:02:13] ✅ Question #1 completed!
+[18:02:13] ⏳ Waiting 7.8s for next question...
+[18:03:54] StudyFlow starting up...
+[18:03:54] 🌐 Starting extension bridge server on http://localhost:5555
+[18:03:54] 📡 Extension can now connect and send quiz data
+[18:03:54] ✅ Extension bridge server started on port 5555

@@ -43,10 +43,22 @@ StudyFlow Suite/
 │   ├── config.py                 # API keys, Tesseract path
 │   └── logging_utils.py          # Debug logging
 │
+├── browser-extension/            # Chrome extension (runs in browser)
+│   ├── manifest.json             # Extension config
+│   ├── popup.html/js             # Extension popup UI
+│   ├── background.js             # Service worker
+│   ├── content.js                # Page content script
+│   └── element-picker.js         # Element selection tool
+│
 ├── .env                          # Environment variables (local)
 ├── requirements.txt              # Python dependencies
 └── Dockerfile                    # Production deployment
 ```
+
+**Website (Marketing/Demo Site):**
+- Location: `C:\Users\CodyW\OneDrive\Documents\studyflowsuitewebsite`
+- Contains: Landing page, demo quizzes, documentation
+- Demo page has 3 tutorial quizzes + Canvas LMS example
 
 ---
 
@@ -153,6 +165,34 @@ Required for backend (already on Render):
 - `REDIS_URL`
 
 API keys are hardcoded in `config.py` (works for frontend).
+
+---
+
+## GitHub Push Rules ⚠️
+
+**CRITICAL: Every push to GitHub triggers automatic Render deployment!**
+
+### When to Push:
+- ✅ **Backend changes ONLY** (StudyFlow/backend/)
+  - Changes to app.py, ai_clients/, tasks.py, etc.
+  - ALWAYS ask user first: "This is a backend change. Should I push to GitHub to deploy on Render?"
+
+### When NOT to Push:
+- ❌ **Browser extension changes** (browser-extension/)
+  - These run locally in the browser
+  - User just needs to reload the extension in Chrome
+  - NO GitHub push needed!
+
+- ❌ **Frontend desktop app changes** (StudyFlow/frontend/)
+  - These run locally on user's computer
+  - NO deployment needed
+  - NO GitHub push needed!
+
+### Exception:
+- User explicitly says "push to github" or "deploy to render"
+- User says "update backend" or similar
+
+**Remember: Unnecessary pushes waste 2-3 minutes of deployment time!**
 
 ---
 

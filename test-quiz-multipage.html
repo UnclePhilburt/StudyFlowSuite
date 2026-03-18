@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Multi-Page Practice Quiz</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      max-width: 800px;
+      margin: 50px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+
+    .quiz-container {
+      background: white;
+      border-radius: 12px;
+      padding: 30px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+
+    h1 {
+      color: #333;
+      margin-bottom: 10px;
+    }
+
+    .quiz-header {
+      margin-bottom: 30px;
+      padding-bottom: 20px;
+      border-bottom: 2px solid #eee;
+    }
+
+    .page {
+      display: none;
+    }
+
+    .page.active {
+      display: block;
+    }
+
+    .question {
+      margin-bottom: 40px;
+      padding: 20px;
+      background: #fafafa;
+      border-radius: 8px;
+      border-left: 4px solid #667eea;
+    }
+
+    .question-text {
+      font-size: 18px;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 20px;
+    }
+
+    .answers {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .answer-option {
+      display: flex;
+      align-items: center;
+      padding: 12px;
+      background: white;
+      border: 2px solid #e0e0e0;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .answer-option:hover {
+      border-color: #667eea;
+      background: #f8f9ff;
+    }
+
+    .answer-option input {
+      margin-right: 12px;
+    }
+
+    .answer-option label {
+      cursor: pointer;
+      flex: 1;
+    }
+
+    textarea, input[type="text"] {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #e0e0e0;
+      border-radius: 6px;
+      font-family: inherit;
+      font-size: 14px;
+      resize: vertical;
+      min-height: 100px;
+    }
+
+    input[type="text"] {
+      min-height: auto;
+      height: 40px;
+    }
+
+    textarea:focus, input[type="text"]:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    .nav-buttons {
+      display: flex;
+      gap: 12px;
+      justify-content: space-between;
+      margin-top: 30px;
+    }
+
+    .btn {
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      color: white;
+      border: none;
+      padding: 14px 32px;
+      font-size: 16px;
+      font-weight: 600;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .btn-secondary {
+      background: #6c757d;
+    }
+
+    .question-number {
+      display: inline-block;
+      background: #667eea;
+      color: white;
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 10px;
+    }
+
+    .page-indicator {
+      text-align: center;
+      color: #666;
+      font-size: 14px;
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="quiz-container">
+    <div class="quiz-header">
+      <h1>Multi-Page Practice Quiz</h1>
+      <p style="color: #666;">This quiz has multiple questions across 3 pages. Test sequential mode!</p>
+    </div>
+
+    <!-- Page 1: Questions 1-5 -->
+    <div class="page active" id="page1">
+      <div class="page-indicator">Page 1 of 3</div>
+
+      <!-- Question 1: Multiple Choice -->
+      <div class="question">
+        <div class="question-number">Question 1</div>
+        <div class="question-text">What is the capital of France?</div>
+        <div class="answers">
+          <div class="answer-option">
+            <input type="radio" id="q1a1" name="q1" value="London">
+            <label for="q1a1">London</label>
+          </div>
+          <div class="answer-option">
+            <input type="radio" id="q1a2" name="q1" value="Paris">
+            <label for="q1a2">Paris</label>
+          </div>
+          <div class="answer-option">
+            <input type="radio" id="q1a3" name="q1" value="Berlin">
+            <label for="q1a3">Berlin</label>
+          </div>
+          <div class="answer-option">
+            <input type="radio" id="q1a4" name="q1" value="Madrid">
+            <label for="q1a4">Madrid</label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Question 2: Fill in the Blank -->
+      <div class="question">
+        <div class="question-number">Question 2</div>
+        <div class="question-text">What is the chemical symbol for gold?</div>
+        <input type="text" id="q2" placeholder="Enter your answer here">
+      </div>
+
+      <!-- Question 3: Multiple Choice -->
+      <div class="question">
+        <div class="question-number">Question 3</div>
+        <div class="question-text">Which planet is known as the Red Planet?</div>
+        <div class="answers">
+          <div class="answer-option">
+            <input type="radio" id="q3a1" name="q3" value="Venus">
+            <label for="q3a1">Venus</label>
+          </div>
+          <div class="answer-option">
+            <input type="radio" id="q3a2" name="q3" value="Mars">
+            <label for="q3a2">Mars</label>
+          </div>
+          <div class="answer-option">
+            <input type="radio" id="q3a3" name="q3" value="Jupiter">
+            <label for="q3a3">Jupiter</label>
+          </div>
+          <div class="answer-option">
+            <input type="radio" id="q3a4" name="q3" value="Saturn">
+            <label for="q3a4">Saturn</label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Question 4: Fill in the Blank -->
+      <div class="question">
+        <div class="question-number">Question 4</div>
+        <div class="question-text">What year did World War II end?</div>
+        <input type="text" id="q4" placeholder="Enter year">
+      </div>
+
+      <!-- Question 5: Short Answer -->
+      <div class="question">
+        <div class="question-number">Question 5</div>
+        <div class="question-text">Briefly explain what photosynthesis is.</div>
+        <textarea id="q5" placeholder="Write your answer here (2-3 sentences)"></textarea>
+      </div>
+
+      <div class="nav-buttons">
+        <button class="btn btn-secondary" disabled>Previous</button>
+        <button class="btn" onclick="nextPage(2)">Next</button>
+      </div>
+    </div>
+
+    <!-- Page 2: Questions 6-10 -->
+    <div class="page" id="page2">
+      <div class="page-indicator">Page 2 of 3</div>
+
+      <!-- Question 6: Multiple Choice -->
+      <div class="question">
+        <div class="question-number">Question 6</div>
+        <div class="question-text">Who wrote "Romeo and Juliet"?</div>
+        <div class="answers">
+          <div class="answer-option">
+            <input type="radio" id="q6a1" name="q6" value="Charles Dickens">
+            <label for="q6a1">Charles Dickens</label>
+          </div>
+          <div class="answer-option">
+            <input type="radio" id="q6a2" name="q6" value="William Shakespeare">
+            <label for="q6a2">William Shakespeare</label>
+          </div>
+          <div class="answer-option">
+            <input type="radio" id="q6a3" name="q6" value="Mark Twain">
+            <label for="q6a3">Mark Twain</label>
+          </div>
+          <div class="answer-option">
+            <input type="radio" id="q6a4" name="q6" value="Jane Austen">
+            <label for="q6a4">Jane Austen</label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Question 7: Fill in the Blank (embedded) -->
+      <div class="question">
+        <div class="question-number">Question 7</div>
+        <div class="question-text">
+          The largest ocean on Earth is the <input type="text" id="q7" placeholder="____" style="width: 150px; display: inline-block; margin: 0 5px;"> Ocean.
+        </div>
+      </div>
+
+      <!-- Question 8: Multiple Choice -->
+      <div class="question">
+        <div class="question-number">Question 8</div>
+        <div class="question-text">What is the speed of light in a vacuum?</div>
+        <div class="answers">
+          <div class="answer-option">
+            <input type="radio" id="q8a1" name="q8" value="300,000 km/s">
+            <label for="q8a1">Approximately 300,000 km/s</label>
+          </div>
+          <div class="answer-option">
+            <input type="radio" id="q8a2" name="q8" value="150,000 km/s">
+            <label for="q8a2">Approximately 150,000 km/s</label>
+          </div>
+          <div class="answer-option">
+            <input type="radio" id="q8a3" name="q8" value="500,000 km/s">
+            <label for="q8a3">Approximately 500,000 km/s</label>
+          </div>
+          <div class="answer-option">
+            <input type="radio" id="q8a4" name="q8" value="100,000 km/s">
+            <label for="q8a4">Approximately 100,000 km/s</label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Question 9: Fill in the Blank -->
+      <div class="question">
+        <div class="question-number">Question 9</div>
+        <div class="question-text">What is the capital of Japan?</div>
+        <input type="text" id="q9" placeholder="Enter city name">
+      </div>
+
+      <!-- Question 10: Essay -->
+      <div class="question">
+        <div class="question-number">Question 10</div>
+        <div class="question-text">Discuss the main causes of the American Civil War.</div>
+        <textarea id="q10" placeholder="Write your essay here (1-2 paragraphs)" style="min-height: 150px;"></textarea>
+      </div>
+
+      <div class="nav-buttons">
+        <button class="btn btn-secondary" onclick="previousPage(1)">Previous</button>
+        <button class="btn" onclick="nextPage(3)">Next</button>
+      </div>
+    </div>
+
+    <!-- Page 3: Questions 11-12 -->
+    <div class="page" id="page3">
+      <div class="page-indicator">Page 3 of 3</div>
+
+      <!-- Question 11: Multiple Choice -->
+      <div class="question">
+        <div class="question-number">Question 11</div>
+        <div class="question-text">What is H2O commonly known as?</div>
+        <div class="answers">
+          <div class="answer-option">
+            <input type="radio" id="q11a1" name="q11" value="Oxygen">
+            <label for="q11a1">Oxygen</label>
+          </div>
+          <div class="answer-option">
+            <input type="radio" id="q11a2" name="q11" value="Water">
+            <label for="q11a2">Water</label>
+          </div>
+          <div class="answer-option">
+            <input type="radio" id="q11a3" name="q11" value="Hydrogen">
+            <label for="q11a3">Hydrogen</label>
+          </div>
+          <div class="answer-option">
+            <input type="radio" id="q11a4" name="q11" value="Carbon Dioxide">
+            <label for="q11a4">Carbon Dioxide</label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Question 12: Fill in the Blank (embedded) -->
+      <div class="question">
+        <div class="question-number">Question 12</div>
+        <div class="question-text">
+          The <input type="text" id="q12" placeholder="____" style="width: 120px; display: inline-block; margin: 0 5px;"> Amendment to the U.S. Constitution abolished slavery in 1865.
+        </div>
+      </div>
+
+      <div class="nav-buttons">
+        <button class="btn btn-secondary" onclick="previousPage(2)">Previous</button>
+        <button class="btn" onclick="submitQuiz()">Submit Quiz</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function nextPage(pageNum) {
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      document.getElementById('page' + pageNum).classList.add('active');
+      window.scrollTo(0, 0);
+    }
+
+    function previousPage(pageNum) {
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      document.getElementById('page' + pageNum).classList.add('active');
+      window.scrollTo(0, 0);
+    }
+
+    function submitQuiz() {
+      alert('Quiz submitted! Check console for answers.');
+
+      console.log('Quiz Answers:');
+      console.log('Q1:', document.querySelector('input[name="q1"]:checked')?.value || 'Not answered');
+      console.log('Q2:', document.getElementById('q2').value || 'Not answered');
+      console.log('Q3:', document.querySelector('input[name="q3"]:checked')?.value || 'Not answered');
+      console.log('Q4:', document.getElementById('q4').value || 'Not answered');
+      console.log('Q5:', document.getElementById('q5').value || 'Not answered');
+      console.log('Q6:', document.querySelector('input[name="q6"]:checked')?.value || 'Not answered');
+      console.log('Q7:', document.getElementById('q7').value || 'Not answered');
+      console.log('Q8:', document.querySelector('input[name="q8"]:checked')?.value || 'Not answered');
+      console.log('Q9:', document.getElementById('q9').value || 'Not answered');
+      console.log('Q10:', document.getElementById('q10').value || 'Not answered');
+      console.log('Q11:', document.querySelector('input[name="q11"]:checked')?.value || 'Not answered');
+      console.log('Q12:', document.getElementById('q12').value || 'Not answered');
+    }
+  </script>
+</body>
+</html>

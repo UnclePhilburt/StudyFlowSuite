@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StudyFlowSuite - Test Quizzes</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 800px;
+      width: 100%;
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      overflow: hidden;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      padding: 40px 30px;
+      text-align: center;
+      color: white;
+    }
+
+    .header h1 {
+      font-size: 32px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      letter-spacing: -0.5px;
+    }
+
+    .header p {
+      font-size: 14px;
+      opacity: 0.9;
+    }
+
+    .content {
+      padding: 40px 30px;
+    }
+
+    .section {
+      margin-bottom: 40px;
+    }
+
+    .section:last-child {
+      margin-bottom: 0;
+    }
+
+    .section-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: #1e293b;
+      margin-bottom: 16px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #e2e8f0;
+    }
+
+    .quiz-grid {
+      display: grid;
+      gap: 16px;
+    }
+
+    .quiz-card {
+      display: block;
+      background: #f8fafc;
+      border: 2px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 20px;
+      text-decoration: none;
+      transition: all 0.2s;
+      cursor: pointer;
+    }
+
+    .quiz-card:hover {
+      border-color: #667eea;
+      background: #f1f5f9;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1);
+    }
+
+    .quiz-card-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #1e293b;
+      margin-bottom: 8px;
+    }
+
+    .quiz-card-description {
+      font-size: 13px;
+      color: #64748b;
+      line-height: 1.5;
+    }
+
+    .quiz-card-meta {
+      display: flex;
+      gap: 16px;
+      margin-top: 12px;
+      font-size: 12px;
+      color: #94a3b8;
+    }
+
+    .quiz-card-meta span {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .badge {
+      display: inline-block;
+      background: #667eea;
+      color: white;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      margin-left: 8px;
+    }
+
+    .badge.tutorial {
+      background: #10b981;
+    }
+
+    .badge.example {
+      background: #f59e0b;
+    }
+
+    .footer {
+      text-align: center;
+      padding: 30px;
+      background: #f8fafc;
+      border-top: 1px solid #e2e8f0;
+    }
+
+    .footer p {
+      font-size: 13px;
+      color: #64748b;
+    }
+
+    .footer a {
+      color: #667eea;
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .footer a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <h1>StudyFlowSuite Test Quizzes</h1>
+      <p>Practice quizzes for testing the browser extension</p>
+    </div>
+
+    <!-- Content -->
+    <div class="content">
+      <!-- Tutorial Quizzes Section -->
+      <div class="section">
+        <h2 class="section-title">Tutorial Quizzes <span class="badge tutorial">3 Quizzes</span></h2>
+        <div class="quiz-grid">
+          <!-- Tutorial 1: One-Page Quiz -->
+          <a href="test-quiz.html" class="quiz-card">
+            <div class="quiz-card-title">Tutorial 1: One-Page Mixed Quiz</div>
+            <div class="quiz-card-description">
+              Comprehensive one-page quiz with 18 questions including multiple choice, fill-in-the-blank, short answer, and essay questions. Perfect for testing one-page quiz mode.
+            </div>
+            <div class="quiz-card-meta">
+              <span>📝 18 questions</span>
+              <span>🎯 Mixed types</span>
+              <span>📄 One page</span>
+            </div>
+          </a>
+
+          <!-- Tutorial 2: Multi-Page Quiz -->
+          <a href="test-quiz-multipage.html" class="quiz-card">
+            <div class="quiz-card-title">Tutorial 2: Multi-Page Sequential Quiz</div>
+            <div class="quiz-card-description">
+              Multi-page quiz with 12 questions across 3 pages. Tests sequential navigation mode with Next/Previous buttons and page transitions.
+            </div>
+            <div class="quiz-card-meta">
+              <span>📝 12 questions</span>
+              <span>🎯 Multiple choice & fill-in</span>
+              <span>📑 3 pages</span>
+            </div>
+          </a>
+
+          <!-- Tutorial 3: Canvas LMS Style -->
+          <a href="test-quiz-canvas.html" class="quiz-card">
+            <div class="quiz-card-title">Tutorial 3: Canvas LMS Style Quiz</div>
+            <div class="quiz-card-description">
+              Authentic Canvas LMS quiz design with nursing fundamentals questions. Features Canvas-style navigation, styling, and multi-page layout.
+            </div>
+            <div class="quiz-card-meta">
+              <span>📝 12 questions</span>
+              <span>🏥 Nursing topics</span>
+              <span>📑 3 pages</span>
+            </div>
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <p>
+        Test these quizzes with the <strong>StudyFlowSuite browser extension</strong>
+      </p>
+    </div>
+  </div>
+</body>
+</html>

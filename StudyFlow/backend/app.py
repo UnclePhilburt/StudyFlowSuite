@@ -53,6 +53,22 @@ except Exception as e:
 
 app = Flask(__name__)
 
+# Enable CORS for website
+from flask_cors import CORS
+CORS(app, resources={
+    r"/api/*": {
+        "origins": [
+            "https://unclephilburt.github.io",
+            "http://localhost:8000",
+            "http://localhost:5000",
+            "http://127.0.0.1:8000",
+            "http://127.0.0.1:5000"
+        ],
+        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"]
+    }
+})
+
 def send_access_key_email(to_email: str, stripe_id: str) -> bool:
     # Build your message bodies
     html_content = (
@@ -123,6 +139,305 @@ def init_postgres_db():
 
 # Initialize DB on startup
 init_postgres_db()
+
+
+# ============================================================================
+# USER AUTHENTICATION & SUBSCRIPTION ROUTES
+# ============================================================================
+import bcrypt
+import jwt
+from datetime import datetime, timedelta
+from functools import wraps
+
+JWT_SECRET = os.environ.get("JWT_SECRET", "a7f3e9d2c4b8a1f6e3d9c2b7a5f8e1d4c9b6a3f7e2d8c5b1a6f9e4d3c8b2a7f5e1d8c4b9a6f3")
+
+def hash_password(password: str) -> str:
+    """Hash a password using bcrypt"""
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+def verify_password(password: str, hashed: str) -> bool:
+    """Verify a password against its hash"""
+    return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
+
+def create_token(user_id: int, email: str) -> str:
+    """Create JWT token for user"""
+    payload = {
+        'user_id': user_id,
+        'email': email,
+        'exp': datetime.utcnow() + timedelta(days=30)
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm='HS256')
+
+def token_required(f):
+    """Decorator to protect routes with JWT authentication"""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = request.headers.get('Authorization')
+        if not token:
+            return jsonify({'error': 'Token is missing'}), 401
+        try:
+            if token.startswith('Bearer '):
+                token = token[7:]
+            data = jwt.decode(token, JWT_SECRET, algorithms=['HS256'])
+            request.user_id = data['user_id']
+            request.user_email = data['email']
+        except:
+            return jsonify({'error': 'Token is invalid'}), 401
+        return f(*args, **kwargs)
+    return decorated
+
+def init_users_table():
+    """Create users table if it doesn't exist"""
+    try:
+        conn = psycopg2.connect(os.environ["DATABASE_URL"])
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                email VARCHAR(255) UNIQUE NOT NULL,
+                name VARCHAR(255),
+                password_hash VARCHAR(255),
+                stripe_customer_id VARCHAR(255) UNIQUE,
+                stripe_subscription_id VARCHAR(255),
+                subscription_status VARCHAR(50) DEFAULT 'free',
+                trial_ends_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        conn.commit()
+        conn.close()
+        print("✅ PostgreSQL: users table ready.")
+    except Exception as e:
+        print(f"❌ Users table init error: {e}")
+
+# Initialize users table
+init_users_table()
+
+@app.route("/api/signup", methods=["POST"])
+def signup():
+    """Create a new user account"""
+    try:
+        data = request.json
+        email = data.get('email')
+        name = data.get('name')
+        password = data.get('password')
+
+        if not email or not password:
+            return jsonify({'error': 'Email and password are required'}), 400
+
+        # Hash password
+        password_hash = hash_password(password)
+
+        # Insert user into database
+        conn = psycopg2.connect(os.environ["DATABASE_URL"])
+        cur = conn.cursor()
+
+        try:
+            cur.execute("""
+                INSERT INTO users (email, name, password_hash, subscription_status)
+                VALUES (%s, %s, %s, 'free')
+                RETURNING id
+            """, (email, name, password_hash))
+            user_id = cur.fetchone()[0]
+            conn.commit()
+
+            app.logger.info(f"✅ New user created: {email} (ID: {user_id})")
+
+            return jsonify({
+                'success': True,
+                'message': 'Account created successfully'
+            }), 201
+
+        except psycopg2.IntegrityError:
+            conn.rollback()
+            return jsonify({'error': 'Email already exists'}), 409
+        finally:
+            conn.close()
+
+    except Exception as e:
+        app.logger.error(f"❌ Signup error: {e}\n{traceback.format_exc()}")
+        return jsonify({'error': 'Signup failed'}), 500
+
+@app.route("/api/login", methods=["POST"])
+def login():
+    """Authenticate user and return JWT token"""
+    try:
+        data = request.json
+        email = data.get('email')
+        password = data.get('password')
+
+        if not email or not password:
+            return jsonify({'error': 'Email and password are required'}), 400
+
+        # Get user from database
+        conn = psycopg2.connect(os.environ["DATABASE_URL"])
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT id, email, name, password_hash, subscription_status, stripe_customer_id
+            FROM users WHERE email = %s
+        """, (email,))
+        user = cur.fetchone()
+        conn.close()
+
+        if not user:
+            return jsonify({'error': 'Invalid email or password'}), 401
+
+        user_id, user_email, name, password_hash, subscription_status, stripe_customer_id = user
+
+        # Verify password
+        if not verify_password(password, password_hash):
+            return jsonify({'error': 'Invalid email or password'}), 401
+
+        # Create JWT token
+        token = create_token(user_id, user_email)
+
+        app.logger.info(f"✅ User logged in: {email}")
+
+        return jsonify({
+            'success': True,
+            'token': token,
+            'user': {
+                'id': user_id,
+                'email': user_email,
+                'name': name,
+                'subscription_status': subscription_status,
+                'stripe_customer_id': stripe_customer_id
+            }
+        }), 200
+
+    except Exception as e:
+        app.logger.error(f"❌ Login error: {e}\n{traceback.format_exc()}")
+        return jsonify({'error': 'Login failed'}), 500
+
+@app.route("/api/create-subscription", methods=["POST"])
+def create_subscription():
+    """Create Stripe subscription for user"""
+    try:
+        data = request.json
+        email = data.get('email')
+        name = data.get('name')
+        payment_method_id = data.get('paymentMethodId')
+        plan = data.get('plan', 'pro')
+
+        if not email or not payment_method_id:
+            return jsonify({'error': 'Missing required fields'}), 400
+
+        # Create or get Stripe customer
+        conn = psycopg2.connect(os.environ["DATABASE_URL"])
+        cur = conn.cursor()
+        cur.execute("SELECT stripe_customer_id FROM users WHERE email = %s", (email,))
+        result = cur.fetchone()
+
+        if result and result[0]:
+            customer_id = result[0]
+            customer = stripe.Customer.retrieve(customer_id)
+        else:
+            customer = stripe.Customer.create(
+                email=email,
+                name=name,
+                payment_method=payment_method_id,
+                invoice_settings={'default_payment_method': payment_method_id}
+            )
+            customer_id = customer.id
+
+        # Create subscription with 7-day trial - $4.99/month
+        subscription = stripe.Subscription.create(
+            customer=customer_id,
+            items=[{'price': 'price_1TCOih9LWKaKRffVWuR3bQin'}],  # $4.99/month
+            trial_period_days=7,
+            expand=['latest_invoice.payment_intent']
+        )
+
+        # Calculate trial end date
+        trial_ends_at = datetime.fromtimestamp(subscription.trial_end)
+
+        # Update or insert user
+        try:
+            cur.execute("""
+                INSERT INTO users (email, name, stripe_customer_id, stripe_subscription_id, subscription_status, trial_ends_at)
+                VALUES (%s, %s, %s, %s, 'trialing', %s)
+                ON CONFLICT (email)
+                DO UPDATE SET
+                    stripe_customer_id = EXCLUDED.stripe_customer_id,
+                    stripe_subscription_id = EXCLUDED.stripe_subscription_id,
+                    subscription_status = EXCLUDED.subscription_status,
+                    trial_ends_at = EXCLUDED.trial_ends_at
+                RETURNING id
+            """, (email, name, customer_id, subscription.id, trial_ends_at))
+            user_id = cur.fetchone()[0]
+            conn.commit()
+
+            # Send welcome email
+            send_access_key_email(email, customer_id)
+
+            # Create JWT token
+            token = create_token(user_id, email)
+
+            app.logger.info(f"✅ Subscription created for {email}: {subscription.id}")
+
+            return jsonify({
+                'success': True,
+                'token': token,
+                'user': {
+                    'id': user_id,
+                    'email': email,
+                    'name': name,
+                    'subscription_status': 'trialing',
+                    'stripe_customer_id': customer_id,
+                    'trial_ends_at': trial_ends_at.isoformat()
+                }
+            }), 200
+
+        except Exception as db_error:
+            conn.rollback()
+            raise db_error
+        finally:
+            conn.close()
+
+    except stripe.error.CardError as e:
+        app.logger.error(f"❌ Card error: {e}")
+        return jsonify({'error': 'Card was declined'}), 400
+    except Exception as e:
+        app.logger.error(f"❌ Subscription creation error: {e}\n{traceback.format_exc()}")
+        return jsonify({'error': 'Subscription creation failed'}), 500
+
+@app.route("/api/me", methods=["GET"])
+@token_required
+def get_current_user():
+    """Get current user info (protected route)"""
+    try:
+        conn = psycopg2.connect(os.environ["DATABASE_URL"])
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT id, email, name, subscription_status, stripe_customer_id, trial_ends_at, created_at
+            FROM users WHERE id = %s
+        """, (request.user_id,))
+        user = cur.fetchone()
+        conn.close()
+
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+
+        user_id, email, name, subscription_status, stripe_customer_id, trial_ends_at, created_at = user
+
+        return jsonify({
+            'id': user_id,
+            'email': email,
+            'name': name,
+            'subscription_status': subscription_status,
+            'stripe_customer_id': stripe_customer_id,
+            'trial_ends_at': trial_ends_at.isoformat() if trial_ends_at else None,
+            'created_at': created_at.isoformat()
+        }), 200
+
+    except Exception as e:
+        app.logger.error(f"❌ Get user error: {e}\n{traceback.format_exc()}")
+        return jsonify({'error': 'Failed to get user info'}), 500
+
+# ============================================================================
+# END USER AUTHENTICATION & SUBSCRIPTION ROUTES
+# ============================================================================
 
 
 @app.route("/api/process", methods=["POST"])
