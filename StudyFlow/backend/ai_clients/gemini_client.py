@@ -31,6 +31,18 @@ def get_gemini_answer_single(question, answers, attempt_num=1, model_name='gemin
 
         genai.configure(api_key=api_key)
 
+        # Map user-friendly names to actual API model names
+        model_mapping = {
+            'gemini-2.5-flash': 'gemini-2.5-flash',
+            'gemini-2.5-pro': 'gemini-2.5-pro',
+            'gemini-3-flash-preview': 'gemini-3-flash-preview',
+            'gemini-3.1-flash-lite-preview': 'gemini-3.1-flash-lite-preview',
+            'gemini-3.1-pro-preview': 'gemini-3.1-pro-preview'
+        }
+
+        actual_model_name = model_mapping.get(model_name, model_name)
+        debug_log(f"Using Gemini model: {actual_model_name}")
+
         # Format answers
         answers_text = "\n".join(f"{i+1}. {a}" for i, a in enumerate(answers))
 
@@ -54,18 +66,18 @@ RULES:
 - Return ONLY valid JSON, no other text"""
 
         # Use specified Gemini model
-        model = genai.GenerativeModel(model_name)
+        model = genai.GenerativeModel(actual_model_name)
 
         response = model.generate_content(
             prompt,
             generation_config={
                 'temperature': 0.1,
-                'max_output_tokens': 300,
+                'max_output_tokens': 150,  # Reduced from 300 to prevent truncation
             }
         )
 
         response_text = response.text.strip()
-        debug_log(f"📥 Gemini ({model_name}) raw response: {response_text[:200]}...")
+        debug_log(f"📥 Gemini ({actual_model_name}) raw response ({len(response_text)} chars): {response_text[:500]}...")
 
         # Parse JSON - handle markdown code blocks
         if "```" in response_text:
@@ -81,7 +93,7 @@ RULES:
             response_text = "\n".join(json_lines)
 
         result = json.loads(response_text)
-        debug_log(f"🤖 Gemini ({model_name}) attempt {attempt_num}: Answer={result.get('correct_answer_index')}, Confidence={result.get('confidence')}")
+        debug_log(f"🤖 Gemini ({actual_model_name}) attempt {attempt_num}: Answer={result.get('correct_answer_index')}, Confidence={result.get('confidence')}")
 
         return result
 
@@ -188,8 +200,16 @@ Provide an accurate answer. Follow these rules:
 
 Return ONLY the answer text, nothing else."""
 
+        # Map model name
+        model_mapping = {
+            'gemini-2.5-flash': 'gemini-2.5-flash',
+            'gemini-2.5-pro': 'gemini-2.5-pro'
+        }
+        actual_model = model_mapping.get(model, model)
+        debug_log(f"Using Gemini model for essay: {actual_model}")
+
         # Use specified Gemini model
-        gemini_model = genai.GenerativeModel(model)
+        gemini_model = genai.GenerativeModel(actual_model)
 
         response = gemini_model.generate_content(
             prompt,
@@ -200,7 +220,7 @@ Return ONLY the answer text, nothing else."""
         )
 
         essay_answer = response.text.strip()
-        debug_log(f"📝 Gemini ({model}) essay: Generated {len(essay_answer)} characters")
+        debug_log(f"📝 Gemini ({actual_model}) essay: Generated {len(essay_answer)} characters")
 
         return essay_answer
 
