@@ -13,7 +13,7 @@ RUN TESS_BIN=$(find / -type f -name tesseract | head -n 1) && \
 
 WORKDIR /app
 
-COPY StudyFlow/backend/requirements.txt /app/requirements.txt
+COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
 COPY . /app
