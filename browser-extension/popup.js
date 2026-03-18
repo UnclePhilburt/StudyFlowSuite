@@ -11,9 +11,29 @@ let setupData = {
 
 // Initialize user profile
 async function initUserProfile() {
-  const user = await window.auth.getCurrentUser();
+  let user = await window.auth.getCurrentUser();
 
   if (user) {
+    // Fetch latest user data from server to sync subscription status
+    try {
+      const token = await window.auth.getAuthToken();
+      const response = await fetch('https://studyflowsuite.onrender.com/api/me', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        const freshUserData = await response.json();
+        // Update cached user data with fresh subscription status
+        user = freshUserData;
+        await chrome.storage.local.set({ user: freshUserData });
+      }
+    } catch (error) {
+      console.log('Could not refresh user data:', error);
+      // Continue with cached data
+    }
+
     // Set user avatar (first letter of name or email)
     const initial = (user.name || user.email).charAt(0).toUpperCase();
     document.getElementById('userAvatar').textContent = initial;
