@@ -89,7 +89,9 @@ RULES:
         debug_log(f"Raw response was: {response_text}")
         return None
     except Exception as e:
+        import traceback
         debug_log(f"❌ Gemini attempt {attempt_num} API error: {e}")
+        debug_log(f"Full traceback: {traceback.format_exc()}")
         return None
 
 
