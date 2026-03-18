@@ -187,10 +187,12 @@ def token_required(f):
     return decorated
 
 def init_users_table():
-    """Create users table if it doesn't exist"""
+    """Create users table if it doesn't exist, and add missing columns if needed"""
     try:
         conn = psycopg2.connect(os.environ["DATABASE_URL"])
         cur = conn.cursor()
+
+        # Create table if it doesn't exist
         cur.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id SERIAL PRIMARY KEY,
@@ -205,6 +207,26 @@ def init_users_table():
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
+
+        # Add missing columns if table already exists
+        columns_to_add = [
+            ("name", "VARCHAR(255)"),
+            ("password_hash", "VARCHAR(255)"),
+            ("trial_ends_at", "TIMESTAMP"),
+            ("created_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
+            ("updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+        ]
+
+        for column_name, column_type in columns_to_add:
+            try:
+                cur.execute(f"""
+                    ALTER TABLE users
+                    ADD COLUMN IF NOT EXISTS {column_name} {column_type};
+                """)
+            except Exception as col_error:
+                # Column might already exist, ignore
+                pass
+
         conn.commit()
         conn.close()
         print("✅ PostgreSQL: users table ready.")
