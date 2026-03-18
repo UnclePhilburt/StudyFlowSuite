@@ -15,7 +15,8 @@ let latestAnswer = null;
 let quizSettings = {
   totalQuestions: null,
   targetTime: null, // in minutes
-  onePageMode: false
+  onePageMode: false,
+  aiModel: 'gemini-2.5-flash' // default model
 };
 let quizStartTime = null;
 
@@ -84,7 +85,7 @@ function stopQuizMode() {
   isPaused = false;
   waitingForNavigation = false;
   currentTabId = null;
-  quizSettings = { totalQuestions: null, targetTime: null, onePageMode: false };
+  quizSettings = { totalQuestions: null, targetTime: null, onePageMode: false, aiModel: 'gemini-2.5-flash' };
   quizStartTime = null;
   console.log('Quiz mode stopped');
   updateBadge('', '');
@@ -288,6 +289,23 @@ async function runQuizLoop() {
       console.error('Error details:', error.message);
       console.error('Stack trace:', error.stack);
       errorCount++;
+
+      // If API failed, skip this question and move on
+      if (error.message && error.message.includes('Failed to get AI answer')) {
+        console.log('⏭️ Skipping question due to API failure - clicking submit to move on');
+        lastQuestionText = null; // Reset so we don't get stuck
+
+        // Click submit to move to next question
+        try {
+          await new Promise((resolve) => {
+            chrome.tabs.sendMessage(currentTabId, { action: 'clickSubmit' }, resolve);
+          });
+          await sleep(2000);
+        } catch (e) {
+          console.error('Failed to click submit:', e);
+        }
+      }
+
       updateBadge('❌', '#f44336');
       await sleep(3000);
     }
@@ -302,7 +320,8 @@ async function getAIAnswer(quiz) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       question: quiz.question,
-      answers: quiz.answers.map(a => a.text)
+      answers: quiz.answers.map(a => a.text),
+      model: quizSettings.aiModel || 'gemini-2.5-flash'
     })
   });
 
@@ -322,7 +341,8 @@ async function getEssayAnswer(question) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      question: question
+      question: question,
+      model: quizSettings.aiModel || 'gemini-2.5-flash'
     })
   });
 

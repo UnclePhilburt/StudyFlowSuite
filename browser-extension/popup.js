@@ -28,11 +28,23 @@ document.getElementById('startBtn').addEventListener('click', async () => {
   await checkAndStartSetup();
 });
 
+// Resume button
+document.getElementById('resumeBtn').addEventListener('click', () => {
+  chrome.runtime.sendMessage({ action: 'resume' }, (response) => {
+    if (response.success) {
+      document.getElementById('resumeBtn').classList.add('hidden');
+      document.getElementById('stopBtn').classList.remove('hidden');
+      updateStatus('Quiz resumed!', 'running');
+    }
+  });
+});
+
 // Stop button
 document.getElementById('stopBtn').addEventListener('click', () => {
   chrome.runtime.sendMessage({ action: 'stop' }, (response) => {
     if (response.success) {
       document.getElementById('startBtn').classList.remove('hidden');
+      document.getElementById('resumeBtn').classList.add('hidden');
       document.getElementById('stopBtn').classList.add('hidden');
       updateStatus('Quiz stopped', 'idle');
       stopStatusPolling();
@@ -113,8 +125,8 @@ function startQuizMode(tabId) {
   // Get settings
   const totalQuestions = parseInt(document.getElementById('totalQuestions').value) || null;
   const targetTime = parseInt(document.getElementById('targetTime').value) || null;
-  const skipEssays = document.getElementById('skipEssays').checked;
   const onePageMode = document.getElementById('onePageMode').checked;
+  const aiModel = document.getElementById('aiModel').value;
 
   // Send to background with settings
   chrome.runtime.sendMessage({
@@ -123,12 +135,13 @@ function startQuizMode(tabId) {
     settings: {
       totalQuestions: totalQuestions,
       targetTime: targetTime,
-      skipEssays: skipEssays,
-      onePageMode: onePageMode
+      onePageMode: onePageMode,
+      aiModel: aiModel
     }
   }, (response) => {
     if (response.success) {
       document.getElementById('startBtn').classList.add('hidden');
+      document.getElementById('resumeBtn').classList.add('hidden');
       document.getElementById('stopBtn').classList.remove('hidden');
       document.getElementById('startBtn').innerHTML = '<span>▶</span> Start Quiz';
       updateStatus('Quiz mode started!', 'running');
@@ -142,6 +155,19 @@ function startStatusPolling() {
   statusInterval = setInterval(() => {
     chrome.runtime.sendMessage({ action: 'getStatus' }, (status) => {
       if (status) {
+        // Check if waiting for navigation
+        if (status.waitingForNavigation) {
+          updateStatus('✅ Page complete! Click Next/Submit, then Resume', 'success');
+          document.getElementById('resumeBtn').classList.remove('hidden');
+          document.getElementById('stopBtn').classList.remove('hidden');
+        } else if (status.isRunning && !status.isPaused) {
+          // Running normally
+          if (document.getElementById('resumeBtn').classList.contains('hidden') === false) {
+            // Just resumed
+            document.getElementById('resumeBtn').classList.add('hidden');
+          }
+        }
+
         // Animate question count if changed
         if (status.questionCount !== lastQuestionCount) {
           const questionEl = document.getElementById('questionCount');
@@ -225,10 +251,20 @@ chrome.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
 chrome.runtime.sendMessage({ action: 'getStatus' }, async (status) => {
   if (status && status.isRunning) {
     document.getElementById('startBtn').classList.add('hidden');
-    document.getElementById('stopBtn').classList.remove('hidden');
     document.getElementById('questionCount').textContent = status.questionCount;
     document.getElementById('errorCount').textContent = status.errorCount;
-    updateStatus('Quiz mode running', 'running');
+
+    if (status.waitingForNavigation) {
+      // Show resume button
+      document.getElementById('resumeBtn').classList.remove('hidden');
+      document.getElementById('stopBtn').classList.remove('hidden');
+      updateStatus('✅ Page complete! Click Next/Submit, then Resume', 'success');
+    } else {
+      // Normal running state
+      document.getElementById('stopBtn').classList.remove('hidden');
+      updateStatus('Quiz mode running', 'running');
+    }
+
     startStatusPolling();
   } else {
     // Check setup progress for current site

@@ -1059,6 +1059,7 @@ def answer_question():
 
         question = data.get("question", "")
         answers = data.get("answers", [])
+        model = data.get("model", "gemini-2.5-flash")  # Get model from request, default to 2.5 Flash
 
         if not question or not answers:
             return jsonify({"error": "Missing question or answers"}), 400
@@ -1085,10 +1086,10 @@ RULES:
 - correct_answer_index is 1-based (1, 2, 3, etc.)
 - Return ONLY valid JSON, no other text"""
 
-        # Use Gemini 1.5 Flash - much faster and cheaper than GPT-4o-mini
+        # Use Gemini API with selected model
         from StudyFlow.backend.ai_clients.gemini_client import get_gemini_answer
 
-        result = get_gemini_answer(question, answers)
+        result = get_gemini_answer(question, answers, model=model)
 
         if result is None:
             return jsonify({"error": "AI processing failed"}), 500
@@ -1126,6 +1127,7 @@ def essay_answer():
             return jsonify({"error": "No JSON provided"}), 400
 
         question = data.get("question", "")
+        model = data.get("model", "gemini-2.5-flash")  # Get model from request, default to 2.5 Flash
 
         if not question:
             return jsonify({"error": "Missing question"}), 400
@@ -1144,10 +1146,10 @@ Provide an accurate answer. Follow these rules:
 
 Return ONLY the answer text, nothing else."""
 
-        # Use Gemini 1.5 Flash for essay generation
+        # Use Gemini API for essay generation with selected model
         from StudyFlow.backend.ai_clients.gemini_client import get_gemini_essay
 
-        essay_answer = get_gemini_essay(question)
+        essay_answer = get_gemini_essay(question, model=model)
 
         if essay_answer is None:
             return jsonify({"error": "AI processing failed"}), 500

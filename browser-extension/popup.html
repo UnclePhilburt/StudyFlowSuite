@@ -12,164 +12,114 @@
       box-sizing: border-box;
     }
 
+    html {
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
     /* Custom Scrollbar Styling */
     ::-webkit-scrollbar {
-      width: 10px;
+      width: 8px;
     }
 
     ::-webkit-scrollbar-track {
-      background: rgba(255, 255, 255, 0.05);
-      border-radius: 10px;
-      margin: 4px;
+      background: #1a1a1a;
     }
 
     ::-webkit-scrollbar-thumb {
-      background: linear-gradient(135deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0.15));
-      border-radius: 10px;
-      border: 2px solid transparent;
-      background-clip: padding-box;
-      transition: all 0.3s ease;
+      background: #333;
+      border-radius: 4px;
     }
 
     ::-webkit-scrollbar-thumb:hover {
-      background: linear-gradient(135deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.25));
-      border-radius: 10px;
-      border: 2px solid transparent;
-      background-clip: padding-box;
-    }
-
-    ::-webkit-scrollbar-thumb:active {
-      background: linear-gradient(135deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.35));
+      background: #444;
     }
 
     body {
-      width: 420px;
-      min-height: 600px;
-      max-height: 600px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      width: 380px;
+      min-height: 580px;
+      max-height: 580px;
+      background: #0f0f0f;
       font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
       padding: 0;
       overflow-y: auto;
       overflow-x: hidden;
       position: relative;
-    }
-
-    /* Animated background gradient */
-    body::before {
-      content: '';
-      position: absolute;
-      top: -50%;
-      left: -50%;
-      width: 200%;
-      height: 200%;
-      background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
-      animation: rotate 20s linear infinite;
-    }
-
-    @keyframes rotate {
-      from { transform: rotate(0deg); }
-      to { transform: rotate(360deg); }
+      border-radius: 12px;
     }
 
     .container {
-      background: rgba(255, 255, 255, 0.12);
-      backdrop-filter: blur(40px) saturate(180%);
-      -webkit-backdrop-filter: blur(40px) saturate(180%);
-      border: 1px solid rgba(255, 255, 255, 0.25);
-      margin: 16px;
-      border-radius: 28px;
-      padding: 28px;
-      box-shadow: 0 16px 64px rgba(0, 0, 0, 0.2),
-                  inset 0 1px 0 rgba(255, 255, 255, 0.3);
+      background: #1a1a1a;
+      padding: 0;
       position: relative;
-      z-index: 1;
+      border-radius: 12px;
+      overflow: hidden;
     }
 
     /* Header */
     .header {
       display: flex;
       align-items: center;
-      gap: 14px;
-      margin-bottom: 28px;
-      padding-bottom: 24px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.15);
-      position: relative;
+      justify-content: space-between;
+      padding: 20px 20px 16px;
+      background: #1a1a1a;
+      border-bottom: 1px solid #2a2a2a;
+      border-radius: 12px 12px 0 0;
     }
 
     .logo {
-      width: 56px;
-      height: 56px;
-      border-radius: 16px;
-      background: linear-gradient(135deg, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0.1));
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       display: flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-      border: 1px solid rgba(255, 255, 255, 0.3);
-      position: relative;
-      overflow: hidden;
-    }
-
-    .logo::before {
-      content: '';
-      position: absolute;
-      top: -50%;
-      left: -50%;
-      width: 200%;
-      height: 200%;
-      background: linear-gradient(45deg, transparent, rgba(255,255,255,0.2), transparent);
-      animation: shine 3s infinite;
-    }
-
-    @keyframes shine {
-      0%, 100% { transform: translateX(-100%); }
-      50% { transform: translateX(100%); }
+      flex-shrink: 0;
     }
 
     .logo img {
-      width: 100%;
-      height: 100%;
-      border-radius: 16px;
-      object-fit: cover;
+      width: 24px;
+      height: 24px;
+      object-fit: contain;
+    }
+
+    .title {
+      flex: 1;
+      margin-left: 12px;
     }
 
     .title h1 {
-      font-size: 26px;
-      font-weight: 800;
-      color: white;
-      letter-spacing: -0.8px;
-      text-shadow: 0 2px 16px rgba(0, 0, 0, 0.2);
+      font-size: 16px;
+      font-weight: 700;
+      color: #ffffff;
+      letter-spacing: -0.3px;
       line-height: 1.2;
     }
 
     .title p {
-      font-size: 13px;
-      color: rgba(255, 255, 255, 0.75);
-      margin-top: 4px;
+      font-size: 11px;
+      color: #888;
+      margin-top: 2px;
       font-weight: 500;
     }
 
     .version {
-      position: absolute;
-      top: 0;
-      right: 0;
-      background: rgba(255, 255, 255, 0.15);
-      color: rgba(255, 255, 255, 0.9);
+      background: #2a2a2a;
+      color: #888;
       font-size: 10px;
       font-weight: 600;
-      padding: 4px 10px;
-      border-radius: 12px;
-      border: 1px solid rgba(255, 255, 255, 0.2);
+      padding: 4px 8px;
+      border-radius: 6px;
+      border: 1px solid #333;
     }
 
     /* Settings Card */
     .settings-card {
-      background: rgba(255, 255, 255, 0.08);
-      backdrop-filter: blur(10px);
-      border-radius: 20px;
+      background: #1a1a1a;
       padding: 20px;
-      margin-bottom: 20px;
-      border: 1px solid rgba(255, 255, 255, 0.15);
+      margin: 0;
+      border-bottom: 1px solid #2a2a2a;
     }
 
     .settings-grid {
@@ -184,49 +134,49 @@
 
     .input-group label {
       display: block;
-      color: rgba(255, 255, 255, 0.8);
+      color: #aaa;
       font-size: 11px;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.5px;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
     }
 
     .input-group input {
       width: 100%;
-      background: rgba(255, 255, 255, 0.1);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      border-radius: 12px;
-      padding: 12px 14px;
-      color: white;
-      font-size: 14px;
-      font-weight: 600;
+      background: #0f0f0f;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 10px 12px;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 500;
       font-family: 'Inter', sans-serif;
-      transition: all 0.3s ease;
+      transition: all 0.2s ease;
       outline: none;
     }
 
     .input-group input::placeholder {
-      color: rgba(255, 255, 255, 0.4);
-      font-weight: 500;
+      color: #555;
+      font-weight: 400;
     }
 
     .input-group input:focus {
-      background: rgba(255, 255, 255, 0.15);
-      border-color: rgba(255, 255, 255, 0.4);
-      box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.1);
+      background: #0f0f0f;
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
     }
 
     .input-group input:disabled {
-      opacity: 0.5;
+      opacity: 0.4;
       cursor: not-allowed;
     }
 
     .input-hint {
       font-size: 9px;
-      color: rgba(255, 255, 255, 0.5);
+      color: #666;
       margin-top: 4px;
-      font-weight: 500;
+      font-weight: 400;
     }
 
     /* Checkbox styling */
@@ -234,20 +184,24 @@
       grid-column: 1 / -1;
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
       margin-top: 8px;
+      padding: 10px;
+      background: #0f0f0f;
+      border-radius: 8px;
+      border: 1px solid #2a2a2a;
     }
 
     .checkbox-group input[type="checkbox"] {
-      width: 18px;
-      height: 18px;
+      width: 16px;
+      height: 16px;
       cursor: pointer;
-      accent-color: #00e676;
+      accent-color: #667eea;
     }
 
     .checkbox-group label {
-      color: rgba(255, 255, 255, 0.85);
-      font-size: 12px;
+      color: #ccc;
+      font-size: 11px;
       font-weight: 500;
       cursor: pointer;
       margin: 0;
@@ -257,10 +211,10 @@
 
     .clear-setup-btn {
       grid-column: 1 / -1;
-      background: rgba(255, 82, 82, 0.15);
-      border: 1px solid rgba(255, 82, 82, 0.3);
-      color: rgba(255, 255, 255, 0.9);
-      padding: 8px 16px;
+      background: #2a2a2a;
+      border: 1px solid #333;
+      color: #ff6b6b;
+      padding: 10px 14px;
       font-size: 11px;
       font-weight: 600;
       border-radius: 8px;
@@ -270,144 +224,150 @@
     }
 
     .clear-setup-btn:hover {
-      background: rgba(255, 82, 82, 0.25);
-      border-color: rgba(255, 82, 82, 0.5);
+      background: #333;
+      border-color: #ff6b6b;
     }
 
     /* Status Card */
     .status-card {
-      background: rgba(255, 255, 255, 0.08);
-      backdrop-filter: blur(10px);
-      border-radius: 20px;
-      padding: 20px;
-      margin-bottom: 20px;
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-      position: relative;
-      overflow: hidden;
+      background: #1a1a1a;
+      padding: 16px 20px;
+      margin: 0;
+      border-bottom: 1px solid #2a2a2a;
+      transition: all 0.3s ease;
     }
 
     .status-card.running {
-      background: rgba(255, 193, 7, 0.12);
-      border-color: rgba(255, 193, 7, 0.3);
-      animation: pulseGlow 2s infinite;
-    }
-
-    @keyframes pulseGlow {
-      0%, 100% { box-shadow: 0 0 20px rgba(255, 193, 7, 0.3); }
-      50% { box-shadow: 0 0 40px rgba(255, 193, 7, 0.5); }
+      background: linear-gradient(90deg, #1a1a1a 0%, rgba(102, 126, 234, 0.1) 100%);
+      border-left: 3px solid #667eea;
     }
 
     .status-card.success {
-      background: rgba(76, 175, 80, 0.12);
-      border-color: rgba(76, 175, 80, 0.3);
+      background: linear-gradient(90deg, #1a1a1a 0%, rgba(0, 230, 118, 0.1) 100%);
+      border-left: 3px solid #00e676;
     }
 
     .status-card.idle {
-      background: rgba(100, 181, 246, 0.12);
-      border-color: rgba(100, 181, 246, 0.3);
+      background: #1a1a1a;
+      border-left: 3px solid #333;
     }
 
     .status-text {
-      color: white;
-      font-size: 15px;
-      font-weight: 600;
+      color: #ccc;
+      font-size: 13px;
+      font-weight: 500;
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
     }
 
     .status-icon {
-      font-size: 18px;
+      font-size: 16px;
     }
 
     /* Stats Grid */
     .stats-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 16px;
-      margin-bottom: 20px;
+      gap: 12px;
+      padding: 20px;
+      background: #1a1a1a;
+      border-bottom: 1px solid #2a2a2a;
     }
 
     .stat-card {
-      background: rgba(255, 255, 255, 0.08);
-      backdrop-filter: blur(10px);
-      border-radius: 20px;
-      padding: 24px 16px;
-      border: 1px solid rgba(255, 255, 255, 0.15);
+      background: #0f0f0f;
+      border-radius: 12px;
+      padding: 20px 16px;
+      border: 1px solid #2a2a2a;
       text-align: center;
-      transition: transform 0.3s;
+      transition: all 0.2s;
     }
 
     .stat-card:hover {
-      transform: translateY(-4px);
+      border-color: #667eea;
+      background: #1a1a1a;
     }
 
     .stat-value {
-      font-size: 42px;
-      font-weight: 800;
-      color: white;
-      text-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-      margin-bottom: 8px;
+      font-size: 36px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 6px;
+      line-height: 1;
     }
 
     .stat-value.counting {
-      animation: countUp 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+      animation: countUp 0.4s ease;
     }
 
     @keyframes countUp {
-      0% { transform: scale(1.3); opacity: 0; }
+      0% { transform: scale(1.2); opacity: 0; }
       100% { transform: scale(1); opacity: 1; }
     }
 
     .stat-label {
-      font-size: 11px;
-      color: rgba(255, 255, 255, 0.7);
+      font-size: 10px;
+      color: #888;
       text-transform: uppercase;
-      letter-spacing: 1px;
-      font-weight: 700;
+      letter-spacing: 0.8px;
+      font-weight: 600;
     }
 
     /* Buttons */
     .btn {
       width: 100%;
-      padding: 18px;
-      font-size: 16px;
-      font-weight: 700;
+      padding: 14px;
+      font-size: 14px;
+      font-weight: 600;
       border: none;
-      border-radius: 18px;
+      border-radius: 8px;
       cursor: pointer;
-      transition: all 0.3s ease;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+      transition: all 0.2s ease;
       position: relative;
       overflow: hidden;
     }
 
     .btn-start {
-      background: linear-gradient(135deg, #00e676 0%, #00c853 100%);
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       color: white;
-      border: 2px solid rgba(255, 255, 255, 0.3);
+      border: 1px solid #667eea;
     }
 
     .btn-start:hover {
-      transform: translateY(-3px);
-      box-shadow: 0 12px 32px rgba(0, 200, 83, 0.4);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+
+    .btn-start:active {
+      transform: translateY(0);
     }
 
     .btn-stop {
-      background: linear-gradient(135deg, #ff5252 0%, #f44336 100%);
-      color: white;
-      border: 2px solid rgba(255, 255, 255, 0.3);
+      background: #2a2a2a;
+      color: #ff6b6b;
+      border: 1px solid #333;
     }
 
     .btn-stop:hover {
-      transform: translateY(-3px);
-      box-shadow: 0 12px 32px rgba(244, 67, 54, 0.4);
+      background: #333;
+      border-color: #ff6b6b;
+      box-shadow: 0 4px 12px rgba(255, 107, 107, 0.2);
     }
 
     .btn span {
       position: relative;
       z-index: 1;
+    }
+
+    /* Action Buttons Container */
+    .action-buttons {
+      padding: 20px;
+      background: #1a1a1a;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      border-radius: 0 0 12px 12px;
     }
 
     .hidden {
@@ -419,14 +379,16 @@
   <div class="container">
     <!-- Header -->
     <div class="header">
-      <div class="logo">
-        <img src="icon128.png" alt="StudyFlowSuite">
+      <div style="display: flex; align-items: center;">
+        <div class="logo">
+          <img src="icon128.png" alt="StudyFlowSuite">
+        </div>
+        <div class="title">
+          <h1>StudyFlowSuite</h1>
+          <p>Quiz Assistant</p>
+        </div>
       </div>
-      <div class="title">
-        <h1>StudyFlowSuite</h1>
-        <p>AI-Powered Quiz Assistant</p>
-      </div>
-      <div class="version">v0.6.0</div>
+      <div class="version">v0.9.0</div>
     </div>
 
     <!-- Settings Card -->
@@ -446,9 +408,13 @@
           <input type="checkbox" id="onePageMode">
           <label for="onePageMode">One-page quiz mode (all questions on one page)</label>
         </div>
-        <div class="checkbox-group">
-          <input type="checkbox" id="skipEssays">
-          <label for="skipEssays">Skip text-based questions (essay/short-answer/fill-in-blank)</label>
+        <div class="input-group" style="grid-column: 1 / -1;">
+          <label>AI Model</label>
+          <select id="aiModel" style="width: 100%; background: #0f0f0f; border: 1px solid #333; border-radius: 8px; padding: 10px 12px; color: #fff; font-size: 13px; font-weight: 500; font-family: 'Inter', sans-serif; cursor: pointer;">
+            <option value="gemini-2.5-flash">Gemini 2.5 Flash (Fast, Cheaper)</option>
+            <option value="gemini-2.0-flash-thinking-exp-1219">Gemini 2.0 Flash Thinking (Advanced Reasoning)</option>
+          </select>
+          <div class="input-hint">2.5 Flash: $0.03/1k questions | 2.0 Thinking: Better accuracy, slower</div>
         </div>
         <button id="clearSetup" class="clear-setup-btn">🗑️ Clear saved setup for this site</button>
       </div>
@@ -475,12 +441,17 @@
     </div>
 
     <!-- Action Buttons -->
-    <button id="startBtn" class="btn btn-start">
-      <span>▶ Start Quiz</span>
-    </button>
-    <button id="stopBtn" class="btn btn-stop hidden">
-      <span>■ Stop Quiz</span>
-    </button>
+    <div class="action-buttons">
+      <button id="startBtn" class="btn btn-start">
+        <span>▶ Start Quiz</span>
+      </button>
+      <button id="resumeBtn" class="btn btn-start hidden">
+        <span>▶ Resume Quiz</span>
+      </button>
+      <button id="stopBtn" class="btn btn-stop hidden">
+        <span>■ Stop Quiz</span>
+      </button>
+    </div>
   </div>
 
   <script src="popup.js"></script>

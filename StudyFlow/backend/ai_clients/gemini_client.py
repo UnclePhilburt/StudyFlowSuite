@@ -9,14 +9,15 @@ import google.generativeai as genai
 from StudyFlow.logging_utils import debug_log
 
 
-def get_gemini_answer_single(question, answers, attempt_num=1):
+def get_gemini_answer_single(question, answers, attempt_num=1, model_name='gemini-2.5-flash'):
     """
-    Get a single answer from Gemini 1.5 Flash.
+    Get a single answer from Gemini.
 
     Args:
         question (str): The quiz question text
         answers (list): List of answer choices
         attempt_num (int): Attempt number for logging
+        model_name (str): Gemini model to use
 
     Returns:
         dict: Answer response with index, text, confidence, reasoning
@@ -52,8 +53,8 @@ RULES:
 - correct_answer_index is 1-based (1, 2, 3, etc.)
 - Return ONLY valid JSON, no other text"""
 
-        # Use Gemini 2.5 Flash - latest stable model
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        # Use specified Gemini model
+        model = genai.GenerativeModel(model_name)
 
         response = model.generate_content(
             prompt,
@@ -64,7 +65,7 @@ RULES:
         )
 
         response_text = response.text.strip()
-        debug_log(f"📥 Gemini raw response: {response_text[:200]}...")
+        debug_log(f"📥 Gemini ({model_name}) raw response: {response_text[:200]}...")
 
         # Parse JSON - handle markdown code blocks
         if "```" in response_text:
@@ -80,7 +81,7 @@ RULES:
             response_text = "\n".join(json_lines)
 
         result = json.loads(response_text)
-        debug_log(f"🤖 Gemini attempt {attempt_num}: Answer={result.get('correct_answer_index')}, Confidence={result.get('confidence')}")
+        debug_log(f"🤖 Gemini ({model_name}) attempt {attempt_num}: Answer={result.get('correct_answer_index')}, Confidence={result.get('confidence')}")
 
         return result
 
@@ -95,26 +96,27 @@ RULES:
         return None
 
 
-def get_gemini_answer(question, answers):
+def get_gemini_answer(question, answers, model='gemini-2.5-flash'):
     """
-    Get answer from Gemini 1.5 Flash with 3-vote system for improved accuracy.
+    Get answer from Gemini with 3-vote system for improved accuracy.
     Calls Gemini 3 times and returns the majority answer.
 
     Args:
         question (str): The quiz question text
         answers (list): List of answer choices
+        model (str): Gemini model to use (default: gemini-2.5-flash)
 
     Returns:
         dict: Answer response with index, text, confidence, reasoning
     """
-    debug_log("🗳️ Starting 3-vote Gemini system...")
+    debug_log(f"🗳️ Starting 3-vote Gemini system with {model}...")
 
     votes = []
     results = []
 
     # Get 3 independent answers
     for i in range(3):
-        result = get_gemini_answer_single(question, answers, attempt_num=i+1)
+        result = get_gemini_answer_single(question, answers, attempt_num=i+1, model_name=model)
         if result and result.get('correct_answer_index'):
             votes.append(result['correct_answer_index'])
             results.append(result)
@@ -152,12 +154,13 @@ def get_gemini_answer(question, answers):
     return winning_result
 
 
-def get_gemini_essay(question):
+def get_gemini_essay(question, model='gemini-2.5-flash'):
     """
-    Generate an essay/short answer using Gemini 1.5 Flash.
+    Generate an essay/short answer using Gemini.
 
     Args:
         question (str): The essay question
+        model (str): Gemini model to use (default: gemini-2.5-flash)
 
     Returns:
         str: The generated essay answer
@@ -185,10 +188,10 @@ Provide an accurate answer. Follow these rules:
 
 Return ONLY the answer text, nothing else."""
 
-        # Use Gemini 2.5 Flash - latest stable model
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        # Use specified Gemini model
+        gemini_model = genai.GenerativeModel(model)
 
-        response = model.generate_content(
+        response = gemini_model.generate_content(
             prompt,
             generation_config={
                 'temperature': 0.7,
@@ -197,7 +200,7 @@ Return ONLY the answer text, nothing else."""
         )
 
         essay_answer = response.text.strip()
-        debug_log(f"📝 Gemini essay: Generated {len(essay_answer)} characters")
+        debug_log(f"📝 Gemini ({model}) essay: Generated {len(essay_answer)} characters")
 
         return essay_answer
 
