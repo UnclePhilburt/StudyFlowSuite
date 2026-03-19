@@ -171,6 +171,14 @@ function detectQuiz() {
   };
 
   console.log('=== QUIZ DETECTION DEBUG ===');
+  console.log('URL:', window.location.href);
+  console.log('Domain:', window.location.hostname);
+
+  // Check if this is Colibri Real Estate
+  const isColibri = window.location.hostname.includes('colibri');
+  if (isColibri) {
+    console.log('🎓 Colibri Real Estate detected!');
+  }
 
   // Look for any text that might be a question (very broad search)
   const allText = document.body.innerText;
@@ -188,6 +196,13 @@ function detectQuiz() {
     // Moodle
     '.qtext',
     '.formulation',
+    // Colibri Real Estate
+    '.quiz__question',
+    '.question__text',
+    '.assessment-question',
+    '[data-question-text]',
+    '[class*="quiz"]',
+    '[class*="assessment"]',
     // Generic
     'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
     '[class*="question"]',
