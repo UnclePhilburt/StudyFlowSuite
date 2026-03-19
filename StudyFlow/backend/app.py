@@ -1710,6 +1710,65 @@ Return ONLY the answer text, nothing else."""
 
 
 # ============ VISION API ENDPOINT ============
+@app.route("/api/send-download-link", methods=["POST"])
+def send_download_link():
+    """Send download link email to mobile users"""
+    try:
+        data = request.get_json()
+        email = data.get('email')
+
+        if not email:
+            return jsonify({'error': 'Email is required'}), 400
+
+        # Send email using SendGrid
+        message = Mail(
+            from_email=Email("info@studyflowsuite.com", "StudyFlow Suite"),
+            to_emails=email,
+            subject="StudyFlow Download Link - Open on Desktop",
+            html_content="""
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                    <h2 style="color: #667eea;">Open StudyFlow on Your Computer</h2>
+                    <p>You visited StudyFlow on your mobile device, but our Chrome extension only works on desktop computers.</p>
+                    <p style="margin: 30px 0;">
+                        <a href="https://unclephilburt.github.io/studyflowwebsite/"
+                           style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                                  color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px;
+                                  font-weight: bold;">
+                            Open on Desktop
+                        </a>
+                    </p>
+                    <h3 style="color: #1e293b;">Requirements:</h3>
+                    <ul style="line-height: 1.8;">
+                        <li>✅ Desktop or laptop computer</li>
+                        <li>✅ Chrome browser</li>
+                        <li>✅ Follow the installation guide on the website</li>
+                    </ul>
+                    <p style="margin-top: 30px; color: #64748b; font-size: 14px;">
+                        Questions? Visit our <a href="https://unclephilburt.github.io/studyflowwebsite/docs.html" style="color: #667eea;">FAQ page</a>.
+                    </p>
+                    <hr style="margin: 30px 0; border: none; border-top: 1px solid #e2e8f0;">
+                    <p style="color: #94a3b8; font-size: 12px; text-align: center;">
+                        StudyFlow Suite - AI-Powered Quiz Automation<br>
+                        <a href="https://unclephilburt.github.io/studyflowwebsite/" style="color: #667eea;">unclephilburt.github.io/studyflowwebsite</a>
+                    </p>
+                </div>
+            """
+        )
+
+        # Make sure sandbox is off
+        message.mail_settings = MailSettings(sandbox_mode=SandBoxMode(enable=False))
+
+        sg = SendGridAPIClient(os.getenv("SENDGRID_API_KEY"))
+        response = sg.send(message)
+
+        app.logger.info(f"✅ Download link sent to {email}")
+        return jsonify({'success': True, 'message': 'Email sent successfully'}), 200
+
+    except Exception as e:
+        app.logger.error(f"❌ Error sending download link: {e}")
+        return jsonify({'error': 'Failed to send email'}), 500
+
+
 @app.route("/api/vision", methods=["POST"])
 def vision_analyze():
     """
