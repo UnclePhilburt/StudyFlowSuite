@@ -178,6 +178,12 @@ function detectQuiz() {
   const isColibri = window.location.hostname.includes('colibri');
   if (isColibri) {
     console.log('🎓 Colibri Real Estate detected!');
+    // Check for iframes (Colibri uses iframe-based quizzes)
+    const iframes = document.querySelectorAll('iframe.resp-iframe, .form-wrap iframe');
+    if (iframes.length > 0) {
+      console.log(`Found ${iframes.length} quiz iframe(s)`);
+      console.log('⚠️ Note: Extension may need to run inside the iframe. Make sure the quiz content is loaded.');
+    }
   }
 
   // Look for any text that might be a question (very broad search)
@@ -196,13 +202,16 @@ function detectQuiz() {
     // Moodle
     '.qtext',
     '.formulation',
-    // Colibri Real Estate
+    // Colibri Real Estate (uses HubSpot forms + iframes)
     '.quiz__question',
     '.question__text',
     '.assessment-question',
     '[data-question-text]',
+    '.hs-form-field label',
+    '.form-wrap label',
     '[class*="quiz"]',
     '[class*="assessment"]',
+    '[class*="hs-form"]',
     // Generic
     'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
     '[class*="question"]',
@@ -299,7 +308,8 @@ function detectQuiz() {
   }
 
   // Find answer options (radio buttons, checkboxes, or text options)
-  let answerInputs = document.querySelectorAll('input[type="radio"], input[type="checkbox"]');
+  // Also check for HubSpot form checkboxes (Colibri Real Estate)
+  let answerInputs = document.querySelectorAll('input[type="radio"], input[type="checkbox"], .hs-form-checkbox input, .custom-control-input');
   console.log(`Found ${answerInputs.length} radio/checkbox inputs`);
 
   // If no inputs found, the quiz might use clickable divs instead
