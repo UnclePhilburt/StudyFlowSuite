@@ -9,6 +9,7 @@ let errorCount = 0;
 let lastQuestionText = null;
 let sameQuestionCount = 0;
 let currentTabId = null;
+let currentFrameId = 0; // Track which frame has the quiz (0 = main frame, >0 = iframe)
 let latestAnswer = null;
 
 // Quiz settings
@@ -91,6 +92,87 @@ function stopQuizMode() {
   updateBadge('', '');
 }
 
+// Helper function to send message to the correct frame
+function sendMessageToFrame(tabId, message, callback) {
+  const options = currentFrameId !== 0 ? { frameId: currentFrameId } : {};
+  chrome.tabs.sendMessage(tabId, message, options, callback);
+}
+
+// Helper function to detect quiz in all frames (including iframes)
+async function detectQuizInAllFrames(tabId) {
+  try {
+    // First, try the main frame (frameId: 0)
+    console.log('🔍 Trying main frame first...');
+    const mainFrameQuiz = await new Promise((resolve) => {
+      chrome.tabs.sendMessage(tabId, {
+        action: 'detectQuiz',
+        onePageMode: quizSettings.onePageMode
+      }, (response) => {
+        if (chrome.runtime.lastError) {
+          console.log('Main frame error:', chrome.runtime.lastError.message);
+          resolve(null);
+        } else {
+          resolve(response);
+        }
+      });
+    });
+
+    if (mainFrameQuiz && mainFrameQuiz.found) {
+      console.log('✅ Found quiz in main frame');
+      currentFrameId = 0;
+      return mainFrameQuiz;
+    }
+
+    // If not found in main frame, try to get all frames
+    console.log('Main frame no quiz, checking all frames...');
+    const frames = await chrome.webNavigation.getAllFrames({ tabId });
+    console.log(`🔍 Found ${frames.length} total frames`);
+
+    // Try each iframe (skip frameId 0 since we already tried it)
+    for (const frame of frames) {
+      if (frame.frameId === 0) continue; // Skip main frame
+      if (!frame.url || frame.url === 'about:blank') continue; // Skip empty frames
+
+      console.log(`  Checking frame ${frame.frameId}: ${frame.url.substring(0, 60)}...`);
+
+      try {
+        // First, try to inject content script into this frame if it doesn't respond
+        const quiz = await new Promise(async (resolve) => {
+          // Try sending message first
+          chrome.tabs.sendMessage(tabId, {
+            action: 'detectQuiz',
+            onePageMode: quizSettings.onePageMode
+          }, { frameId: frame.frameId }, async (response) => {
+            if (chrome.runtime.lastError) {
+              console.log(`    ❌ Frame ${frame.frameId} not responding. If you just installed the extension, please refresh this page.`);
+              resolve(null);
+            } else {
+              console.log(`    ✓ Frame ${frame.frameId} responded`);
+              resolve(response);
+            }
+          });
+        });
+
+        // If we found a quiz in this frame, return it
+        if (quiz && quiz.found) {
+          console.log(`✅ Found quiz in frame ${frame.frameId} (${frame.url})`);
+          currentFrameId = frame.frameId;
+          return quiz;
+        }
+      } catch (e) {
+        console.log(`    ⚠️ Frame ${frame.frameId} exception:`, e);
+        continue;
+      }
+    }
+
+    console.log('❌ No quiz found in any frame');
+    return null;
+  } catch (e) {
+    console.error('Error detecting quiz in frames:', e);
+    return null;
+  }
+}
+
 async function runQuizLoop() {
   while (isRunning) {
     try {
@@ -101,20 +183,8 @@ async function runQuizLoop() {
         continue;
       }
 
-      // Detect quiz on current tab
-      const quiz = await new Promise((resolve) => {
-        chrome.tabs.sendMessage(currentTabId, {
-          action: 'detectQuiz',
-          onePageMode: quizSettings.onePageMode
-        }, (response) => {
-          if (chrome.runtime.lastError) {
-            console.error('Error:', chrome.runtime.lastError);
-            resolve(null);
-          } else {
-            resolve(response);
-          }
-        });
-      });
+      // Detect quiz on current tab - try all frames (including iframes)
+      const quiz = await detectQuizInAllFrames(currentTabId);
 
       if (!quiz || !quiz.found) {
         // Check if this is the end of a one-page quiz
@@ -136,71 +206,7 @@ async function runQuizLoop() {
         continue;
       }
 
-      // Check if one-page mode is enabled
-      const isOnePageQuiz = quizSettings.onePageMode;
-
-      // Check if it's an essay question
-      if (quiz.isEssay) {
-        console.log('📝 Essay question detected - writing AI answer...');
-
-        // Get essay answer from AI
-        const essayAnswer = await getEssayAnswer(quiz.question);
-        console.log('AI Essay Answer:', essayAnswer.substring(0, 100));
-
-        // Fill in the essay field
-        await new Promise((resolve) => {
-          chrome.tabs.sendMessage(currentTabId, {
-            action: 'fillEssay',
-            essayAnswer: essayAnswer,
-            essayFieldId: quiz.essayFieldId
-          }, (response) => {
-            if (chrome.runtime.lastError) {
-              console.error('Error filling essay:', chrome.runtime.lastError);
-            }
-            resolve(response);
-          });
-        });
-
-        await sleep(1500);
-
-        // Only click submit if NOT a one-page quiz
-        if (!isOnePageQuiz) {
-          await new Promise((resolve) => {
-            chrome.tabs.sendMessage(currentTabId, { action: 'clickSubmit' }, (response) => {
-              if (chrome.runtime.lastError) {
-                console.error('Error clicking submit:', chrome.runtime.lastError);
-              }
-              resolve(response);
-            });
-          });
-        }
-
-        questionCount++;
-        console.log(`✅ Essay question ${questionCount} completed`);
-        updateBadge(questionCount.toString(), '#00c853');
-
-        // Check if we've hit the total questions limit
-        if (quizSettings.totalQuestions && questionCount >= quizSettings.totalQuestions) {
-          console.log('🎉 Reached total questions limit. Stopping quiz.');
-
-          // If one-page quiz, click submit now
-          if (isOnePageQuiz) {
-            await new Promise((resolve) => {
-              chrome.tabs.sendMessage(currentTabId, { action: 'clickSubmit' }, resolve);
-            });
-          }
-
-          stopQuizMode();
-          break;
-        }
-
-        // Use smart delay
-        const delay = calculateSmartDelay();
-        await sleep(delay);
-        continue; // Skip the multiple choice logic below
-      }
-
-      // Check if same question
+      // Check if same question (do this BEFORE processing to avoid duplicates)
       const currentQuestionText = quiz.question.substring(0, 200);
       if (currentQuestionText === lastQuestionText) {
         sameQuestionCount++;
@@ -218,14 +224,150 @@ async function runQuizLoop() {
         continue;
       }
 
-      // New question!
+      // New question detected!
       sameQuestionCount = 0;
       lastQuestionText = currentQuestionText;
       console.log('✅ New question detected:', currentQuestionText.substring(0, 50));
 
+      // Check if one-page mode is enabled
+      const isOnePageQuiz = quizSettings.onePageMode;
+
+      // Check if it's an essay question
+      if (quiz.isEssay) {
+        console.log('📝 Essay question detected - writing AI answer...');
+
+        // Get essay answer from AI
+        const essayAnswer = await getEssayAnswer(quiz.question);
+        console.log('AI Essay Answer:', essayAnswer.substring(0, 100));
+
+        // Fill in the essay field
+        await new Promise((resolve) => {
+          sendMessageToFrame(currentTabId, {
+            action: 'fillEssay',
+            essayAnswer: essayAnswer,
+            essayFieldId: quiz.essayFieldId,
+            isRichTextEditor: quiz.isRichTextEditor || false
+          }, (response) => {
+            if (chrome.runtime.lastError) {
+              console.error('Error filling essay:', chrome.runtime.lastError);
+            }
+            resolve(response);
+          });
+        });
+
+        // Calculate delay based on field type
+        // Rich Text Editor (essay): filled instantly, short delay
+        // Fill-in-blank: character-by-character typing, longer delay
+        let typingDelay;
+        if (quiz.isRichTextEditor) {
+          // Rich Text Editor - instant fill, just need short delay for visual confirmation
+          typingDelay = 1500;
+        } else {
+          // Fill-in-blank - character typing: 1-2s initial + (50-150ms per char) + 300ms blur + 2s buffer
+          // Use 150ms per char (max) to account for random delays
+          typingDelay = Math.max(3000, 2000 + (essayAnswer.length * 150) + 300 + 2000);
+        }
+        console.log(`⏱️ Waiting ${typingDelay}ms for ${quiz.isRichTextEditor ? 'Rich Text Editor' : 'fill-in-blank typing'} to complete visually...`);
+        await sleep(typingDelay);
+
+        // Mark question as answered
+        if (quiz.questionHash) {
+          await new Promise((resolve) => {
+            sendMessageToFrame(currentTabId, {
+              action: 'markQuestionAnswered',
+              questionHash: quiz.questionHash
+            }, resolve);
+          });
+        }
+
+        // Only click submit if NOT a one-page quiz
+        // One-page quizzes have all questions visible - no submit between questions
+        if (!isOnePageQuiz) {
+          const submitResponse = await new Promise((resolve) => {
+            sendMessageToFrame(currentTabId, { action: 'clickSubmit' }, (response) => {
+              if (chrome.runtime.lastError) {
+                console.error('Error clicking submit:', chrome.runtime.lastError);
+              }
+              resolve(response);
+            });
+          });
+
+          // Button was auto-clicked, wait for page to load new content
+          if (submitResponse && submitResponse.success) {
+            console.log('✅ Submit button clicked, waiting for next question to load...');
+
+            // Wait minimum 2 seconds for page transition to start
+            await sleep(2000);
+
+            // Poll for new question to appear (wait up to 8 more seconds)
+            const oldQuestion = lastQuestionText;
+            let newQuestionDetected = false;
+            for (let i = 0; i < 16; i++) {
+              await sleep(500); // Check every 500ms
+
+              // Try to detect quiz
+              const checkQuiz = await detectQuizInAllFrames(currentTabId);
+              if (checkQuiz && checkQuiz.found && checkQuiz.question) {
+                const checkQuestionText = checkQuiz.question.substring(0, 200);
+                if (checkQuestionText !== oldQuestion) {
+                  console.log('🔄 New question detected after button click!');
+                  console.log(`   Old: "${oldQuestion?.substring(0, 50)}"`);
+                  console.log(`   New: "${checkQuestionText.substring(0, 50)}"`);
+                  newQuestionDetected = true;
+                  break;
+                }
+              }
+            }
+
+            if (!newQuestionDetected) {
+              console.log('⚠️ No new question detected after 10 seconds, continuing anyway...');
+            }
+
+            // Reset lastQuestionText so we can detect the new question
+            lastQuestionText = null;
+            console.log('🔄 Reset lastQuestionText, ready to detect new question');
+          }
+        } else {
+          // One-page mode: just continue to next question without clicking submit
+          console.log('📄 One-page mode: Skipping submit button, moving to next question');
+        }
+
+        questionCount++;
+        console.log(`✅ Essay question ${questionCount} completed`);
+        updateBadge(questionCount.toString(), '#00c853');
+
+        // Check if we've hit the total questions limit
+        if (quizSettings.totalQuestions && questionCount >= quizSettings.totalQuestions) {
+          console.log('🎉 Reached total questions limit. Stopping quiz.');
+
+          // If one-page quiz, click submit now
+          if (isOnePageQuiz) {
+            await new Promise((resolve) => {
+              sendMessageToFrame(currentTabId, { action: 'clickSubmit' }, resolve);
+            });
+          }
+
+          stopQuizMode();
+          break;
+        }
+
+        // Use smart delay
+        const delay = calculateSmartDelay();
+        await sleep(delay);
+        continue; // Skip the multiple choice logic below
+      }
+
+      // Multiple choice question - continue with normal flow below
+
       // Get AI answer
       const answer = await getAIAnswer(quiz);
-      console.log('AI Answer:', answer.correct_index);
+
+      // Handle both single and multiple answer questions
+      if (quiz.isMultipleAnswer) {
+        console.log('AI Answer (Multiple):', answer.correct_indices);
+      } else {
+        console.log('AI Answer:', answer.correct_index);
+      }
 
       // Clean the question text (remove common headers)
       let cleanQuestion = quiz.question;
@@ -244,7 +386,15 @@ async function runQuizLoop() {
       cleanQuestion = cleanQuestion.trim();
 
       // Store latest answer for history (with unique ID to prevent duplicates)
-      const answerText = quiz.answers[answer.correct_index - 1]?.text || `Answer #${answer.correct_index}`;
+      let answerText;
+      if (quiz.isMultipleAnswer) {
+        // Multiple answers - join them
+        const answerTexts = answer.correct_indices.map(idx => quiz.answers[idx - 1]?.text || `Answer #${idx}`);
+        answerText = answerTexts.join(', ');
+      } else {
+        answerText = quiz.answers[answer.correct_index - 1]?.text || `Answer #${answer.correct_index}`;
+      }
+
       latestAnswer = {
         id: `${Date.now()}-${currentQuestionText.substring(0, 50)}`, // Unique ID
         question: cleanQuestion,
@@ -253,32 +403,122 @@ async function runQuizLoop() {
         timestamp: Date.now()
       };
 
-      // Click answer
-      await new Promise((resolve) => {
-        chrome.tabs.sendMessage(currentTabId, {
-          action: 'clickAnswer',
-          answerIndex: answer.correct_index,
-          radioGroupId: quiz.radioGroupId
-        }, (response) => {
-          if (chrome.runtime.lastError) {
-            console.error('Error clicking answer:', chrome.runtime.lastError);
-          }
-          resolve(response);
+      // Click answer(s)
+      if (quiz.isMultipleAnswer) {
+        // Multiple-answer question: click multiple checkboxes
+        for (const answerIndex of answer.correct_indices) {
+          await new Promise((resolve) => {
+            sendMessageToFrame(currentTabId, {
+              action: 'clickAnswer',
+              answerIndex: answerIndex,
+              radioGroupId: quiz.radioGroupId
+            }, (response) => {
+              if (chrome.runtime.lastError) {
+                console.error('Error clicking checkbox:', chrome.runtime.lastError);
+              }
+              resolve(response);
+            });
+          });
+          await sleep(500); // Small delay between checkbox clicks
+        }
+      } else {
+        // Single-answer question: click one radio button
+        await new Promise((resolve) => {
+          sendMessageToFrame(currentTabId, {
+            action: 'clickAnswer',
+            answerIndex: answer.correct_index,
+            radioGroupId: quiz.radioGroupId
+          }, (response) => {
+            if (chrome.runtime.lastError) {
+              console.error('Error clicking answer:', chrome.runtime.lastError);
+            }
+            resolve(response);
+          });
         });
-      });
+      }
 
       await sleep(1500);
 
-      // Only click submit if NOT a one-page quiz
-      if (!isOnePageQuiz) {
+      // Mark question as answered
+      if (quiz.questionHash) {
         await new Promise((resolve) => {
-          chrome.tabs.sendMessage(currentTabId, { action: 'clickSubmit' }, (response) => {
+          sendMessageToFrame(currentTabId, {
+            action: 'markQuestionAnswered',
+            questionHash: quiz.questionHash
+          }, resolve);
+        });
+      }
+
+      // Only click submit if NOT a one-page quiz
+      // One-page quizzes have all questions visible - no submit between questions
+      if (!isOnePageQuiz) {
+        const submitResponse = await new Promise((resolve) => {
+          sendMessageToFrame(currentTabId, { action: 'clickSubmit' }, (response) => {
             if (chrome.runtime.lastError) {
               console.error('Error clicking submit:', chrome.runtime.lastError);
             }
             resolve(response);
           });
         });
+
+        // Button was auto-clicked, wait for page to load new content
+        if (submitResponse && submitResponse.success) {
+          console.log('✅ Submit button clicked, waiting for next question to load...');
+
+          // Wait minimum 2 seconds for page transition to start
+          await sleep(2000);
+
+          // Poll for new question to appear (wait up to 8 more seconds)
+          const oldQuestion = lastQuestionText;
+          console.log(`🔍 Starting poll for new question. Old question: "${oldQuestion?.substring(0, 50)}"`);
+          let newQuestionDetected = false;
+          for (let i = 0; i < 16; i++) {
+            await sleep(500); // Check every 500ms
+
+            // Try to detect quiz
+            const checkQuiz = await detectQuizInAllFrames(currentTabId);
+            if (checkQuiz && checkQuiz.found && checkQuiz.question) {
+              const checkQuestionText = checkQuiz.question.substring(0, 200);
+              console.log(`   Poll ${i + 1}/16: Found question: "${checkQuestionText.substring(0, 50)}"`);
+
+              // Filter out warning/confirmation messages that aren't real questions
+              const isWarningMessage = checkQuestionText.toLowerCase().includes('upon submission') ||
+                                      checkQuestionText.toLowerCase().includes('confirm submission') ||
+                                      checkQuestionText.toLowerCase().includes('you will not be able to change') ||
+                                      checkQuestionText.toLowerCase().includes('are you sure') ||
+                                      checkQuestionText.toLowerCase().includes('cannot be changed') ||
+                                      checkQuestionText.toLowerCase().includes('closeup');
+
+              if (isWarningMessage) {
+                console.log(`   Poll ${i + 1}/16: Ignoring warning/confirmation message`);
+                continue;
+              }
+
+              if (checkQuestionText !== oldQuestion) {
+                console.log('🔄 New question detected after button click!');
+                console.log(`   Old: "${oldQuestion?.substring(0, 50)}"`);
+                console.log(`   New: "${checkQuestionText.substring(0, 50)}"`);
+                newQuestionDetected = true;
+                break;
+              } else {
+                console.log(`   Poll ${i + 1}/16: Same question, continuing...`);
+              }
+            } else {
+              console.log(`   Poll ${i + 1}/16: No quiz found`);
+            }
+          }
+
+          if (!newQuestionDetected) {
+            console.log('⚠️ No new question detected after 10 seconds, continuing anyway...');
+          }
+
+          // Reset lastQuestionText so we can detect the new question
+          lastQuestionText = null;
+          console.log('🔄 Reset lastQuestionText, ready to detect new question');
+        }
+      } else {
+        // One-page mode: just continue to next question without clicking submit
+        console.log('📄 One-page mode: Skipping submit button, moving to next question');
       }
 
       questionCount++;
@@ -292,7 +532,7 @@ async function runQuizLoop() {
         // If one-page quiz, click submit now
         if (isOnePageQuiz) {
           await new Promise((resolve) => {
-            chrome.tabs.sendMessage(currentTabId, { action: 'clickSubmit' }, (response) => {
+            sendMessageToFrame(currentTabId, { action: 'clickSubmit' }, (response) => {
               if (chrome.runtime.lastError) {
                 console.error('Error clicking submit:', chrome.runtime.lastError);
               }
@@ -344,7 +584,7 @@ async function runQuizLoop() {
         // Click submit to move to next question
         try {
           await new Promise((resolve) => {
-            chrome.tabs.sendMessage(currentTabId, { action: 'clickSubmit' }, (response) => {
+            sendMessageToFrame(currentTabId, { action: 'clickSubmit' }, (response) => {
               if (chrome.runtime.lastError) {
                 console.error('Error clicking submit:', chrome.runtime.lastError);
               }
@@ -369,7 +609,8 @@ async function getAIAnswer(quiz) {
   const requestData = {
     question: quiz.question,
     answers: quiz.answers.map(a => a.text),
-    model: quizSettings.aiModel || 'gemini-2.5-flash'
+    model: quizSettings.aiModel || 'gemini-2.5-flash',
+    isMultipleAnswer: quiz.isMultipleAnswer || false  // Pass checkbox flag to backend
   };
 
   console.log('Sending to API:', requestData);
@@ -406,10 +647,19 @@ async function getAIAnswer(quiz) {
   }
 
   const data = await response.json();
-  return {
-    correct_index: data.correct_answer_index,
-    reasoning: data.reasoning || 'No explanation provided'
-  };
+
+  // Handle both single-answer and multiple-answer responses
+  if (quiz.isMultipleAnswer) {
+    return {
+      correct_indices: data.correct_answer_indices || [data.correct_answer_index], // Fallback to single if API didn't return array
+      reasoning: data.reasoning || 'No explanation provided'
+    };
+  } else {
+    return {
+      correct_index: data.correct_answer_index,
+      reasoning: data.reasoning || 'No explanation provided'
+    };
+  }
 }
 
 async function getEssayAnswer(question) {
@@ -489,6 +739,142 @@ function calculateSmartDelay() {
   console.log(`Smart delay: ${Math.round(clampedDelay / 1000)}s (${questionsLeft} questions left, ${remainingMinutes.toFixed(1)}min remaining)`);
 
   return clampedDelay;
+}
+
+// Listen for navigation events to auto-resume after manual button click
+chrome.webNavigation.onCompleted.addListener((details) => {
+  // Only care about the main frame or specific iframe
+  if (details.tabId === currentTabId && waitingForNavigation) {
+    console.log('🔄 Navigation detected - page loaded. Resuming quiz loop...');
+
+    // Small delay to let the page fully load
+    setTimeout(() => {
+      waitingForNavigation = false;
+      isPaused = false;
+      lastQuestionText = null; // Reset to detect new question
+
+      // Clear the answered questions for the new page
+      chrome.tabs.sendMessage(currentTabId, { action: 'resetAnsweredQuestions' }, () => {
+        if (chrome.runtime.lastError) {
+          console.log('Could not reset answered questions (page might not be ready yet)');
+        }
+      });
+
+      console.log('✅ Quiz loop resumed automatically');
+    }, 2000); // Wait 2 seconds for page to fully render
+  }
+});
+
+// For Learnosity/Canvas that loads content dynamically without page navigation,
+// poll for content changes after user clicks Next button
+let contentChangePollingInterval = null;
+
+async function startContentChangePolling() {
+  if (contentChangePollingInterval) return; // Already polling
+
+  console.log('🔄 Starting content change polling (for dynamic question loading)...');
+  let pollCount = 0;
+  const maxPolls = 30; // Poll for max 30 seconds
+
+  contentChangePollingInterval = setInterval(async () => {
+    pollCount++;
+
+    if (!waitingForNavigation || pollCount > maxPolls) {
+      // Either content changed and we resumed, or timeout
+      clearInterval(contentChangePollingInterval);
+      contentChangePollingInterval = null;
+      if (pollCount > maxPolls) {
+        console.log('⏱️ Content change polling timeout - stopping');
+      }
+      return;
+    }
+
+    console.log(`🔄 Polling for content changes... (attempt ${pollCount}/${maxPolls})`);
+
+    // Check main frame first
+    const mainFrameData = await new Promise((resolve) => {
+      chrome.tabs.sendMessage(currentTabId, { action: 'detectQuiz' }, (response) => {
+        if (chrome.runtime.lastError) {
+          resolve(null);
+        } else {
+          resolve(response);
+        }
+      });
+    });
+
+    if (mainFrameData && mainFrameData.found && mainFrameData.question !== lastQuestionText) {
+      console.log('🔄 New question detected in main frame via polling!');
+      console.log(`Old question: "${lastQuestionText}"`);
+      console.log(`New question: "${mainFrameData.question}"`);
+
+      // Stop polling
+      clearInterval(contentChangePollingInterval);
+      contentChangePollingInterval = null;
+
+      // Resume quiz loop
+      setTimeout(() => {
+        waitingForNavigation = false;
+        isPaused = false;
+        lastQuestionText = null;
+
+        // Clear the answered questions for the new question
+        chrome.tabs.sendMessage(currentTabId, { action: 'resetAnsweredQuestions' }, () => {
+          if (chrome.runtime.lastError) {
+            console.log('Could not reset answered questions');
+          }
+        });
+
+        console.log('✅ Quiz loop resumed after detecting content change');
+      }, 1500); // Small delay to let content fully render
+      return;
+    }
+
+    // Check all iframes
+    chrome.webNavigation.getAllFrames({ tabId: currentTabId }, async (frames) => {
+      if (!frames) return;
+
+      for (const frame of frames) {
+        if (frame.frameId === 0) continue; // Skip main frame (already checked)
+
+        const frameData = await new Promise((resolve) => {
+          sendMessageToFrame(currentTabId, { action: 'detectQuiz' }, (response) => {
+            if (chrome.runtime.lastError) {
+              resolve(null);
+            } else {
+              resolve(response);
+            }
+          }, frame.frameId);
+        });
+
+        if (frameData && frameData.found && frameData.question !== lastQuestionText) {
+          console.log(`🔄 New question detected in frame ${frame.frameId} via polling!`);
+          console.log(`Old question: "${lastQuestionText}"`);
+          console.log(`New question: "${frameData.question}"`);
+
+          // Stop polling
+          clearInterval(contentChangePollingInterval);
+          contentChangePollingInterval = null;
+
+          // Resume quiz loop
+          setTimeout(() => {
+            waitingForNavigation = false;
+            isPaused = false;
+            lastQuestionText = null;
+
+            // Clear the answered questions for the new question
+            chrome.tabs.sendMessage(currentTabId, { action: 'resetAnsweredQuestions' }, () => {
+              if (chrome.runtime.lastError) {
+                console.log('Could not reset answered questions');
+              }
+            });
+
+            console.log('✅ Quiz loop resumed after detecting content change');
+          }, 1500); // Small delay to let content fully render
+          return;
+        }
+      }
+    });
+  }, 1000); // Poll every 1 second
 }
 
 console.log('StudyFlowSuite background worker loaded');

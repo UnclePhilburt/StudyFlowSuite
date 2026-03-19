@@ -1551,32 +1551,11 @@ def answer_question():
 
         question = data.get("question", "")
         answers = data.get("answers", [])
+        is_multiple_answer = data.get("isMultipleAnswer", False)  # New field for checkbox questions
         model = data.get("model", "gemini-2.5-flash")  # Get model from request, default to 2.5 Flash
 
         if not question or not answers:
             return jsonify({"error": "Missing question or answers"}), 400
-
-        # Format answers for the prompt
-        answers_text = "\n".join(f"{i+1}. {a}" for i, a in enumerate(answers))
-
-        prompt = f"""You are answering a quiz question. Analyze carefully and select the correct answer.
-
-Question: {question}
-
-Answer options:
-{answers_text}
-
-Return a JSON object with this EXACT structure:
-{{
-    "correct_answer_index": <number 1-{len(answers)}>,
-    "correct_answer_text": "<exact text of correct answer>",
-    "confidence": "high/medium/low",
-    "reasoning": "<brief explanation why this is correct>"
-}}
-
-RULES:
-- correct_answer_index is 1-based (1, 2, 3, etc.)
-- Return ONLY valid JSON, no other text"""
 
         # Use OpenAI API (gpt-4o-mini for speed/cost, gpt-4o for accuracy)
         from openai import OpenAI
@@ -1587,7 +1566,32 @@ RULES:
 
         answers_text = "\n".join(f"{i+1}. {a}" for i, a in enumerate(answers))
 
-        prompt = f"""Answer this quiz question and return ONLY a JSON object.
+        # Different prompts for single-answer vs multiple-answer questions
+        if is_multiple_answer:
+            prompt = f"""Answer this quiz question that allows MULTIPLE correct answers (checkboxes). Return ONLY a JSON object.
+
+Question: {question}
+
+Options:
+{answers_text}
+
+This question allows selecting MULTIPLE correct answers. Identify ALL answers that are correct.
+
+Return this exact JSON format:
+{{
+    "correct_answer_indices": [<array of numbers, e.g., [1, 3, 4]>],
+    "correct_answer_texts": ["<first correct answer>", "<second correct answer>", ...],
+    "confidence": "high/medium/low",
+    "reasoning": "<brief explanation why these answers are correct>"
+}}
+
+RULES:
+- correct_answer_indices is 1-based (1, 2, 3, etc.)
+- Include ALL correct answers in the array
+- If only one answer is correct, return array with one element: [2]
+- Return ONLY valid JSON, no markdown, no other text."""
+        else:
+            prompt = f"""Answer this quiz question and return ONLY a JSON object.
 
 Question: {question}
 
@@ -1613,10 +1617,16 @@ Return ONLY valid JSON, no markdown, no other text."""
 
         result = json.loads(response.choices[0].message.content)
 
-        if not result or not result.get('correct_answer_index'):
-            return jsonify({"error": "AI processing failed"}), 500
+        # Validate result based on question type
+        if is_multiple_answer:
+            if not result or not result.get('correct_answer_indices'):
+                return jsonify({"error": "AI processing failed"}), 500
+            debug_log(f"TEXT API (OpenAI {openai_model}) MULTIPLE-ANSWER: Answers={result.get('correct_answer_indices')}, Confidence={result.get('confidence')}")
+        else:
+            if not result or not result.get('correct_answer_index'):
+                return jsonify({"error": "AI processing failed"}), 500
+            debug_log(f"TEXT API (OpenAI {openai_model}): Answer={result.get('correct_answer_index')}, Confidence={result.get('confidence')}")
 
-        debug_log(f"TEXT API (OpenAI {openai_model}): Answer={result.get('correct_answer_index')}, Confidence={result.get('confidence')}")
         return jsonify(result), 200
 
     except json.JSONDecodeError as e:

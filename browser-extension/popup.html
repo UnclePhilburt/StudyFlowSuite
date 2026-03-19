@@ -49,21 +49,10 @@
     /* Header */
     .header {
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      padding: 24px 20px;
+      padding: 16px 20px;
       color: white;
       position: relative;
       overflow: hidden;
-    }
-
-    .header::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: url('data:image/svg+xml,<svg width="100" height="100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="40" fill="rgba(255,255,255,0.05)"/></svg>');
-      opacity: 0.3;
     }
 
     .header-content {
@@ -75,12 +64,11 @@
       display: flex;
       align-items: center;
       gap: 12px;
-      margin-bottom: 8px;
     }
 
     .brand-icon {
-      width: 32px;
-      height: 32px;
+      width: 28px;
+      height: 28px;
       background: rgba(255, 255, 255, 0.2);
       border-radius: 8px;
       display: flex;
@@ -90,12 +78,12 @@
     }
 
     .brand-icon img {
-      width: 20px;
-      height: 20px;
+      width: 18px;
+      height: 18px;
     }
 
     .brand h1 {
-      font-size: 18px;
+      font-size: 16px;
       font-weight: 700;
       letter-spacing: -0.5px;
     }
@@ -109,36 +97,6 @@
       margin-left: auto;
     }
 
-    .status-bar {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 13px;
-      opacity: 0.9;
-    }
-
-    .status-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: #4ade80;
-      animation: pulse 2s ease-in-out infinite;
-    }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
-    }
-
-    .status-dot.idle {
-      background: #94a3b8;
-      animation: none;
-    }
-
-    .status-dot.error {
-      background: #f87171;
-    }
-
     /* Main Content */
     .content {
       flex: 1;
@@ -146,83 +104,16 @@
       overflow-y: auto;
     }
 
-    /* Stats */
-    .stats {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-      margin-bottom: 20px;
-    }
-
-    .stat {
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
-      border-radius: 12px;
-      padding: 16px;
-      text-align: center;
-      transition: all 0.2s;
-    }
-
-    .stat:hover {
-      border-color: #667eea;
-      transform: translateY(-2px);
-      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1);
-    }
-
-    .stat-value {
-      font-size: 32px;
-      font-weight: 700;
-      color: #1e293b;
-      line-height: 1;
-      margin-bottom: 4px;
-    }
-
-    .stat-label {
-      font-size: 11px;
-      color: #64748b;
-      font-weight: 500;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-
     /* Settings Section */
     .section {
       margin-bottom: 20px;
     }
 
-    .section-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 12px;
-      cursor: pointer;
-      user-select: none;
-    }
-
-    .section-title {
-      font-size: 12px;
-      font-weight: 600;
-      color: #64748b;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-
-    .section-toggle {
-      font-size: 10px;
-      color: #94a3b8;
-    }
-
-    .section-content {
+    .settings-row {
       display: grid;
+      grid-template-columns: 1fr 1fr;
       gap: 12px;
-      overflow: hidden;
-      transition: all 0.3s ease;
-    }
-
-    .section-content.collapsed {
-      max-height: 0;
-      opacity: 0;
-      margin-top: 0;
+      margin-bottom: 20px;
     }
 
     .input-group {
@@ -232,9 +123,9 @@
     .input-group label {
       display: block;
       font-size: 12px;
-      font-weight: 500;
+      font-weight: 600;
       color: #475569;
-      margin-bottom: 6px;
+      margin-bottom: 8px;
     }
 
     .input-group input,
@@ -243,7 +134,7 @@
       background: #fff;
       border: 1.5px solid #e2e8f0;
       border-radius: 8px;
-      padding: 10px 12px;
+      padding: 12px 14px;
       color: #1e293b;
       font-size: 13px;
       font-weight: 500;
@@ -263,19 +154,33 @@
     }
 
     .input-hint {
-      font-size: 10px;
+      font-size: 11px;
       color: #94a3b8;
-      margin-top: 4px;
+      margin-top: 6px;
+      line-height: 1.4;
+    }
+
+    .clear-setup-link {
+      font-size: 11px;
+      color: #dc2626;
+      margin-top: 8px;
+      cursor: pointer;
+      text-decoration: underline;
+      transition: color 0.2s;
+    }
+
+    .clear-setup-link:hover {
+      color: #b91c1c;
     }
 
     .checkbox-wrapper {
       display: flex;
       align-items: center;
-      gap: 10px;
-      padding: 12px;
+      gap: 12px;
+      padding: 14px;
       background: #f8fafc;
       border: 1.5px solid #e2e8f0;
-      border-radius: 8px;
+      border-radius: 10px;
       cursor: pointer;
       transition: all 0.2s;
     }
@@ -286,19 +191,23 @@
     }
 
     .checkbox-wrapper input[type="checkbox"] {
-      width: 18px;
-      height: 18px;
+      width: 20px;
+      height: 20px;
       cursor: pointer;
       accent-color: #667eea;
     }
 
     .checkbox-wrapper label {
       flex: 1;
-      font-size: 12px;
+      font-size: 13px;
       font-weight: 500;
       color: #475569;
       cursor: pointer;
       margin: 0;
+    }
+
+    input[type="checkbox"].toggle-input {
+      display: none;
     }
 
     /* Buttons */
@@ -364,71 +273,69 @@
 
     /* User Profile */
     .user-profile {
-      padding: 20px;
+      padding: 10px 20px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      background: #fff;
-      border-bottom: 1px solid #e2e8f0;
+      background: #f8fafc;
+      border-top: 1px solid #e2e8f0;
     }
 
     .user-info {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
       flex: 1;
     }
 
     .user-avatar {
-      width: 42px;
-      height: 42px;
+      width: 28px;
+      height: 28px;
       border-radius: 50%;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       display: flex;
       align-items: center;
       justify-content: center;
       color: white;
-      font-weight: 700;
-      font-size: 17px;
-      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.25);
+      font-weight: 600;
+      font-size: 13px;
     }
 
     .user-details {
       display: flex;
-      flex-direction: column;
-      gap: 3px;
+      align-items: center;
+      gap: 8px;
     }
 
     .user-name {
-      font-size: 15px;
+      font-size: 12px;
       font-weight: 600;
       color: #1e293b;
-      line-height: 1.2;
     }
 
     .user-plan {
-      font-size: 11px;
+      font-size: 10px;
       color: #64748b;
       text-transform: uppercase;
-      letter-spacing: 0.8px;
+      letter-spacing: 0.5px;
       font-weight: 600;
     }
 
     .logout-btn {
-      background: #f1f5f9;
+      background: transparent;
       border: none;
-      color: #64748b;
-      font-size: 12px;
+      color: #94a3b8;
+      font-size: 11px;
       cursor: pointer;
-      padding: 8px 14px;
-      border-radius: 8px;
+      padding: 4px 8px;
+      border-radius: 6px;
       transition: all 0.2s;
-      font-weight: 600;
+      font-weight: 500;
     }
 
     .logout-btn:hover {
       background: #e2e8f0;
-      color: #475569;
+      color: #64748b;
     }
 
     /* Welcome Animation */
@@ -534,18 +441,6 @@
 </head>
 <body>
   <div class="container">
-    <!-- User Profile -->
-    <div class="user-profile" id="userProfile">
-      <div class="user-info">
-        <div class="user-avatar" id="userAvatar">?</div>
-        <div class="user-details">
-          <div class="user-name" id="userName">Loading...</div>
-          <div class="user-plan" id="userPlan">Free Plan</div>
-        </div>
-      </div>
-      <button class="logout-btn" id="logoutBtn">Logout</button>
-    </div>
-
     <!-- Header -->
     <div class="header">
       <div class="header-content">
@@ -556,69 +451,57 @@
           <h1>StudyFlow</h1>
           <span class="version">v0.2.0</span>
         </div>
-        <div class="status-bar">
-          <div class="status-dot idle" id="statusDot"></div>
-          <span id="statusText">Ready to start</span>
-        </div>
       </div>
     </div>
 
     <!-- Content -->
     <div class="content">
-      <!-- Stats -->
-      <div class="stats">
-        <div class="stat">
-          <div class="stat-value" id="questionCount">0</div>
-          <div class="stat-label">Answered</div>
-        </div>
-        <div class="stat">
-          <div class="stat-value" id="errorCount">0</div>
-          <div class="stat-label">Errors</div>
-        </div>
-      </div>
-
       <!-- Quick Settings -->
       <div class="section">
         <div class="input-group">
-          <label>AI Model</label>
+          <label>Model Selection</label>
           <select id="aiModel">
-            <option value="gpt-4o-mini">GPT-4o Mini (Recommended)</option>
-            <option value="gpt-4o">GPT-4o (Most Accurate)</option>
+            <option value="gpt-4o-mini">Basic Model</option>
+            <option value="gpt-4o">Advanced Model (Pro Only)</option>
           </select>
-          <div class="input-hint">Mini: $0.15/1k • Pro: $2.50/1k questions</div>
+          <div class="input-hint" id="modelHint">Basic: Fast & accurate • Advanced: Maximum accuracy</div>
         </div>
       </div>
 
-      <!-- Advanced Settings -->
-      <div class="section">
-        <div class="section-header" onclick="toggleSection('advanced')">
-          <div class="section-title">Advanced Settings</div>
-          <div class="section-toggle" id="advancedToggle">▼</div>
+      <!-- Settings Grid -->
+      <div class="settings-row">
+        <div class="input-group">
+          <label>Question Limit</label>
+          <input type="number" id="totalQuestions" placeholder="Unlimited">
+          <div class="input-hint">Stop after N questions</div>
         </div>
-        <div class="section-content" id="advancedContent">
-          <div class="input-group">
-            <label>Question Limit</label>
-            <input type="number" id="totalQuestions" placeholder="Unlimited">
-            <div class="input-hint">Stop after N questions</div>
-          </div>
-          <div class="input-group">
-            <label>Target Time (minutes)</label>
-            <input type="number" id="targetTime" placeholder="Auto pace">
-            <div class="input-hint">Adds delays between questions</div>
-          </div>
-          <div class="checkbox-wrapper">
-            <input type="checkbox" id="onePageMode">
-            <label for="onePageMode">One-page quiz mode</label>
-          </div>
+        <div class="input-group">
+          <label>Target Time (min)</label>
+          <input type="number" id="targetTime" placeholder="Auto pace">
+          <div class="input-hint">Adds delays</div>
         </div>
       </div>
+
+      <!-- Answer Mode -->
+      <div class="section">
+        <div class="input-group">
+          <label>Answer Mode</label>
+          <select id="quizMode">
+            <option value="sequential">Sequential - One question per page with auto-navigation</option>
+            <option value="multi-question">Multi-Question - Multiple questions per page, manual navigation</option>
+            <option value="single-page">Single-Page - All questions on one page</option>
+          </select>
+          <div class="input-hint">How questions are displayed in your assignment</div>
+        </div>
+      </div>
+
     </div>
 
     <!-- Actions -->
     <div class="actions">
       <button id="startBtn" class="btn btn-primary">
         <span>▶</span>
-        <span>Start Quiz</span>
+        <span>Start Assistant</span>
       </button>
       <button id="resumeBtn" class="btn btn-primary hidden">
         <span>▶</span>
@@ -626,27 +509,23 @@
       </button>
       <button id="stopBtn" class="btn btn-danger hidden">
         <span>■</span>
-        <span>Stop Quiz</span>
+        <span>Stop Assistant</span>
       </button>
-      <button id="clearSetup" class="btn btn-secondary">
-        <span>🗑️</span>
-        <span>Clear Site Setup</span>
-      </button>
+    </div>
+
+    <!-- User Profile -->
+    <div class="user-profile" id="userProfile">
+      <div class="user-info">
+        <div class="user-avatar" id="userAvatar">?</div>
+        <div class="user-details">
+          <span class="user-name" id="userName">Loading...</span>
+          <span class="user-plan" id="userPlan">Free Plan</span>
+        </div>
+      </div>
+      <button class="logout-btn" id="logoutBtn">Logout</button>
     </div>
   </div>
 
-  <script>
-    function toggleSection(id) {
-      const content = document.getElementById(id + 'Content');
-      const toggle = document.getElementById(id + 'Toggle');
-      content.classList.toggle('collapsed');
-      toggle.textContent = content.classList.contains('collapsed') ? '▶' : '▼';
-    }
-
-    // Start collapsed
-    document.getElementById('advancedContent').classList.add('collapsed');
-    document.getElementById('advancedToggle').textContent = '▶';
-  </script>
   <script src="auth.js"></script>
   <script src="popup.js"></script>
 </body>
