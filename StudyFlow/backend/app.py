@@ -2788,11 +2788,15 @@ def search_notes():
             match_count=5  # Top 5 results
         )
 
+        print(f"🔎 Search returned {len(search_results) if search_results else 0} results")
+
         if not search_results:
+            print("⚠️ No search results found, returning empty array")
             return jsonify({"results": []}), 200
 
         # Format results with hints
         formatted_results = []
+        print(f"📝 Processing {len(search_results)} results...")
 
         for result in search_results:
             # Get note filename
@@ -2838,7 +2842,7 @@ def generate_hint_from_text(question, text):
             return "Review this section carefully to find the answer."
 
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        model = genai.GenerativeModel('gemini-3-flash-preview')
 
         prompt = f"""You are a study tutor. A student asked: "{question}"
 

@@ -147,7 +147,7 @@ def anonymize_chunks_batch(chunk_texts):
     """
     try:
         genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-        model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        model = genai.GenerativeModel('gemini-3-flash-preview')
 
         anonymized = []
 
