@@ -1257,6 +1257,157 @@ def view_qa():
         return f"<h1>Error:</h1><p>{e}</p>"
 
 
+@app.route("/admin/view-questions")
+def view_questions():
+    """Admin page to view all questions from the questions table"""
+    try:
+        conn = psycopg2.connect(os.environ["DATABASE_URL"])
+        cur = conn.cursor()
+
+        # Get filter parameters
+        user_id_filter = request.args.get('user_id', None)
+        question_type_filter = request.args.get('type', None)
+        limit = int(request.args.get('limit', 100))
+
+        # Build query with filters
+        query = "SELECT q.id, q.user_id, u.email, q.question_text, q.question_type, q.answers_json, q.ai_answer, q.ai_reasoning, q.created_at FROM questions q LEFT JOIN users u ON q.user_id = u.id WHERE 1=1"
+        params = []
+
+        if user_id_filter:
+            query += " AND q.user_id = %s"
+            params.append(int(user_id_filter))
+
+        if question_type_filter:
+            query += " AND q.question_type = %s"
+            params.append(question_type_filter)
+
+        query += " ORDER BY q.created_at DESC LIMIT %s"
+        params.append(limit)
+
+        cur.execute(query, params)
+        rows = cur.fetchall()
+
+        # Get statistics
+        cur.execute("SELECT COUNT(*) FROM questions")
+        total_questions = cur.fetchone()[0]
+
+        cur.execute("SELECT question_type, COUNT(*) FROM questions GROUP BY question_type")
+        type_counts = cur.fetchall()
+
+        cur.execute("SELECT COUNT(DISTINCT user_id) FROM questions")
+        unique_users = cur.fetchone()[0]
+
+        conn.close()
+
+        # Build HTML with stats
+        stats_html = ""
+        for q_type, count in type_counts:
+            stats_html += f'<div class="stat-card"><h3>{count}</h3><p>{q_type.replace("_", " ").title()}</p></div>'
+
+        # Build table rows
+        rows_html = ""
+        for row in rows:
+            q_id, user_id, email, question_text, question_type, answers_json, ai_answer, ai_reasoning, created_at = row
+            question_display = (question_text[:100] + '...') if len(question_text) > 100 else question_text
+            answer_display = (ai_answer[:80] + '...') if ai_answer and len(ai_answer) > 80 else (ai_answer or 'N/A')
+            timestamp_str = created_at.strftime('%Y-%m-%d %H:%M') if created_at else 'N/A'
+
+            rows_html += f'''<tr>
+                <td>{q_id}</td>
+                <td><div><strong>ID {user_id}</strong></div><div class="email">{email or 'Unknown'}</div></td>
+                <td><span class="badge badge-{question_type}">{question_type.replace("_", " ").title()}</span></td>
+                <td class="question-text" title="{question_text}">{question_display}</td>
+                <td class="answer-text" title="{ai_answer or ''}">{answer_display}</td>
+                <td class="timestamp">{timestamp_str}</td>
+            </tr>'''
+
+        html = f'''<!DOCTYPE html>
+<html>
+<head>
+    <title>Question Database</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; background: #f4f4f4; padding: 20px; }}
+        .header {{ background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }}
+        .stats {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }}
+        .stat-card {{ background: #667eea; color: white; padding: 15px; border-radius: 8px; text-align: center; }}
+        .stat-card h3 {{ margin: 0; font-size: 32px; }}
+        .stat-card p {{ margin: 5px 0 0 0; font-size: 14px; }}
+        .filters {{ background: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }}
+        .filters form {{ display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }}
+        .filters input, .filters select, .filters button {{ padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; }}
+        .filters button {{ background: #667eea; color: white; cursor: pointer; border: none; }}
+        .filters button:hover {{ background: #5568d3; }}
+        .filters a {{ padding: 8px 12px; background: #f5f5f5; border-radius: 4px; text-decoration: none; color: #333; }}
+        table {{ width: 100%; background: white; border-collapse: collapse; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }}
+        th {{ background: #667eea; color: white; padding: 12px; text-align: left; font-weight: 600; }}
+        td {{ padding: 12px; border-bottom: 1px solid #eee; }}
+        tr:hover {{ background: #f9f9f9; }}
+        .question-text {{ max-width: 400px; overflow: hidden; text-overflow: ellipsis; }}
+        .answer-text {{ max-width: 300px; overflow: hidden; text-overflow: ellipsis; color: #333; }}
+        .badge {{ display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }}
+        .badge-multiple_choice {{ background: #e3f2fd; color: #1976d2; }}
+        .badge-multiple_answer {{ background: #f3e5f5; color: #7b1fa2; }}
+        .badge-essay {{ background: #fff3e0; color: #f57c00; }}
+        .badge-short_answer {{ background: #e8f5e9; color: #388e3c; }}
+        .badge-fill_in_blank {{ background: #fce4ec; color: #c2185b; }}
+        .email {{ color: #666; font-size: 12px; }}
+        .timestamp {{ color: #999; font-size: 12px; }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📊 Question Database</h1>
+        <p>All questions answered by StudyFlow users</p>
+    </div>
+    <div class="stats">
+        <div class="stat-card"><h3>{total_questions}</h3><p>Total Questions</p></div>
+        <div class="stat-card"><h3>{unique_users}</h3><p>Unique Users</p></div>
+        {stats_html}
+    </div>
+    <div class="filters">
+        <form method="get">
+            <input type="number" name="user_id" placeholder="User ID" value="{user_id_filter or ''}">
+            <select name="type">
+                <option value="">All Types</option>
+                <option value="multiple_choice" {"selected" if question_type_filter == "multiple_choice" else ""}>Multiple Choice</option>
+                <option value="multiple_answer" {"selected" if question_type_filter == "multiple_answer" else ""}>Multiple Answer</option>
+                <option value="essay" {"selected" if question_type_filter == "essay" else ""}>Essay</option>
+                <option value="short_answer" {"selected" if question_type_filter == "short_answer" else ""}>Short Answer</option>
+                <option value="fill_in_blank" {"selected" if question_type_filter == "fill_in_blank" else ""}>Fill in Blank</option>
+            </select>
+            <select name="limit">
+                <option value="50" {"selected" if limit == 50 else ""}>50 results</option>
+                <option value="100" {"selected" if limit == 100 else ""}>100 results</option>
+                <option value="500" {"selected" if limit == 500 else ""}>500 results</option>
+                <option value="1000" {"selected" if limit == 1000 else ""}>1000 results</option>
+            </select>
+            <button type="submit">Filter</button>
+            <a href="/admin/view-questions">Clear</a>
+        </form>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>User</th>
+                <th>Type</th>
+                <th>Question</th>
+                <th>AI Answer</th>
+                <th>Date</th>
+            </tr>
+        </thead>
+        <tbody>
+            {rows_html}
+        </tbody>
+    </table>
+</body>
+</html>'''
+
+        return html
+
+    except Exception as e:
+        debug_log(f"🔥 /admin/view-questions error: {e}\n{traceback.format_exc()}")
+        return f"<h1>Error:</h1><p>{e}</p><pre>{traceback.format_exc()}</pre>"
 
 
 @app.route("/api/status/<task_id>")
