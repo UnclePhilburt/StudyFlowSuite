@@ -651,6 +651,39 @@ def create_portal_session():
         app.logger.error(f"❌ Create portal session error: {e}\n{traceback.format_exc()}")
         return jsonify({'error': 'Failed to create portal session'}), 500
 
+@app.route("/api/current-user", methods=["GET"])
+@token_required
+def get_current_user():
+    """Get current authenticated user info"""
+    try:
+        conn = psycopg2.connect(os.environ["DATABASE_URL"])
+        cur = conn.cursor()
+
+        cur.execute("""
+            SELECT id, email, name, subscription_status, is_beta, created_at
+            FROM users WHERE id = %s
+        """, (request.user_id,))
+
+        user = cur.fetchone()
+        conn.close()
+
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+
+        return jsonify({
+            "id": user[0],
+            "email": user[1],
+            "name": user[2],
+            "subscription_status": user[3],
+            "is_beta": user[4],
+            "created_at": user[5].isoformat() if user[5] else None
+        }), 200
+
+    except Exception as e:
+        debug_log(f"❌ Get current user error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/stats", methods=["GET"])
 @token_required
 def get_user_stats():
