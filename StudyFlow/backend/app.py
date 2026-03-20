@@ -2405,7 +2405,7 @@ CRITICAL RULES:
 @token_required
 def upload_note():
     """
-    Upload a note file (PDF, image, Word doc) and extract text using Gemini OCR.
+    Upload a note file (PDF, image, Word doc, TXT) and extract text using Gemini OCR.
 
     Expects: multipart/form-data with 'file' field
 
@@ -2434,8 +2434,8 @@ def upload_note():
 
         # Determine file type
         file_ext = original_filename.rsplit('.', 1)[1].lower() if '.' in original_filename else ''
-        if file_ext not in ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx']:
-            return jsonify({"error": "Unsupported file type. Allowed: PDF, JPG, PNG, DOC, DOCX"}), 400
+        if file_ext not in ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx', 'txt']:
+            return jsonify({"error": "Unsupported file type. Allowed: PDF, JPG, PNG, DOC, DOCX, TXT"}), 400
 
         # Read file content
         file_content = file.read()
@@ -2486,6 +2486,11 @@ def upload_note():
                 # For now, just save without OCR
                 # TODO: Add pdf2image conversion for scanned PDFs
                 ocr_text = f"[PDF document: {page_count} pages]"
+
+        elif file_ext == 'txt':
+            # Plain text file - read directly
+            ocr_text = file_content.decode('utf-8', errors='ignore')
+            page_count = 1
 
         else:
             # Word docs - extract text
