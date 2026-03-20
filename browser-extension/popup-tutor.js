@@ -67,8 +67,63 @@ async function checkOverlayState() {
   });
 }
 
+// Sync auth from website's localStorage to extension storage
+async function syncAuthFromWebsite() {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab) return;
+
+    // Skip chrome:// pages and extension pages
+    if (tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://')) {
+      return;
+    }
+
+    // Check if we already have auth tokens
+    const existingAuth = await chrome.storage.local.get(['authToken', 'user']);
+    if (existingAuth.authToken && existingAuth.user) {
+      console.log('✅ Already logged in to extension');
+      return;
+    }
+
+    // Try to get auth from website's localStorage
+    chrome.tabs.sendMessage(tab.id, { action: 'syncAuth' }, async (response) => {
+      if (chrome.runtime.lastError) {
+        console.log('⚠️ Could not sync auth from website:', chrome.runtime.lastError.message);
+        return;
+      }
+
+      if (response && response.success && response.authData && response.authData.user) {
+        console.log('🔄 Syncing auth from website to extension...');
+
+        // Copy website auth to extension storage
+        await chrome.storage.local.set({
+          authToken: response.authData.token,
+          refreshToken: response.authData.refreshToken,
+          tokenExpiresAt: response.authData.tokenExpiresAt,
+          user: response.authData.user
+        });
+
+        console.log('✅ Auto-synced login from website!');
+
+        // Reload popup to show logged-in state
+        window.location.reload();
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error syncing auth:', error);
+  }
+}
+
 async function init() {
+  // Try to sync auth from website first
+  await syncAuthFromWebsite();
+
   const user = await window.auth.getCurrentUser();
+
+  // Debug logging
+  console.log('Extension popup init - user:', user);
+  const storage = await chrome.storage.local.get(null);
+  console.log('Extension storage:', storage);
 
   if (!user) {
     // Show login section
@@ -95,13 +150,32 @@ async function init() {
         const data = await response.json();
 
         if (response.ok) {
-          // Store auth data
+          // Store auth data in extension storage
           await chrome.storage.local.set({
             authToken: data.access_token,
             refreshToken: data.refresh_token,
             tokenExpiresAt: Date.now() + (data.expires_in * 1000),
             user: data.user
           });
+
+          // Also sync to website's localStorage if on StudyFlow website
+          try {
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            if (tab && tab.url.includes('unclephilburt.github.io/studyflowwebsite')) {
+              chrome.tabs.sendMessage(tab.id, {
+                action: 'syncToWebsite',
+                authData: {
+                  token: data.access_token,
+                  refreshToken: data.refresh_token,
+                  tokenExpiresAt: Date.now() + (data.expires_in * 1000),
+                  user: data.user
+                }
+              });
+              console.log('✅ Synced extension login to website');
+            }
+          } catch (e) {
+            console.log('⚠️ Could not sync to website (not on website page)');
+          }
 
           // Reload popup to show main section
           window.location.reload();

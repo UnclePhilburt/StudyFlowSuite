@@ -546,6 +546,40 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   } else if (request.action === 'checkNoteFlowState') {
     const overlay = document.getElementById('studyflow-noteflow');
     sendResponse({ isOpen: overlay !== null });
+  } else if (request.action === 'syncAuth') {
+    // Read auth tokens from website's localStorage
+    console.log('🔄 Syncing auth from website localStorage...');
+    try {
+      const authData = {
+        token: localStorage.getItem('token'),
+        refreshToken: localStorage.getItem('refreshToken'),
+        tokenExpiresAt: localStorage.getItem('tokenExpiresAt'),
+        user: localStorage.getItem('user') ? JSON.parse(localStorage.getItem('user')) : null
+      };
+      console.log('✅ Found website auth:', authData.user ? 'logged in' : 'not logged in');
+      sendResponse({ success: true, authData });
+    } catch (error) {
+      console.error('❌ Error reading localStorage:', error);
+      sendResponse({ success: false, error: error.message });
+    }
+  } else if (request.action === 'syncToWebsite') {
+    // Write auth tokens to website's localStorage
+    console.log('🔄 Syncing auth from extension to website localStorage...');
+    try {
+      if (request.authData) {
+        localStorage.setItem('token', request.authData.token);
+        localStorage.setItem('refreshToken', request.authData.refreshToken);
+        localStorage.setItem('tokenExpiresAt', request.authData.tokenExpiresAt);
+        localStorage.setItem('user', JSON.stringify(request.authData.user));
+        console.log('✅ Synced extension auth to website');
+        sendResponse({ success: true });
+      } else {
+        sendResponse({ success: false, error: 'No auth data provided' });
+      }
+    } catch (error) {
+      console.error('❌ Error writing to localStorage:', error);
+      sendResponse({ success: false, error: error.message });
+    }
   }
   return true; // Keep message channel open for async response
 });
