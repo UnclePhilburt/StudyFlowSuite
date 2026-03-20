@@ -65,7 +65,131 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 60px 0;
+      padding: 80px 20px;
+      position: relative;
+    }
+
+    .login-glow {
+      position: absolute;
+      width: 200px;
+      height: 200px;
+      background: radial-gradient(circle, rgba(139, 92, 246, 0.3) 0%, transparent 70%);
+      filter: blur(40px);
+      animation: glow-pulse 4s ease-in-out infinite;
+      pointer-events: none;
+    }
+
+    @keyframes glow-pulse {
+      0%, 100% {
+        opacity: 0.5;
+        transform: scale(1);
+      }
+      50% {
+        opacity: 0.8;
+        transform: scale(1.2);
+      }
+    }
+
+    .login-btn {
+      position: relative;
+      background: rgba(255, 255, 255, 0.03);
+      backdrop-filter: blur(10px);
+      border: 2px solid transparent;
+      border-radius: 16px;
+      padding: 18px 32px;
+      font-size: 15px;
+      font-weight: 600;
+      color: #ffffff;
+      cursor: pointer;
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-family: inherit;
+      letter-spacing: 0.3px;
+      box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    }
+
+    .login-btn::before {
+      content: '';
+      position: absolute;
+      inset: -2px;
+      background: linear-gradient(
+        135deg,
+        #667eea,
+        #764ba2,
+        #f093fb,
+        #667eea
+      );
+      background-size: 300% 300%;
+      border-radius: 16px;
+      z-index: -1;
+      opacity: 0;
+      transition: opacity 0.4s ease;
+      animation: gradient-rotate 4s ease infinite;
+    }
+
+    @keyframes gradient-rotate {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+
+    .login-btn::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.1) 0%,
+        transparent 50%,
+        rgba(255, 255, 255, 0.1) 100%
+      );
+      background-size: 200% 200%;
+      background-position: 100% 100%;
+      border-radius: 14px;
+      opacity: 0;
+      transition: all 0.6s ease;
+    }
+
+    .login-btn:hover {
+      background: rgba(255, 255, 255, 0.05);
+      transform: translateY(-2px) scale(1.02);
+      box-shadow:
+        0 16px 48px rgba(139, 92, 246, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    }
+
+    .login-btn:hover::before {
+      opacity: 1;
+    }
+
+    .login-btn:hover::after {
+      opacity: 1;
+      background-position: 0% 0%;
+    }
+
+    .login-btn:hover .btn-arrow {
+      transform: translateX(4px);
+    }
+
+    .login-btn:active {
+      transform: translateY(0) scale(0.98);
+    }
+
+    .btn-text {
+      position: relative;
+      z-index: 1;
+    }
+
+    .btn-arrow {
+      font-size: 20px;
+      transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      z-index: 1;
     }
 
     input {
@@ -425,8 +549,10 @@
       <!-- Login Section (shown when not logged in) -->
       <div id="loginSection" class="hidden">
         <div class="login-section">
-          <button id="openWebsiteBtn" class="btn btn-primary">
-            Log in at studyflowsuite.com
+          <div class="login-glow"></div>
+          <button id="openWebsiteBtn" class="login-btn">
+            <span class="btn-text">Log in at studyflowsuite.com</span>
+            <span class="btn-arrow">→</span>
           </button>
         </div>
       </div>
