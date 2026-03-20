@@ -2681,41 +2681,49 @@ def search_notes():
             debug_log(f"❌ Gemini init error: {e}")
             return jsonify({"error": "AI service unavailable"}), 503
 
+        # Limit notes to 10k chars to avoid token limits
+        notes_excerpt = all_notes_text[:10000]
+
         prompt = f"""You are a helpful study assistant. A student is asking about their notes.
 
 Student's Question: {question}
 
 Student's Notes:
-{all_notes_text[:10000]}  # Limit to first 10k chars to avoid token limits
+{notes_excerpt}
 
 Your task:
-1. Search through the notes for relevant information
+1. Search through the notes above for information related to the question
 2. Provide HINTS and GUIDANCE, not direct answers
 3. Point the student to specific sections of their notes
 4. Help them learn by guiding their thinking
 
-Return a JSON array with 1-3 results in this format:
+If you find relevant information, return JSON in this EXACT format:
 {{
     "results": [
         {{
-            "source": "filename (section or page)",
-            "text": "Relevant quote from notes (max 200 chars)",
-            "hint": "Helpful hint guiding them toward the answer without giving it away"
+            "source": "CivilWar.txt",
+            "text": "relevant quote from the notes",
+            "hint": "helpful hint guiding them to the answer"
         }}
     ]
 }}
 
-IMPORTANT: Guide them to the answer, don't give it directly. Use phrases like:
-- "Look at the section about..."
-- "Consider the relationship between..."
-- "Check the definition of..."
+If the notes don't contain relevant information, return:
+{{
+    "results": []
+}}
 
-Return ONLY valid JSON, no other text."""
+IMPORTANT:
+- Guide them to the answer, don't give it directly
+- Use phrases like "Look at the section about...", "Consider the relationship between...", "Check the definition of..."
+- Return ONLY valid JSON, nothing else"""
+
+        debug_log(f"🔍 Searching for: '{question}' in {len(all_notes_text)} chars of notes")
 
         try:
             response = model.generate_content(prompt)
             response_text = response.text.strip()
-            debug_log(f"📝 Gemini response: {response_text[:200]}...")
+            debug_log(f"📝 Gemini full response: {response_text}")
         except Exception as e:
             debug_log(f"❌ Gemini API error: {e}")
             return jsonify({"error": "AI service error", "results": []}), 200
@@ -2728,9 +2736,10 @@ Return ONLY valid JSON, no other text."""
 
         try:
             result = json.loads(response_text.strip())
+            debug_log(f"✅ Parsed results: {len(result.get('results', []))} items")
             return jsonify(result), 200
         except json.JSONDecodeError as e:
-            debug_log(f"❌ Search JSON parse error: {e}\nResponse was: {response_text}")
+            debug_log(f"❌ Search JSON parse error: {e}\nFull response was: {response_text}")
             # Return empty results instead of error
             return jsonify({"results": []}), 200
 
