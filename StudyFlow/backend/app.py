@@ -2849,15 +2849,20 @@ def generate_hint_from_text(question, text):
 I found this relevant excerpt from their notes:
 "{text[:500]}"
 
-Generate a SHORT hint (1-2 sentences) that guides them to the answer WITHOUT giving it directly.
+Generate a SHORT hint (1-2 sentences) that provides helpful clues from the notes WITHOUT directly giving the full answer.
 
-Use phrases like:
-- "Look at the section about..."
-- "Consider the relationship between..."
-- "Check the definition of..."
-- "Think about how X relates to Y..."
+Give them the KEY FACTS or CONCEPTS they need, but make them put it together themselves.
 
-Return ONLY the hint, nothing else."""
+GOOD examples:
+- "The economic tensions between industrial North and agricultural South were major factors, along with disputes over states' rights."
+- "Photosynthesis converts light energy into chemical energy using chlorophyll in plant cells."
+
+BAD examples (DON'T use these):
+- "Look at the section about..." (We ARE the section!)
+- "Check the definition of..." (Just give the definition!)
+- "Review the notes on..." (They're already here!)
+
+Return ONLY the hint with the actual information, nothing else."""
 
         debug_log(f"🤖 Generating hint for question: '{question[:50]}...'")
         response = model.generate_content(prompt)
