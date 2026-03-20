@@ -2729,6 +2729,46 @@ def delete_note_endpoint(note_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/notes/<note_id>/download", methods=["GET"])
+@supabase_auth_required
+def download_note_endpoint(note_id):
+    """
+    Download a note file by ID (only if it belongs to current user).
+    """
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        # Get note metadata to verify ownership and get file path
+        note = supabase.table("notes").select("*").eq("id", note_id).eq("user_id", request.user_id).single().execute()
+
+        if not note.data:
+            return jsonify({"error": "Note not found or unauthorized"}), 404
+
+        file_path = note.data.get('file_path')
+        original_filename = note.data.get('original_filename')
+
+        if not file_path:
+            return jsonify({"error": "File not found in storage"}), 404
+
+        # Download file from Supabase Storage
+        file_data = supabase.storage.from_('note-files').download(file_path)
+
+        # Return file as download
+        from flask import send_file
+        import io
+
+        return send_file(
+            io.BytesIO(file_data),
+            mimetype='application/octet-stream',
+            as_attachment=True,
+            download_name=original_filename
+        )
+
+    except Exception as e:
+        debug_log(f"❌ Download note error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/notes/search", methods=["POST"])
 @supabase_auth_required
 def search_notes():
