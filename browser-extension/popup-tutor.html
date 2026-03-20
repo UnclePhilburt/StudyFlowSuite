@@ -62,80 +62,10 @@
     }
 
     .login-section {
-      padding: 20px 0;
-      text-align: center;
-    }
-
-    .login-icon {
-      font-size: 64px;
-      margin-bottom: 20px;
-      animation: pulse 2s ease-in-out infinite;
-    }
-
-    @keyframes pulse {
-      0%, 100% {
-        transform: scale(1);
-        opacity: 1;
-      }
-      50% {
-        transform: scale(1.05);
-        opacity: 0.8;
-      }
-    }
-
-    .login-title {
-      font-size: 22px;
-      font-weight: 700;
-      color: #e0e0e8;
-      margin-bottom: 12px;
-    }
-
-    .login-description {
-      font-size: 13px;
-      color: #a8a8b3;
-      margin-bottom: 24px;
-      line-height: 1.6;
-      padding: 0 10px;
-    }
-
-    .website-url {
-      font-size: 14px;
-      color: #8b5cf6;
-      font-weight: 600;
-      margin-top: 12px;
-      padding: 8px 12px;
-      background: rgba(139, 92, 246, 0.1);
-      border-radius: 6px;
-      display: inline-block;
-      letter-spacing: 0.3px;
-    }
-
-    .sync-message {
-      background: linear-gradient(135deg, #2a2a3e 0%, #1a1a2e 100%);
-      border: 1.5px solid #3a3a4e;
-      border-radius: 12px;
-      padding: 16px;
       display: flex;
-      align-items: flex-start;
-      gap: 12px;
-      text-align: left;
-    }
-
-    .sync-icon {
-      font-size: 24px;
-      flex-shrink: 0;
-      animation: rotate 3s linear infinite;
-    }
-
-    @keyframes rotate {
-      from { transform: rotate(0deg); }
-      to { transform: rotate(360deg); }
-    }
-
-    .sync-text {
-      font-size: 12px;
-      color: #a8a8b3;
-      line-height: 1.5;
+      align-items: center;
+      justify-content: center;
+      padding: 60px 0;
     }
 
     input {
@@ -495,28 +425,9 @@
       <!-- Login Section (shown when not logged in) -->
       <div id="loginSection" class="hidden">
         <div class="login-section">
-          <div class="login-icon">🔐</div>
-
-          <div class="login-title">Welcome to StudyFlow</div>
-
-          <div class="login-description">
-            Please visit our website to sign in or create an account
-          </div>
-
           <button id="openWebsiteBtn" class="btn btn-primary">
-            Open StudyFlow Website
+            Log in at studyflowsuite.com
           </button>
-
-          <div class="website-url">studyflowsuite.com</div>
-
-          <div class="divider"></div>
-
-          <div class="sync-message">
-            <div class="sync-icon">🔄</div>
-            <div class="sync-text">
-              Once you're logged in on the website, this extension will automatically sync your account
-            </div>
-          </div>
         </div>
       </div>
 
