@@ -130,70 +130,10 @@ async function init() {
     document.getElementById('loginSection').classList.remove('hidden');
     document.getElementById('mainSection').classList.add('hidden');
 
-    // Login form submission
-    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+    // Open website button
+    document.getElementById('openWebsiteBtn').addEventListener('click', (e) => {
       e.preventDefault();
-
-      const email = document.getElementById('emailInput').value;
-      const password = document.getElementById('passwordInput').value;
-      const errorDiv = document.getElementById('loginError');
-
-      errorDiv.classList.add('hidden');
-
-      try {
-        const response = await fetch('https://studyflowsuite.onrender.com/api/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password })
-        });
-
-        const data = await response.json();
-
-        if (response.ok) {
-          // Store auth data in extension storage
-          await chrome.storage.local.set({
-            authToken: data.access_token,
-            refreshToken: data.refresh_token,
-            tokenExpiresAt: Date.now() + (data.expires_in * 1000),
-            user: data.user
-          });
-
-          // Also sync to website's localStorage if on StudyFlow website
-          try {
-            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-            if (tab && tab.url.includes('unclephilburt.github.io/studyflowwebsite')) {
-              chrome.tabs.sendMessage(tab.id, {
-                action: 'syncToWebsite',
-                authData: {
-                  token: data.access_token,
-                  refreshToken: data.refresh_token,
-                  tokenExpiresAt: Date.now() + (data.expires_in * 1000),
-                  user: data.user
-                }
-              });
-              console.log('✅ Synced extension login to website');
-            }
-          } catch (e) {
-            console.log('⚠️ Could not sync to website (not on website page)');
-          }
-
-          // Reload popup to show main section
-          window.location.reload();
-        } else {
-          errorDiv.textContent = data.error || 'Login failed';
-          errorDiv.classList.remove('hidden');
-        }
-      } catch (error) {
-        console.error('Login error:', error);
-        errorDiv.textContent = 'Connection error. Please try again.';
-        errorDiv.classList.remove('hidden');
-      }
-    });
-
-    // Signup link
-    document.getElementById('signupLink').addEventListener('click', (e) => {
-      e.preventDefault();
-      chrome.tabs.create({ url: 'https://unclephilburt.github.io/studyflowwebsite/signup.html' });
+      chrome.tabs.create({ url: 'https://studyflowsuite.com' });
     });
   } else {
     // Show main section

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "StudyFlow NoteFlow",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "Search your uploaded notes with AI - Get hints and guidance without direct answers",
   "permissions": [
     "activeTab",
@@ -28,6 +28,12 @@
       "matches": ["<all_urls>"],
       "js": ["noteflow-overlay.js"],
       "run_at": "document_idle",
+      "all_frames": false
+    },
+    {
+      "matches": ["https://unclephilburt.github.io/studyflowwebsite/*"],
+      "js": ["website-sync.js"],
+      "run_at": "document_end",
       "all_frames": false
     }
   ],
