@@ -39,9 +39,11 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
     const data = await response.json();
 
     if (response.ok) {
-      // Store token and user data
+      // Store access token, refresh token, and user data (Supabase Auth)
       await chrome.storage.local.set({
-        authToken: data.token,
+        authToken: data.access_token,  // Supabase access token
+        refreshToken: data.refresh_token,  // Supabase refresh token
+        tokenExpiresAt: Date.now() + (data.expires_in * 1000),  // Expiration time
         user: data.user,
         showWelcome: true  // Flag to show welcome animation
       });

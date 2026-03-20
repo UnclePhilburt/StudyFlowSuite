@@ -21,6 +21,7 @@ from StudyFlow.logging_utils import debug_log
 from StudyFlow.backend.submit_button_storage import register_submit_button_upload
 from StudyFlow.backend.tasks import process_question_async, celery_app
 from StudyFlow.backend import tasks  # 🧠 registers the Celery task
+from StudyFlow.backend.supabase_auth import supabase_auth_required  # Supabase Auth decorator
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail, Email, MailSettings, SandBoxMode
 
@@ -400,53 +401,59 @@ init_users_table()
 
 @app.route("/api/signup", methods=["POST"])
 def signup():
-    """Create a new user account"""
+    """Create a new user account with Supabase Auth"""
     try:
+        from StudyFlow.backend.supabase_auth import create_user_with_metadata
+
         data = request.json
         email = data.get('email')
         name = data.get('name')
         password = data.get('password')
+        collective_brain_opt_in = data.get('collective_brain_opt_in', False)
 
         if not email or not password:
             return jsonify({'error': 'Email and password are required'}), 400
 
-        # Hash password
-        password_hash = hash_password(password)
+        # Create user with Supabase Auth + profile
+        result, error = create_user_with_metadata(
+            email=email,
+            password=password,
+            full_name=name,
+            collective_brain_opt_in=collective_brain_opt_in
+        )
 
-        # Insert user into database
-        conn = psycopg2.connect(os.environ["DATABASE_URL"])
-        cur = conn.cursor()
+        if error:
+            # Check if it's a duplicate email error
+            if 'already registered' in error.lower() or 'already exists' in error.lower():
+                return jsonify({'error': 'Email already exists'}), 409
+            return jsonify({'error': error}), 400
 
-        try:
-            cur.execute("""
-                INSERT INTO users (email, name, password_hash, subscription_status)
-                VALUES (%s, %s, %s, 'free')
-                RETURNING id
-            """, (email, name, password_hash))
-            user_id = cur.fetchone()[0]
-            conn.commit()
+        debug_log(f"✅ New user created: {email}")
 
-            app.logger.info(f"✅ New user created: {email} (ID: {user_id})")
-
-            return jsonify({
-                'success': True,
-                'message': 'Account created successfully'
-            }), 201
-
-        except psycopg2.IntegrityError:
-            conn.rollback()
-            return jsonify({'error': 'Email already exists'}), 409
-        finally:
-            conn.close()
+        return jsonify({
+            'success': True,
+            'message': 'Account created successfully',
+            'access_token': result['session'].access_token if result['session'] else None,
+            'refresh_token': result['session'].refresh_token if result['session'] else None,
+            'user': {
+                'id': result['user'].id,
+                'email': result['user'].email,
+                'collective_brain_opt_in': collective_brain_opt_in
+            }
+        }), 201
 
     except Exception as e:
-        app.logger.error(f"❌ Signup error: {e}\n{traceback.format_exc()}")
+        debug_log(f"❌ Signup error: {e}\n{traceback.format_exc()}")
         return jsonify({'error': 'Signup failed'}), 500
+
 
 @app.route("/api/login", methods=["POST"])
 def login():
-    """Authenticate user and return JWT token"""
+    """Authenticate user with Supabase Auth and return access token"""
     try:
+        from StudyFlow.backend.supabase_auth import sign_in_user
+        from StudyFlow.backend.supabase_client import get_user_profile
+
         data = request.json
         email = data.get('email')
         password = data.get('password')
@@ -454,45 +461,116 @@ def login():
         if not email or not password:
             return jsonify({'error': 'Email and password are required'}), 400
 
-        # Get user from database
-        conn = psycopg2.connect(os.environ["DATABASE_URL"])
-        cur = conn.cursor()
-        cur.execute("""
-            SELECT id, email, name, password_hash, subscription_status, stripe_customer_id
-            FROM users WHERE email = %s
-        """, (email,))
-        user = cur.fetchone()
-        conn.close()
+        # Sign in with Supabase Auth
+        result, error = sign_in_user(email, password)
 
-        if not user:
-            return jsonify({'error': 'Invalid email or password'}), 401
+        if error:
+            return jsonify({'error': error}), 401
 
-        user_id, user_email, name, password_hash, subscription_status, stripe_customer_id = user
+        # Get user profile for additional info
+        user_profile = get_user_profile(result['user'].id)
 
-        # Verify password
-        if not verify_password(password, password_hash):
-            return jsonify({'error': 'Invalid email or password'}), 401
-
-        # Create JWT token
-        token = create_token(user_id, user_email)
-
-        app.logger.info(f"✅ User logged in: {email}")
+        debug_log(f"✅ User logged in: {email}")
 
         return jsonify({
             'success': True,
-            'token': token,
+            'access_token': result['access_token'],
+            'refresh_token': result['refresh_token'],
+            'expires_in': result['expires_in'],
             'user': {
-                'id': user_id,
-                'email': user_email,
-                'name': name,
-                'subscription_status': subscription_status,
-                'stripe_customer_id': stripe_customer_id
+                'id': result['user'].id,
+                'email': result['user'].email,
+                'full_name': user_profile.get('full_name') if user_profile else None,
+                'subscription_tier': user_profile.get('subscription_tier') if user_profile else 'free',
+                'stripe_customer_id': user_profile.get('stripe_customer_id') if user_profile else None,
+                'collective_brain_opt_in': user_profile.get('collective_brain_opt_in') if user_profile else False
             }
         }), 200
 
     except Exception as e:
-        app.logger.error(f"❌ Login error: {e}\n{traceback.format_exc()}")
+        debug_log(f"❌ Login error: {e}\n{traceback.format_exc()}")
         return jsonify({'error': 'Login failed'}), 500
+
+
+@app.route("/api/refresh", methods=["POST"])
+def refresh_token():
+    """Refresh an expired access token"""
+    try:
+        from StudyFlow.backend.supabase_auth import refresh_access_token
+
+        data = request.json
+        refresh_token_str = data.get('refresh_token')
+
+        if not refresh_token_str:
+            return jsonify({'error': 'Refresh token is required'}), 400
+
+        result, error = refresh_access_token(refresh_token_str)
+
+        if error:
+            return jsonify({'error': error}), 401
+
+        return jsonify({
+            'success': True,
+            'access_token': result['access_token'],
+            'refresh_token': result['refresh_token'],
+            'expires_in': result['expires_in']
+        }), 200
+
+    except Exception as e:
+        debug_log(f"❌ Refresh token error: {e}\n{traceback.format_exc()}")
+        return jsonify({'error': 'Failed to refresh token'}), 500
+
+
+@app.route("/api/logout", methods=["POST"])
+def logout():
+    """Sign out user (invalidate session)"""
+    try:
+        from StudyFlow.backend.supabase_auth import sign_out_user
+
+        # Get token from Authorization header
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'error': 'Missing or invalid Authorization header'}), 401
+
+        token = auth_header[7:]  # Remove 'Bearer ' prefix
+
+        success, error = sign_out_user(token)
+
+        if error:
+            return jsonify({'error': error}), 400
+
+        return jsonify({'success': True, 'message': 'Logged out successfully'}), 200
+
+    except Exception as e:
+        debug_log(f"❌ Logout error: {e}\n{traceback.format_exc()}")
+        return jsonify({'error': 'Logout failed'}), 500
+
+
+@app.route("/api/reset-password", methods=["POST"])
+def reset_password():
+    """Send password reset email"""
+    try:
+        from StudyFlow.backend.supabase_auth import reset_password_email
+
+        data = request.json
+        email = data.get('email')
+
+        if not email:
+            return jsonify({'error': 'Email is required'}), 400
+
+        success, error = reset_password_email(email)
+
+        if error:
+            return jsonify({'error': error}), 400
+
+        return jsonify({
+            'success': True,
+            'message': 'Password reset email sent. Check your inbox.'
+        }), 200
+
+    except Exception as e:
+        debug_log(f"❌ Reset password error: {e}\n{traceback.format_exc()}")
+        return jsonify({'error': 'Failed to send reset email'}), 500
 
 @app.route("/api/create-subscription", methods=["POST"])
 def create_subscription():
@@ -587,7 +665,7 @@ def create_subscription():
         return jsonify({'error': 'Subscription creation failed'}), 500
 
 @app.route("/api/me", methods=["GET"])
-@token_required
+@supabase_auth_required
 def get_me():
     """Get current user info (protected route)"""
     try:
@@ -621,7 +699,7 @@ def get_me():
         return jsonify({'error': 'Failed to get user info'}), 500
 
 @app.route("/api/create-portal-session", methods=["POST"])
-@token_required
+@supabase_auth_required
 def create_portal_session():
     """Create a Stripe Customer Portal session for managing subscription"""
     try:
@@ -652,7 +730,7 @@ def create_portal_session():
         return jsonify({'error': 'Failed to create portal session'}), 500
 
 @app.route("/api/current-user", methods=["GET"])
-@token_required
+@supabase_auth_required
 def get_current_user():
     """Get current authenticated user info"""
     try:
@@ -685,7 +763,7 @@ def get_current_user():
 
 
 @app.route("/api/stats", methods=["GET"])
-@token_required
+@supabase_auth_required
 def get_user_stats():
     """Get user statistics"""
     try:
@@ -775,7 +853,7 @@ def get_user_stats():
 
 
 @app.route("/api/process", methods=["POST"])
-@token_required
+@supabase_auth_required
 def process_data():
     try:
         # Check rate limit for free users
@@ -1846,7 +1924,7 @@ def admin_home_message():
 
 # ============ TEXT-ONLY ANSWER ENDPOINT (CHEAP) ============
 @app.route("/api/answer", methods=["POST"])
-@token_required
+@supabase_auth_required
 def answer_question():
     """
     Answer a quiz question using text only (no image). Uses OpenAI API.
@@ -2004,7 +2082,7 @@ Return ONLY valid JSON, no markdown, no other text."""
 
 # ============ LEGAL TUTOR EXPLANATION ENDPOINT ============
 @app.route("/api/tutor/explain", methods=["POST"])
-@token_required
+@supabase_auth_required
 def tutor_explain():
     """
     Legal AI tutoring endpoint - Returns step-by-step explanations WITHOUT selecting answers.
@@ -2124,7 +2202,7 @@ Your explanation:"""
 
 # ============ ESSAY ANSWER ENDPOINT ============
 @app.route("/api/essay", methods=["POST"])
-@token_required
+@supabase_auth_required
 def essay_answer():
     """
     Generate an essay answer for a short-answer or essay question.
@@ -2402,23 +2480,35 @@ CRITICAL RULES:
 # ============ NOTEFLOW ENDPOINTS ============
 
 @app.route("/api/notes/upload", methods=["POST"])
-@token_required
+@supabase_auth_required
 def upload_note():
     """
-    Upload a note file (PDF, image, Word doc, TXT) and extract text using Gemini OCR.
+    Upload a note file (PDF, image, Word doc, TXT) to Supabase.
 
-    Expects: multipart/form-data with 'file' field
+    NEW: Uses Supabase Storage + pgvector + background processing
+
+    Expects: multipart/form-data with:
+        - file: The document file
+        - university: (optional) University name
+        - course_code: (optional) Course code (e.g., "BIO 101")
+        - professor: (optional) Professor name
+        - semester: (optional) Semester (e.g., "Fall 2024")
 
     Returns:
     {
         "success": true,
-        "note_id": 123,
+        "note_id": "uuid",
         "filename": "Biology_Chapter_3.pdf",
-        "ocr_text": "extracted text...",
-        "pages": 5
+        "pages": 5,
+        "processing": true
     }
     """
     try:
+        from StudyFlow.backend.supabase_client import (
+            check_page_limit, upload_file_to_storage, create_note_record, increment_page_count
+        )
+        from StudyFlow.backend.tasks import process_note_async
+
         # Check if file was uploaded
         if 'file' not in request.files:
             return jsonify({"error": "No file uploaded"}), 400
@@ -2427,10 +2517,19 @@ def upload_note():
         if file.filename == '':
             return jsonify({"error": "No file selected"}), 400
 
+        # Get course metadata from form
+        course_metadata = {
+            "university": request.form.get('university'),
+            "course_code": request.form.get('course_code'),
+            "professor": request.form.get('professor'),
+            "semester": request.form.get('semester')
+        }
+
         # Get file info
         original_filename = file.filename
-        file_size = len(file.read())
-        file.seek(0)  # Reset file pointer after reading size
+        file.seek(0, os.SEEK_END)
+        file_size = file.tell()
+        file.seek(0)  # Reset file pointer
 
         # Determine file type
         file_ext = original_filename.rsplit('.', 1)[1].lower() if '.' in original_filename else ''
@@ -2440,13 +2539,11 @@ def upload_note():
         # Read file content
         file_content = file.read()
 
-        # Use Gemini 3 Flash for OCR
+        # Extract text based on file type
         import google.generativeai as genai
         genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-
         model = genai.GenerativeModel('gemini-2.0-flash-exp')
 
-        # For images and PDFs, send directly to Gemini
         if file_ext in ['jpg', 'jpeg', 'png']:
             # Image file
             import PIL.Image
@@ -2467,7 +2564,7 @@ def upload_note():
             page_count = 1
 
         elif file_ext == 'pdf':
-            # PDF file - convert to images and OCR each page
+            # PDF file
             import PyPDF2
             import io
 
@@ -2481,57 +2578,76 @@ def upload_note():
                 if page_text:
                     ocr_text += page_text + "\n\n"
 
-            # If no text extracted, use Gemini OCR (for scanned PDFs)
+            # If no text extracted, skip for now
             if not ocr_text.strip():
-                # For now, just save without OCR
-                # TODO: Add pdf2image conversion for scanned PDFs
-                ocr_text = f"[PDF document: {page_count} pages]"
+                ocr_text = f"[PDF document: {page_count} pages - requires OCR]"
 
         elif file_ext == 'txt':
-            # Plain text file - read directly
+            # Plain text file
             ocr_text = file_content.decode('utf-8', errors='ignore')
             page_count = 1
 
         else:
-            # Word docs - extract text
-            # TODO: Add python-docx for .doc/.docx files
+            # Word docs
             ocr_text = f"[{file_ext.upper()} document]"
             page_count = 1
 
-        # Save to database
-        conn = psycopg2.connect(os.environ.get("DATABASE_URL"))
-        cur = conn.cursor()
+        # Check page limit BEFORE uploading
+        allowed, message = check_page_limit(request.user_id, page_count)
+        if not allowed:
+            return jsonify({"error": message, "limit_exceeded": True}), 403
 
-        # Generate unique filename
+        # Upload file to Supabase Storage
         import uuid
-        unique_filename = f"{uuid.uuid4()}_{original_filename}"
+        unique_filename = f"{request.user_id}/{uuid.uuid4()}_{original_filename}"
 
-        cur.execute("""
-            INSERT INTO notes (user_id, filename, original_filename, file_type, file_size, ocr_text, page_count)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-            RETURNING id
-        """, (
-            request.user_id,
-            unique_filename,
-            original_filename,
-            file_ext,
-            file_size,
-            ocr_text,
-            page_count
-        ))
+        content_type_map = {
+            'pdf': 'application/pdf',
+            'jpg': 'image/jpeg',
+            'jpeg': 'image/jpeg',
+            'png': 'image/png',
+            'txt': 'text/plain',
+            'doc': 'application/msword',
+            'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        }
+        content_type = content_type_map.get(file_ext, 'application/octet-stream')
 
-        note_id = cur.fetchone()[0]
-        conn.commit()
-        conn.close()
+        file_url = upload_file_to_storage(file_content, unique_filename, content_type)
+        if not file_url:
+            return jsonify({"error": "Failed to upload file to storage"}), 500
+
+        # Create note record in Supabase
+        note = create_note_record(
+            user_id=request.user_id,
+            filename=original_filename,
+            file_type=file_ext,
+            file_size=file_size,
+            file_path=unique_filename,
+            page_count=page_count,
+            course_metadata=course_metadata
+        )
+
+        if not note:
+            return jsonify({"error": "Failed to create note record"}), 500
+
+        note_id = note['id']
+
+        # Increment user's page count
+        increment_page_count(request.user_id, page_count)
+
+        # Trigger background processing (chunking, embedding, anonymization)
+        process_note_async.delay(note_id, request.user_id, ocr_text, course_metadata)
 
         debug_log(f"✅ Note uploaded: {original_filename} ({file_size} bytes, {page_count} pages)")
+        debug_log(f"🚀 Background processing started for note {note_id}")
 
         return jsonify({
             "success": True,
             "note_id": note_id,
             "filename": original_filename,
-            "ocr_text": ocr_text[:500] + "..." if len(ocr_text) > 500 else ocr_text,  # Preview
-            "pages": page_count
+            "pages": page_count,
+            "processing": True,
+            "message": "Note uploaded! Processing in background..."
         }), 200
 
     except Exception as e:
@@ -2540,7 +2656,7 @@ def upload_note():
 
 
 @app.route("/api/notes/list", methods=["GET"])
-@token_required
+@supabase_auth_required
 def list_notes():
     """
     Get list of all notes for current user.
@@ -2548,67 +2664,58 @@ def list_notes():
     Returns:
     [
         {
-            "id": 1,
+            "id": "uuid",
             "filename": "Biology_Chapter_3.pdf",
             "pages": 5,
-            "uploaded_at": "2024-01-15T10:30:00"
+            "uploaded_at": "2024-01-15T10:30:00",
+            "processed": true,
+            "university": "MSU",
+            "course_code": "BIO 101"
         },
         ...
     ]
     """
     try:
-        conn = psycopg2.connect(os.environ.get("DATABASE_URL"))
-        cur = conn.cursor()
+        from StudyFlow.backend.supabase_client import get_user_notes
 
-        cur.execute("""
-            SELECT id, original_filename, file_type, file_size, page_count, uploaded_at
-            FROM notes
-            WHERE user_id = %s
-            ORDER BY uploaded_at DESC
-        """, (request.user_id,))
+        notes = get_user_notes(request.user_id)
 
-        notes = []
-        for row in cur.fetchall():
-            notes.append({
-                "id": row[0],
-                "filename": row[1],
-                "file_type": row[2],
-                "file_size": row[3],
-                "pages": row[4],
-                "uploaded_at": row[5].isoformat() if row[5] else None
+        # Format response
+        formatted_notes = []
+        for note in notes:
+            formatted_notes.append({
+                "id": note['id'],
+                "filename": note['original_filename'],
+                "file_type": note['file_type'],
+                "file_size": note['file_size'],
+                "pages": note['page_count'],
+                "uploaded_at": note['uploaded_at'],
+                "processed": note['processed'],
+                "is_public": note['is_public'],
+                "university": note.get('university'),
+                "course_code": note.get('course_code'),
+                "professor": note.get('professor')
             })
 
-        conn.close()
-
-        return jsonify(notes), 200
+        return jsonify(formatted_notes), 200
 
     except Exception as e:
         debug_log(f"❌ List notes error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/api/notes/<int:note_id>", methods=["DELETE"])
-@token_required
-def delete_note(note_id):
+@app.route("/api/notes/<note_id>", methods=["DELETE"])
+@supabase_auth_required
+def delete_note_endpoint(note_id):
     """
     Delete a note by ID (only if it belongs to current user).
     """
     try:
-        conn = psycopg2.connect(os.environ.get("DATABASE_URL"))
-        cur = conn.cursor()
+        from StudyFlow.backend.supabase_client import delete_note
 
-        # Verify ownership before deleting
-        cur.execute("""
-            DELETE FROM notes
-            WHERE id = %s AND user_id = %s
-            RETURNING id
-        """, (note_id, request.user_id))
+        success = delete_note(note_id, request.user_id)
 
-        deleted = cur.fetchone()
-        conn.commit()
-        conn.close()
-
-        if deleted:
+        if success:
             return jsonify({"success": True}), 200
         else:
             return jsonify({"error": "Note not found or unauthorized"}), 404
@@ -2619,133 +2726,140 @@ def delete_note(note_id):
 
 
 @app.route("/api/notes/search", methods=["POST"])
-@token_required
+@supabase_auth_required
 def search_notes():
     """
-    Search through user's notes using AI to find relevant information.
+    Search through user's notes using vector similarity (pgvector + embeddings).
+
+    NEW: Uses semantic search with OpenAI embeddings + Collective Brain
 
     Expects JSON:
     {
-        "question": "What is photosynthesis?"
+        "question": "What is photosynthesis?",
+        "university": "Michigan State University" (optional),
+        "course_code": "BIO 101" (optional)
     }
 
     Returns:
     {
         "results": [
             {
-                "source": "Biology_Chapter_3.pdf (Page 1)",
+                "source": "Biology_Chapter_3.pdf",
                 "text": "Photosynthesis is the process by which...",
-                "hint": "Look at the section about cellular processes and energy production."
+                "hint": "Look at the section about cellular processes...",
+                "from_collective_brain": false,
+                "similarity": 0.89
             }
         ]
     }
     """
     try:
+        from StudyFlow.backend.supabase_client import search_notes_vector, get_user_profile, supabase
+        from StudyFlow.backend.embedding_client import generate_embedding
+
         data = request.get_json()
         if not data or not data.get('question'):
             return jsonify({"error": "Missing question"}), 400
 
         question = data.get('question')
+        university = data.get('university')
+        course_code = data.get('course_code')
 
-        # Get all user's notes
-        conn = psycopg2.connect(os.environ.get("DATABASE_URL"))
-        cur = conn.cursor()
+        # Get user profile to check their course metadata
+        user_profile = get_user_profile(request.user_id)
+        if not user_profile:
+            return jsonify({"error": "User profile not found", "results": []}), 404
 
-        cur.execute("""
-            SELECT id, original_filename, ocr_text, page_count
-            FROM notes
-            WHERE user_id = %s AND ocr_text IS NOT NULL AND ocr_text != ''
-            ORDER BY uploaded_at DESC
-        """, (request.user_id,))
+        # If no course specified, try to get from user's most recent note
+        if not university or not course_code:
+            recent_notes = supabase.table("notes").select("university, course_code").eq("user_id", request.user_id).order("uploaded_at", desc=True).limit(1).execute()
+            if recent_notes.data:
+                university = university or recent_notes.data[0].get('university')
+                course_code = course_code or recent_notes.data[0].get('course_code')
 
-        user_notes = cur.fetchall()
-        conn.close()
+        # Generate embedding for the question
+        query_embedding = generate_embedding(question)
+        if not query_embedding:
+            return jsonify({"error": "Failed to generate query embedding", "results": []}), 500
 
-        if not user_notes:
-            return jsonify({"error": "No notes found", "results": []}), 404
+        debug_log(f"🔍 Searching for: '{question}' (university={university}, course={course_code})")
 
-        # Combine all notes for AI search
-        all_notes_text = ""
-        note_sources = {}
+        # Search using pgvector
+        search_results = search_notes_vector(
+            query_embedding=query_embedding,
+            user_id=request.user_id,
+            university=university,
+            course_code=course_code,
+            match_threshold=0.7,  # Only return results with >70% similarity
+            match_count=5  # Top 5 results
+        )
 
-        for note_id, filename, ocr_text, page_count in user_notes:
-            note_sources[filename] = ocr_text
-            all_notes_text += f"\n\n=== {filename} ===\n{ocr_text}"
-
-        # Use Gemini to search and provide hints
-        try:
-            import google.generativeai as genai
-            genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-            model = genai.GenerativeModel('gemini-2.0-flash-exp')
-        except Exception as e:
-            debug_log(f"❌ Gemini init error: {e}")
-            return jsonify({"error": "AI service unavailable"}), 503
-
-        # Limit notes to 10k chars to avoid token limits
-        notes_excerpt = all_notes_text[:10000]
-
-        prompt = f"""You are a helpful study assistant. A student is asking about their notes.
-
-Student's Question: {question}
-
-Student's Notes:
-{notes_excerpt}
-
-Your task:
-1. Search through the notes above for information related to the question
-2. Provide HINTS and GUIDANCE, not direct answers
-3. Point the student to specific sections of their notes
-4. Help them learn by guiding their thinking
-
-If you find relevant information, return JSON in this EXACT format:
-{{
-    "results": [
-        {{
-            "source": "CivilWar.txt",
-            "text": "relevant quote from the notes",
-            "hint": "helpful hint guiding them to the answer"
-        }}
-    ]
-}}
-
-If the notes don't contain relevant information, return:
-{{
-    "results": []
-}}
-
-IMPORTANT:
-- Guide them to the answer, don't give it directly
-- Use phrases like "Look at the section about...", "Consider the relationship between...", "Check the definition of..."
-- Return ONLY valid JSON, nothing else"""
-
-        debug_log(f"🔍 Searching for: '{question}' in {len(all_notes_text)} chars of notes")
-
-        try:
-            response = model.generate_content(prompt)
-            response_text = response.text.strip()
-            debug_log(f"📝 Gemini full response: {response_text}")
-        except Exception as e:
-            debug_log(f"❌ Gemini API error: {e}")
-            return jsonify({"error": "AI service error", "results": []}), 200
-
-        # Parse JSON response
-        if response_text.startswith('```json'):
-            response_text = response_text[7:]
-        if response_text.endswith('```'):
-            response_text = response_text[:-3]
-
-        try:
-            result = json.loads(response_text.strip())
-            debug_log(f"✅ Parsed results: {len(result.get('results', []))} items")
-            return jsonify(result), 200
-        except json.JSONDecodeError as e:
-            debug_log(f"❌ Search JSON parse error: {e}\nFull response was: {response_text}")
-            # Return empty results instead of error
+        if not search_results:
             return jsonify({"results": []}), 200
+
+        # Format results with hints
+        formatted_results = []
+
+        for result in search_results:
+            # Get note filename
+            note = supabase.table("notes").select("original_filename").eq("id", result['note_id']).single().execute()
+            filename = note.data['original_filename'] if note.data else "Unknown"
+
+            # Decide which text to show
+            text_to_show = result['content_summary'] if result['content_summary'] else result['chunk_text']
+
+            # Generate a hint using the text
+            hint = generate_hint_from_text(question, text_to_show)
+
+            formatted_results.append({
+                "source": f"{filename} ({result['university']} - {result['course_code']})" if result['university'] else filename,
+                "text": text_to_show[:300] + "..." if len(text_to_show) > 300 else text_to_show,
+                "hint": hint,
+                "from_collective_brain": not result['is_own_note'],
+                "similarity": round(result['similarity'], 2)
+            })
+
+        debug_log(f"✅ Found {len(formatted_results)} results (similarity > 0.7)")
+
+        return jsonify({"results": formatted_results}), 200
 
     except Exception as e:
         debug_log(f"❌ Search notes error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e), "results": []}), 500
+
+
+def generate_hint_from_text(question, text):
+    """
+    Generate a study hint from the found text using Gemini.
+    """
+    try:
+        import google.generativeai as genai
+        genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+        model = genai.GenerativeModel('gemini-2.0-flash-exp')
+
+        prompt = f"""You are a study tutor. A student asked: "{question}"
+
+I found this relevant excerpt from their notes:
+"{text[:500]}"
+
+Generate a SHORT hint (1 sentence) that guides them to the answer WITHOUT giving it directly.
+
+Use phrases like:
+- "Look at the section about..."
+- "Consider the relationship between..."
+- "Check the definition of..."
+- "Think about how X relates to Y..."
+
+Return ONLY the hint, nothing else."""
+
+        response = model.generate_content(prompt)
+        hint = response.text.strip()
+
+        return hint if hint else "Review this section carefully to find the answer."
+
+    except Exception as e:
+        debug_log(f"⚠️ Error generating hint: {e}")
+        return "Review this section to find the answer."
 
 
 if __name__ == "__main__":

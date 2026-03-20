@@ -25,3 +25,5 @@ bcrypt
 pyjwt
 PyPDF2
 python-docx
+supabase>=2.0.0
+pgvector
