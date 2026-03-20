@@ -81,6 +81,7 @@ CREATE INDEX IF NOT EXISTS note_chunks_course_idx ON note_chunks
 CREATE INDEX IF NOT EXISTS note_chunks_user_idx ON note_chunks (user_id);
 
 -- Function to search notes with vector similarity
+-- COLLECTIVE BRAIN: Searches ALL public notes from ALL students (no course filtering)
 CREATE OR REPLACE FUNCTION search_notes_with_vector(
     query_embedding VECTOR(1536),
     search_user_id UUID,
@@ -114,11 +115,8 @@ BEGIN
         (nc.user_id = search_user_id) AS is_own_note
     FROM note_chunks nc
     WHERE
-        -- User's own notes OR public notes from same course
-        (nc.user_id = search_user_id OR
-         (nc.is_public = TRUE AND
-          nc.university = search_university AND
-          nc.course_code = search_course_code))
+        -- User's own notes OR ALL public notes (true collective brain)
+        (nc.user_id = search_user_id OR nc.is_public = TRUE)
         AND 1 - (nc.embedding <=> query_embedding) > match_threshold
     ORDER BY nc.embedding <=> query_embedding
     LIMIT match_count;

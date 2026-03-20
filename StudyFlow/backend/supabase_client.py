@@ -231,7 +231,8 @@ def search_notes_vector(query_embedding: list, user_id: str, university: str = N
                        course_code: str = None, match_threshold: float = 0.7, match_count: int = 5) -> list:
     """
     Search notes using vector similarity
-    Returns chunks from user's own notes + public notes from same course
+    Returns chunks from user's own notes + ALL public notes (collective brain)
+    University and course_code parameters are ignored - searches all public notes
     """
     try:
         # Call the PostgreSQL function we defined

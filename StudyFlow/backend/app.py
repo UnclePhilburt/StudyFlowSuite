@@ -2733,15 +2733,14 @@ def delete_note_endpoint(note_id):
 @supabase_auth_required
 def search_notes():
     """
-    Search through user's notes using vector similarity (pgvector + embeddings).
+    Search through ALL notes using vector similarity (pgvector + embeddings).
 
-    NEW: Uses semantic search with OpenAI embeddings + Collective Brain
+    COLLECTIVE BRAIN: Searches user's own notes + ALL public notes from ALL students.
+    No course filtering - truly shared knowledge base across all subjects.
 
     Expects JSON:
     {
-        "question": "What is photosynthesis?",
-        "university": "Michigan State University" (optional),
-        "course_code": "BIO 101" (optional)
+        "question": "What is photosynthesis?"
     }
 
     Returns:
@@ -2751,7 +2750,7 @@ def search_notes():
                 "source": "Biology_Chapter_3.pdf",
                 "text": "Photosynthesis is the process by which...",
                 "hint": "Look at the section about cellular processes...",
-                "from_collective_brain": false,
+                "from_collective_brain": true,
                 "similarity": 0.89
             }
         ]
@@ -2766,34 +2765,25 @@ def search_notes():
             return jsonify({"error": "Missing question"}), 400
 
         question = data.get('question')
-        university = data.get('university')
-        course_code = data.get('course_code')
 
-        # Get user profile to check their course metadata
+        # Get user profile (just to verify user exists)
         user_profile = get_user_profile(request.user_id)
         if not user_profile:
             return jsonify({"error": "User profile not found", "results": []}), 404
-
-        # If no course specified, try to get from user's most recent note
-        if not university or not course_code:
-            recent_notes = supabase.table("notes").select("university, course_code").eq("user_id", request.user_id).order("uploaded_at", desc=True).limit(1).execute()
-            if recent_notes.data:
-                university = university or recent_notes.data[0].get('university')
-                course_code = course_code or recent_notes.data[0].get('course_code')
 
         # Generate embedding for the question
         query_embedding = generate_embedding(question)
         if not query_embedding:
             return jsonify({"error": "Failed to generate query embedding", "results": []}), 500
 
-        debug_log(f"🔍 Searching for: '{question}' (university={university}, course={course_code})")
+        debug_log(f"🔍 Searching ENTIRE collective brain for: '{question}'")
 
-        # Search using pgvector
+        # Search using pgvector - searches ALL public notes from ALL students
         search_results = search_notes_vector(
             query_embedding=query_embedding,
             user_id=request.user_id,
-            university=university,
-            course_code=course_code,
+            university=None,  # No course filtering - true collective brain
+            course_code=None,
             match_threshold=0.4,  # Only return results with >40% similarity
             match_count=5  # Top 5 results
         )
