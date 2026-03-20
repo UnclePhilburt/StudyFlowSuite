@@ -734,27 +734,21 @@ def create_portal_session():
 def get_current_user():
     """Get current authenticated user info"""
     try:
-        conn = psycopg2.connect(os.environ["DATABASE_URL"])
-        cur = conn.cursor()
+        from StudyFlow.backend.supabase_client import get_user_profile
 
-        cur.execute("""
-            SELECT id, email, name, subscription_status, is_beta, created_at
-            FROM users WHERE id = %s
-        """, (request.user_id,))
+        # Get user profile from Supabase
+        profile = get_user_profile(request.user_id)
 
-        user = cur.fetchone()
-        conn.close()
-
-        if not user:
+        if not profile:
             return jsonify({"error": "User not found"}), 404
 
         return jsonify({
-            "id": user[0],
-            "email": user[1],
-            "name": user[2],
-            "subscription_status": user[3],
-            "is_beta": user[4],
-            "created_at": user[5].isoformat() if user[5] else None
+            "id": profile.get("id"),
+            "email": profile.get("email"),
+            "name": profile.get("full_name"),
+            "subscription_status": profile.get("subscription_tier", "free"),
+            "is_beta": False,  # Legacy field, always False for new users
+            "created_at": profile.get("created_at")
         }), 200
 
     except Exception as e:
