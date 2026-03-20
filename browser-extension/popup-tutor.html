@@ -348,6 +348,65 @@
     input:checked + .toggle-slider:before {
       transform: translateX(20px);
     }
+
+    .footer {
+      background: #ffffff;
+      border-top: 1px solid #e8e8e8;
+      padding: 16px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .footer-user {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .footer-user-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .footer-user-name {
+      font-size: 14px;
+      color: #1a1a1a;
+      font-weight: 500;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      letter-spacing: -0.2px;
+    }
+
+    .footer-btn {
+      background: #f5f5f5;
+      border: none;
+      border-radius: 8px;
+      padding: 8px 16px;
+      font-size: 13px;
+      font-weight: 500;
+      color: #1a1a1a;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-family: inherit;
+      letter-spacing: -0.2px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .footer-btn:hover {
+      background: #ebebeb;
+    }
+
+    .footer-btn .btn-icon {
+      font-size: 14px;
+    }
   </style>
 </head>
 <body>
@@ -383,16 +442,6 @@
         <!-- Home Tab -->
         <div class="tab-content active" id="homeTab">
           <div class="section">
-            <!-- User Card -->
-            <div class="user-card">
-              <div class="user-header">
-                <div class="user-avatar" id="userAvatar">S</div>
-                <div class="user-info">
-                  <div class="user-name" id="userName">Loading...</div>
-                </div>
-              </div>
-            </div>
-
             <!-- Actions -->
             <button id="toggleOverlayBtn" class="action-btn">
               <span>Open NoteFlow</span>
@@ -401,13 +450,6 @@
             <button id="uploadNotesBtn" class="action-btn-secondary action-btn">
               <span>Upload Notes</span>
               <span class="btn-icon">↗</span>
-            </button>
-
-            <div class="spacer"></div>
-
-            <button id="logoutBtn" class="action-btn-secondary action-btn">
-              <span>Sign Out</span>
-              <span class="btn-icon">→</span>
             </button>
           </div>
         </div>
@@ -455,6 +497,20 @@
               </div>
             </div>
           </div>
+        </div>
+
+        <!-- Footer (shown in all tabs when logged in) -->
+        <div class="footer">
+          <div class="footer-user">
+            <div class="user-avatar" id="footerUserAvatar">S</div>
+            <div class="footer-user-info">
+              <div class="footer-user-name" id="footerUserName">Loading...</div>
+            </div>
+          </div>
+          <button id="logoutBtn" class="footer-btn">
+            <span>Sign Out</span>
+            <span class="btn-icon">→</span>
+          </button>
         </div>
       </div>
     </div>

@@ -142,10 +142,10 @@ async function init() {
 
     // Display user info
     const userName = user.full_name || user.name || user.email.split('@')[0];
-    document.getElementById('userName').textContent = userName;
 
-    // Set avatar initial
-    document.getElementById('userAvatar').textContent = userName.charAt(0).toUpperCase();
+    // Set footer user info
+    document.getElementById('footerUserName').textContent = userName;
+    document.getElementById('footerUserAvatar').textContent = userName.charAt(0).toUpperCase();
 
     // Show navigation
     document.getElementById('mainNav').classList.remove('hidden');
