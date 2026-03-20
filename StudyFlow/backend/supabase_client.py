@@ -250,6 +250,9 @@ def search_notes_vector(query_embedding: list, user_id: str, university: str = N
 
     except Exception as e:
         debug_log(f"❌ Error searching notes with vector: {e}")
+        # Log more details for debugging
+        import traceback
+        debug_log(f"Full error traceback: {traceback.format_exc()}")
         return []
 
 

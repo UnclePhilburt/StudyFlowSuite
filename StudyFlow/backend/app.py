@@ -182,7 +182,7 @@ def check_question_limit(user_id):
         cur = conn.cursor()
 
         # Check user's subscription status and beta status
-        cur.execute("SELECT subscription_status, is_beta FROM users WHERE id = %s", (user_id,))
+        cur.execute("SELECT subscription_tier, created_at FROM user_profiles WHERE id = %s", (user_id,))
         user = cur.fetchone()
         if not user:
             conn.close()
@@ -592,7 +592,7 @@ def create_subscription():
         # Create or get Stripe customer
         conn = psycopg2.connect(os.environ["DATABASE_URL"])
         cur = conn.cursor()
-        cur.execute("SELECT stripe_customer_id FROM users WHERE email = %s", (email,))
+        cur.execute("SELECT stripe_customer_id FROM user_profiles WHERE email = %s", (email,))
         result = cur.fetchone()
 
         if result and result[0]:
@@ -676,8 +676,8 @@ def get_me():
         conn = psycopg2.connect(os.environ["DATABASE_URL"])
         cur = conn.cursor()
         cur.execute("""
-            SELECT id, email, name, subscription_status, stripe_customer_id, trial_ends_at, created_at, is_beta
-            FROM users WHERE id = %s
+            SELECT id, email, full_name, subscription_tier, stripe_customer_id, NULL as trial_ends_at, created_at, FALSE as is_beta
+            FROM user_profiles WHERE id = %s
         """, (request.user_id,))
         user = cur.fetchone()
         conn.close()
@@ -711,7 +711,7 @@ def create_portal_session():
         conn = psycopg2.connect(os.environ["DATABASE_URL"])
         cur = conn.cursor()
         cur.execute("""
-            SELECT stripe_customer_id FROM users WHERE id = %s
+            SELECT stripe_customer_id FROM user_profiles WHERE id = %s
         """, (request.user_id,))
         result = cur.fetchone()
         conn.close()
@@ -780,8 +780,8 @@ def get_user_stats():
 
         # Get user info
         cur.execute("""
-            SELECT email, name, subscription_status, is_beta, created_at
-            FROM users WHERE id = %s
+            SELECT email, full_name, subscription_tier, FALSE as is_beta, created_at
+            FROM user_profiles WHERE id = %s
         """, (request.user_id,))
         user = cur.fetchone()
 
@@ -1086,7 +1086,7 @@ def check_subscription():
         conn = psycopg2.connect(os.environ["DATABASE_URL"])
         cur = conn.cursor()
         cur.execute(
-            "SELECT subscription_status FROM users WHERE stripe_id = %s",
+            "SELECT subscription_tier FROM user_profiles WHERE stripe_customer_id = %s",
             (sid,)
         )
         row = cur.fetchone()
@@ -1500,7 +1500,7 @@ def view_questions():
         limit = int(request.args.get('limit', 100))
 
         # Build query with filters
-        query = "SELECT q.id, q.user_id, u.email, q.question_text, q.question_type, q.answers_json, q.ai_answer, q.ai_reasoning, q.created_at FROM questions q LEFT JOIN users u ON q.user_id = u.id WHERE 1=1"
+        query = "SELECT q.id, q.user_id, u.email, q.question_text, q.question_type, q.answers_json, q.ai_answer, q.ai_reasoning, q.created_at FROM questions q LEFT JOIN user_profiles u ON q.user_id = u.id WHERE 1=1"
         params = []
 
         if user_id_filter:
