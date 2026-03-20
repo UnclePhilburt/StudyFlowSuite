@@ -2794,7 +2794,7 @@ def search_notes():
             user_id=request.user_id,
             university=university,
             course_code=course_code,
-            match_threshold=0.7,  # Only return results with >70% similarity
+            match_threshold=0.4,  # Only return results with >40% similarity
             match_count=5  # Top 5 results
         )
 
@@ -2823,7 +2823,7 @@ def search_notes():
                 "similarity": round(result['similarity'], 2)
             })
 
-        debug_log(f"✅ Found {len(formatted_results)} results (similarity > 0.7)")
+        debug_log(f"✅ Found {len(formatted_results)} results (similarity > 0.4)")
 
         return jsonify({"results": formatted_results}), 200
 
