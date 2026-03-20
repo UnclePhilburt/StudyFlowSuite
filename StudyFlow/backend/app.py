@@ -625,6 +625,91 @@ def create_portal_session():
         app.logger.error(f"❌ Create portal session error: {e}\n{traceback.format_exc()}")
         return jsonify({'error': 'Failed to create portal session'}), 500
 
+@app.route("/api/stats", methods=["GET"])
+@token_required
+def get_user_stats():
+    """Get user statistics"""
+    try:
+        conn = psycopg2.connect(os.environ["DATABASE_URL"])
+        cur = conn.cursor()
+
+        # Get user info
+        cur.execute("""
+            SELECT email, name, subscription_status, is_beta, created_at
+            FROM users WHERE id = %s
+        """, (request.user_id,))
+        user = cur.fetchone()
+
+        if not user:
+            conn.close()
+            return jsonify({'error': 'User not found'}), 404
+
+        email, name, subscription_status, is_beta, created_at = user
+
+        # Get total questions
+        cur.execute("""
+            SELECT COUNT(*) FROM questions WHERE user_id = %s
+        """, (request.user_id,))
+        total_questions = cur.fetchone()[0]
+
+        # Get questions today
+        cur.execute("""
+            SELECT COUNT(*) FROM questions
+            WHERE user_id = %s AND created_at >= CURRENT_DATE
+        """, (request.user_id,))
+        questions_today = cur.fetchone()[0]
+
+        # Get questions this week
+        cur.execute("""
+            SELECT COUNT(*) FROM questions
+            WHERE user_id = %s AND created_at >= CURRENT_DATE - INTERVAL '7 days'
+        """, (request.user_id,))
+        questions_this_week = cur.fetchone()[0]
+
+        # Get question type breakdown
+        cur.execute("""
+            SELECT question_type, COUNT(*)
+            FROM questions
+            WHERE user_id = %s
+            GROUP BY question_type
+        """, (request.user_id,))
+        question_types = dict(cur.fetchall())
+
+        # Get most recent question date
+        cur.execute("""
+            SELECT MAX(created_at) FROM questions WHERE user_id = %s
+        """, (request.user_id,))
+        last_activity = cur.fetchone()[0]
+
+        conn.close()
+
+        # Determine tier
+        tier = 'Free'
+        if is_beta:
+            tier = 'Beta (Pro)'
+        elif subscription_status in ['active', 'trialing']:
+            tier = 'Pro'
+
+        return jsonify({
+            'user': {
+                'name': name,
+                'email': email,
+                'tier': tier,
+                'created_at': created_at.isoformat() if created_at else None
+            },
+            'stats': {
+                'total_questions': total_questions,
+                'questions_today': questions_today,
+                'questions_this_week': questions_this_week,
+                'last_activity': last_activity.isoformat() if last_activity else None
+            },
+            'question_types': question_types
+        }), 200
+
+    except Exception as e:
+        app.logger.error(f"❌ Get stats error: {e}\n{traceback.format_exc()}")
+        return jsonify({'error': 'Failed to get stats'}), 500
+
 # ============================================================================
 # END USER AUTHENTICATION & SUBSCRIPTION ROUTES
 # ============================================================================

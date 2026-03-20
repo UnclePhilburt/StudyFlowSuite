@@ -195,6 +195,123 @@ document.getElementById('targetTime').addEventListener('click', async (e) => {
 // Initialize on page load
 initUserProfile();
 
+// Tab switching
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const tab = btn.dataset.tab;
+
+    // Update tab buttons
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+
+    // Update tab content
+    document.querySelectorAll('.tab-content').forEach(content => {
+      content.classList.add('hidden');
+    });
+    document.getElementById(`${tab}-tab`).classList.remove('hidden');
+
+    // Load stats if switching to stats tab
+    if (tab === 'stats') {
+      loadStats();
+    }
+  });
+});
+
+// Load stats from API
+async function loadStats() {
+  try {
+    const token = await window.auth.getAuthToken();
+    const response = await fetch('https://studyflowsuite.onrender.com/api/stats', {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      displayStats(data);
+    } else {
+      console.error('Failed to load stats:', response.status);
+      displayStatsError();
+    }
+  } catch (error) {
+    console.error('Error loading stats:', error);
+    displayStatsError();
+  }
+}
+
+// Display stats in UI
+function displayStats(data) {
+  // Update stat cards
+  document.getElementById('totalQuestions').textContent = data.stats.total_questions.toLocaleString();
+  document.getElementById('questionsToday').textContent = data.stats.questions_today.toLocaleString();
+  document.getElementById('questionsWeek').textContent = data.stats.questions_this_week.toLocaleString();
+  document.getElementById('accountTier').textContent = data.user.tier;
+
+  // Update question types
+  const questionTypesDiv = document.getElementById('questionTypes');
+  if (data.question_types && Object.keys(data.question_types).length > 0) {
+    questionTypesDiv.innerHTML = '';
+    for (const [type, count] of Object.entries(data.question_types)) {
+      const row = document.createElement('div');
+      row.className = 'type-row';
+      row.innerHTML = `
+        <span class="type-name">${type}</span>
+        <span class="type-count">${count.toLocaleString()}</span>
+      `;
+      questionTypesDiv.appendChild(row);
+    }
+  } else {
+    questionTypesDiv.innerHTML = '<div class="loading-spinner">No questions yet</div>';
+  }
+
+  // Update account info
+  document.getElementById('userEmail').textContent = data.user.email;
+
+  if (data.user.created_at) {
+    const createdDate = new Date(data.user.created_at);
+    document.getElementById('memberSince').textContent = createdDate.toLocaleDateString();
+  }
+
+  if (data.stats.last_activity) {
+    const lastActivityDate = new Date(data.stats.last_activity);
+    const now = new Date();
+    const diffMs = now - lastActivityDate;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    let lastActivityText = '';
+    if (diffMins < 1) {
+      lastActivityText = 'Just now';
+    } else if (diffMins < 60) {
+      lastActivityText = `${diffMins} min ago`;
+    } else if (diffHours < 24) {
+      lastActivityText = `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    } else {
+      lastActivityText = `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+    }
+
+    document.getElementById('lastActivity').textContent = lastActivityText;
+  } else {
+    document.getElementById('lastActivity').textContent = 'No activity yet';
+  }
+}
+
+// Display error message
+function displayStatsError() {
+  document.getElementById('totalQuestions').textContent = 'Error';
+  document.getElementById('questionsToday').textContent = 'Error';
+  document.getElementById('questionsWeek').textContent = 'Error';
+  document.getElementById('accountTier').textContent = 'Error';
+  document.getElementById('questionTypes').innerHTML = '<div class="loading-spinner">Failed to load</div>';
+}
+
+// Refresh stats button
+document.getElementById('refreshStats').addEventListener('click', () => {
+  loadStats();
+});
+
 // Settings validation
 document.getElementById('totalQuestions').addEventListener('input', (e) => {
   const totalQuestions = parseInt(e.target.value);

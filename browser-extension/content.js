@@ -668,7 +668,12 @@ function detectQuiz() {
       const isHardcodedSelector = selector === '.user_content > p' || selector === '.css-1nuqag6-formFieldLayout__label';
       const meetsLengthRequirement = isHardcodedSelector ? (text.length > 5) : (text.length > 30 && text.length < 2000);
 
-      if ((hasQuestionMark || (hasKeywords && meetsLengthRequirement)) && text.length > 5) {
+      // TRUE/FALSE SPECIAL CASE: If we detected "True or False" question type, accept ANY statement from .user_content > p
+      // True/False questions don't have question marks or keywords - they're just statements
+      const isTrueFalseQuestion = detectedQuestionType && /true.*false|true\/false/i.test(detectedQuestionType);
+      const isTrueFalseValidText = isTrueFalseQuestion && isHardcodedSelector && text.length > 10;
+
+      if ((hasQuestionMark || (hasKeywords && meetsLengthRequirement) || isTrueFalseValidText) && text.length > 5) {
         quizData.question = text;
         quizData.found = true;
         quizData.debug.push(`Found question via selector: ${selector}`);
@@ -1059,7 +1064,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     // LEARNOSITY: Check if this is a Rich Text Editor iframe
     if (isRichTextEditor) {
-      const iframe = document.querySelector(`[data-studyflow-field-id="${essayFieldId}"]`);
+      // Try finding by ID first (preferred), then fall back to data-studyflow-field-id
+      let iframe = document.getElementById(essayFieldId);
+      if (!iframe) {
+        iframe = document.querySelector(`[data-studyflow-field-id="${essayFieldId}"]`);
+      }
 
       if (iframe && iframe.tagName === 'IFRAME') {
         iframe.scrollIntoView({ behavior: 'smooth', block: 'center' });

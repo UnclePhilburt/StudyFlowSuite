@@ -241,7 +241,7 @@ async function runQuizLoop() {
         console.log('AI Essay Answer:', essayAnswer.substring(0, 100));
 
         // Fill in the essay field
-        await new Promise((resolve) => {
+        const fillResponse = await new Promise((resolve) => {
           sendMessageToFrame(currentTabId, {
             action: 'fillEssay',
             essayAnswer: essayAnswer,
@@ -254,6 +254,12 @@ async function runQuizLoop() {
             resolve(response);
           });
         });
+
+        if (fillResponse && fillResponse.success) {
+          console.log('✅ Essay field filled successfully');
+        } else {
+          console.error('❌ Failed to fill essay field:', fillResponse?.error || 'Unknown error');
+        }
 
         // Calculate delay based on field type
         // Rich Text Editor (essay): filled instantly, short delay
@@ -437,7 +443,9 @@ async function runQuizLoop() {
         });
       }
 
-      await sleep(1500);
+      // Wait longer for Canvas/Learnosity to register the answer before submitting
+      // This prevents 403 errors and "invalid launch" issues in sequential mode
+      await sleep(3000);
 
       // Mark question as answered
       if (quiz.questionHash) {
@@ -465,8 +473,9 @@ async function runQuizLoop() {
         if (submitResponse && submitResponse.success) {
           console.log('✅ Submit button clicked, waiting for next question to load...');
 
-          // Wait minimum 2 seconds for page transition to start
-          await sleep(2000);
+          // Wait minimum 4 seconds for Canvas LTI session to complete and page transition to start
+          // This prevents 403 errors and "invalid launch" issues
+          await sleep(4000);
 
           // Poll for new question to appear (wait up to 8 more seconds)
           const oldQuestion = lastQuestionText;

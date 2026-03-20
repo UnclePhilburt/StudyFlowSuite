@@ -5,6 +5,10 @@ let pickerMode = null; // 'question', 'answers', 'submit'
 let hoveredElement = null;
 let overlay = null;
 
+// Dev Inspector (separate from picker)
+let isDevInspectorActive = false;
+let devHoveredElement = null;
+
 // Listen for picker activation
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'startPicker') {
@@ -12,6 +16,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     sendResponse({ success: true });
   } else if (request.action === 'stopPicker') {
     stopPicker();
+    sendResponse({ success: true });
+  } else if (request.action === 'startDevInspector') {
+    startDevInspector();
+    sendResponse({ success: true });
+  } else if (request.action === 'stopDevInspector') {
+    stopDevInspector();
     sendResponse({ success: true });
   }
   return true;
@@ -228,6 +238,174 @@ function getElementSelector(element) {
   }
 
   return tag;
+}
+
+// === DEV INSPECTOR (Development Tool) ===
+
+function startDevInspector() {
+  if (isDevInspectorActive) return;
+
+  isDevInspectorActive = true;
+  console.log('🔍 Dev Inspector activated');
+
+  // Add event listeners
+  document.addEventListener('mouseover', devHandleMouseOver, true);
+  document.addEventListener('mouseout', devHandleMouseOut, true);
+  document.addEventListener('click', devHandleClick, true);
+  document.addEventListener('keydown', devHandleKeyDown, true);
+
+  // Create overlay banner
+  const banner = document.createElement('div');
+  banner.id = 'studyflow-dev-banner';
+  banner.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(135deg, #f59e0b, #dc2626);
+    color: white;
+    padding: 12px;
+    text-align: center;
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    font-weight: bold;
+    z-index: 999999;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  `;
+  banner.textContent = '🔍 DEV INSPECTOR ACTIVE - Click elements to log selectors to background console (ESC to exit)';
+  document.body.appendChild(banner);
+}
+
+function stopDevInspector() {
+  if (!isDevInspectorActive) return;
+
+  isDevInspectorActive = false;
+  devHoveredElement = null;
+
+  // Remove banner
+  const banner = document.getElementById('studyflow-dev-banner');
+  if (banner) banner.remove();
+
+  // Remove highlight
+  removeHighlight();
+
+  // Remove event listeners
+  document.removeEventListener('mouseover', devHandleMouseOver, true);
+  document.removeEventListener('mouseout', devHandleMouseOut, true);
+  document.removeEventListener('click', devHandleClick, true);
+  document.removeEventListener('keydown', devHandleKeyDown, true);
+
+  console.log('🔍 Dev Inspector stopped');
+}
+
+function devHandleMouseOver(e) {
+  if (!isDevInspectorActive) return;
+  if (e.target.id === 'studyflow-dev-banner') return;
+
+  e.stopPropagation();
+  devHoveredElement = e.target;
+  highlightElement(devHoveredElement);
+}
+
+function devHandleMouseOut(e) {
+  if (!isDevInspectorActive) return;
+  e.stopPropagation();
+}
+
+function devHandleClick(e) {
+  if (!isDevInspectorActive) return;
+  if (e.target.id === 'studyflow-dev-banner') return;
+
+  e.preventDefault();
+  e.stopPropagation();
+
+  const element = devHoveredElement;
+  if (!element) return;
+
+  // Get comprehensive element info
+  const selector = getDetailedSelector(element);
+  const textPreview = element.textContent.trim().substring(0, 200);
+  const htmlPreview = element.outerHTML.substring(0, 500);
+
+  const elementInfo = {
+    tagName: element.tagName,
+    id: element.id,
+    className: element.className,
+    attributes: Array.from(element.attributes).map(attr => ({
+      name: attr.name,
+      value: attr.value
+    })),
+    parentTag: element.parentElement?.tagName,
+    parentClass: element.parentElement?.className
+  };
+
+  // Log to content script console
+  console.log('=== DEV INSPECTOR CLICKED ===');
+  console.log('Selector:', selector);
+  console.log('Element Info:', elementInfo);
+  console.log('Text:', textPreview);
+  console.log('HTML:', htmlPreview);
+  console.log('Element:', element);
+  console.log('========================');
+
+  // Send to background for service worker console logging
+  chrome.runtime.sendMessage({
+    action: 'devInspectorResult',
+    selector: selector,
+    elementInfo: elementInfo,
+    textPreview: textPreview,
+    htmlPreview: htmlPreview
+  });
+}
+
+function devHandleKeyDown(e) {
+  if (e.key === 'Escape') {
+    stopDevInspector();
+  }
+}
+
+function getDetailedSelector(element) {
+  // Try multiple selector strategies
+  const selectors = [];
+
+  // 1. ID
+  if (element.id) {
+    selectors.push(`#${element.id}`);
+  }
+
+  // 2. Class(es)
+  if (element.className && typeof element.className === 'string') {
+    const classes = element.className.trim().split(/\s+/).filter(c => c);
+    if (classes.length > 0) {
+      selectors.push(`.${classes.join('.')}`);
+      selectors.push(`.${classes[0]}`); // Just first class
+    }
+  }
+
+  // 3. Data attributes
+  Array.from(element.attributes).forEach(attr => {
+    if (attr.name.startsWith('data-')) {
+      selectors.push(`[${attr.name}="${attr.value}"]`);
+    }
+  });
+
+  // 4. Tag with parent
+  const tag = element.tagName.toLowerCase();
+  if (element.parentElement) {
+    if (element.parentElement.id) {
+      selectors.push(`#${element.parentElement.id} > ${tag}`);
+    } else if (element.parentElement.className && typeof element.parentElement.className === 'string') {
+      const parentClass = element.parentElement.className.trim().split(/\s+/)[0];
+      if (parentClass) {
+        selectors.push(`.${parentClass} > ${tag}`);
+      }
+    }
+  }
+
+  // 5. Just the tag
+  selectors.push(tag);
+
+  return selectors;
 }
 
 console.log('StudyFlowSuite element picker loaded');

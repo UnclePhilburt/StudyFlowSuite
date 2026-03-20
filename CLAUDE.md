@@ -196,9 +196,73 @@ API keys are hardcoded in `config.py` (works for frontend).
 
 ---
 
+## Browser Extension - Single-Page Canvas Quiz Mode
+
+### Critical Architecture
+The extension handles Canvas LMS single-page quizzes where ALL questions are visible on one page (no Next button).
+
+**Key Files:**
+- `content.js` (lines 48-290): `detectOnePageQuiz()` - Scans all question containers
+- `background.js` (lines 205-520): `runQuizLoop()` - Processes questions sequentially
+- `popup.js` (line 185): Sets `onePageMode: true` for single-page mode
+
+### Question Tracking System (CRITICAL FIX - Jan 2025)
+**Problem Solved:** Questions were being marked as "answered" during detection (before actually being filled), causing the extension to skip questions.
+
+**Solution Implemented:**
+1. **Detection Phase** (content.js lines 156-279):
+   - Questions are detected but NOT marked as answered
+   - Each question returns a `questionHash` identifier
+   - Only already-filled questions are marked during detection
+
+2. **Processing Phase** (background.js lines 411-438 for multiple choice, 273-314 for essays):
+   - After successfully clicking/filling an answer
+   - Send `markQuestionAnswered` message to content.js
+   - Only then is the question marked in `answeredLearnosityQuestions` Set
+
+3. **Message Handler** (content.js lines 947-959):
+   - `markQuestionAnswered` action adds hash to tracking Set
+   - Prevents re-processing same question on next detection
+
+### Question Detection Selectors
+**Learnosity/Canvas specific:**
+- Primary: `[data-automation="sdk-take-item-question"]`
+- Fallback: `.lrn-assess-item, .lrn_widget, [class*="lrn_question"]`
+
+**Question Types Supported:**
+1. Multiple Choice: Radio buttons with `data-studyflow-radio-group` and `data-studyflow-radio-index` attributes
+2. Essay (TinyMCE): iframe with `data-studyflow-field-id` attribute
+3. Fill-in-blank: textarea with `data-studyflow-field-id` attribute
+
+### Cross-Frame Message Routing
+**Critical Fix (background.js line 413):**
+- Use `sendMessageToFrame()` NOT `chrome.tabs.sendMessage()`
+- Ensures messages go to correct iframe via `currentFrameId`
+- Fixes: "Radio button not found" and "Essay field not found" errors
+
+### Submit Button Logic
+**One-page mode behavior:**
+- Skip submit between questions (background.js line 429)
+- Only click submit after ALL questions answered (background.js line 363)
+- Prevents premature quiz submission
+
+### Flow Example (3-question quiz):
+```
+1. Detect Q1 (multiple choice) → Return Q1 [NOT marked]
+2. Get AI answer → Click radio → Send markQuestionAnswered → Q1 marked ✓
+3. Detect Q2 (essay) → Return Q2 [NOT marked, Q1 skipped]
+4. Get AI answer → Fill iframe → Send markQuestionAnswered → Q2 marked ✓
+5. Detect Q3 (fill-blank) → Return Q3 [NOT marked, Q1-Q2 skipped]
+6. Get AI answer → Fill textarea → Send markQuestionAnswered → Q3 marked ✓
+7. Detect next → All marked → Return "All questions answered! Ready for final submit"
+```
+
+---
+
 ## Common Issues
 
 1. **Import errors**: Ensure using `StudyFlow.frontend.xxx` not `StudyFlow.xxx`
 2. **Images not loading**: Check `MEDIA_DIR` path resolution
 3. **Tesseract not found**: Install via Homebrew or set `TESSERACT_PATH`
 4. **pyautogui missing**: `pip install pyautogui`
+5. **Extension skipping questions**: Ensure `markQuestionAnswered` is called AFTER successful answer (not during detection)
