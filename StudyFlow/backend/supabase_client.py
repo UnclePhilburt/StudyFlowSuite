@@ -12,7 +12,13 @@ SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY")
 SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY")
 
+# Debug: Print what we actually got
+print(f"🔍 SUPABASE_URL = {SUPABASE_URL}")
+print(f"🔍 SUPABASE_SERVICE_KEY = {'[PRESENT]' if SUPABASE_SERVICE_KEY else '[MISSING]'}")
+print(f"🔍 All env vars with 'SUPABASE': {[k for k in os.environ.keys() if 'SUPABASE' in k]}")
+
 if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+    print(f"❌ ERROR: SUPABASE_URL={SUPABASE_URL}, SERVICE_KEY={'[PRESENT]' if SUPABASE_SERVICE_KEY else '[MISSING]'}")
     raise RuntimeError("Missing SUPABASE_URL or SUPABASE_SERVICE_KEY environment variables")
 
 # Service role client (for backend operations)
