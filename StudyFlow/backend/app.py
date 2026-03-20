@@ -734,13 +734,23 @@ def create_portal_session():
 def get_current_user():
     """Get current authenticated user info"""
     try:
-        from StudyFlow.backend.supabase_client import get_user_profile
+        from StudyFlow.backend.supabase_client import get_user_profile, create_user_profile
 
         # Get user profile from Supabase
         profile = get_user_profile(request.user_id)
 
+        # If profile doesn't exist, create it (handles edge case where auth exists but profile is missing)
         if not profile:
-            return jsonify({"error": "User not found"}), 404
+            debug_log(f"⚠️ User profile missing for {request.user_email}, creating now...")
+            profile = create_user_profile(
+                user_id=request.user_id,
+                email=request.user_email,
+                full_name=None,
+                collective_brain_opt_in=False
+            )
+
+            if not profile:
+                return jsonify({"error": "Failed to create user profile"}), 500
 
         return jsonify({
             "id": profile.get("id"),
