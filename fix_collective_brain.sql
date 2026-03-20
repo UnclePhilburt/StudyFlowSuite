@@ -29,7 +29,7 @@ BEGIN
     SELECT COALESCE(collective_brain_opt_in, TRUE)
     INTO searcher_opted_in
     FROM user_profiles
-    WHERE id = search_user_id;
+    WHERE user_profiles.id = search_user_id;
 
     RETURN QUERY
     SELECT
