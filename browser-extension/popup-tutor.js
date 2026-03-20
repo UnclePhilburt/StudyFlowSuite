@@ -147,6 +147,9 @@ async function init() {
     // Set avatar initial
     document.getElementById('userAvatar').textContent = userName.charAt(0).toUpperCase();
 
+    // Show navigation
+    document.getElementById('mainNav').classList.remove('hidden');
+
     // Load stats
     loadStats();
 
@@ -157,9 +160,9 @@ async function init() {
     setInterval(syncSettingsFromBackend, 5000);
 
     // Tab switching
-    document.querySelectorAll('.tab').forEach(tab => {
-      tab.addEventListener('click', () => {
-        const tabName = tab.getAttribute('data-tab');
+    document.querySelectorAll('.nav-item').forEach(navItem => {
+      navItem.addEventListener('click', () => {
+        const tabName = navItem.getAttribute('data-tab');
         switchTab(tabName);
       });
     });
@@ -254,12 +257,12 @@ async function init() {
 
 // Tab switching function
 function switchTab(tabName) {
-  // Update tab buttons
-  document.querySelectorAll('.tab').forEach(tab => {
-    if (tab.getAttribute('data-tab') === tabName) {
-      tab.classList.add('active');
+  // Update nav buttons
+  document.querySelectorAll('.nav-item').forEach(navItem => {
+    if (navItem.getAttribute('data-tab') === tabName) {
+      navItem.classList.add('active');
     } else {
-      tab.classList.remove('active');
+      navItem.classList.remove('active');
     }
   });
 

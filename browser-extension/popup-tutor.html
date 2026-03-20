@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>StudyFlow Suite</title>
+  <title>StudyFlow</title>
   <style>
     * {
       margin: 0;
@@ -11,406 +11,302 @@
     }
 
     body {
-      width: 340px;
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #ffffff;
+      width: 380px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: #fafafa;
       color: #1a1a1a;
+      -webkit-font-smoothing: antialiased;
     }
 
     .container {
-      padding: 0;
-      background: #ffffff;
-      min-height: 400px;
+      background: #fafafa;
+      min-height: 500px;
     }
 
     .header {
-      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-      padding: 20px;
-      text-align: center;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .header::before {
-      content: '';
-      position: absolute;
-      top: -50%;
-      left: -50%;
-      width: 200%;
-      height: 200%;
-      background: radial-gradient(circle, rgba(255,255,255,0.15) 0%, transparent 70%);
-      animation: pulse 4s ease-in-out infinite;
-    }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 0.4; }
-      50% { opacity: 0.7; }
-    }
-
-    .title {
-      font-size: 22px;
-      font-weight: 800;
-      letter-spacing: 0.5px;
-      position: relative;
-      z-index: 1;
-      text-shadow: 0 2px 10px rgba(0,0,0,0.3);
-    }
-
-    .content {
-      padding: 20px;
-    }
-
-    .login-section {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 80px 20px;
-      position: relative;
-      background: linear-gradient(180deg, #ffffff 0%, #fafafa 100%);
-    }
-
-    .login-glow {
-      position: absolute;
-      width: 250px;
-      height: 250px;
-      background: radial-gradient(circle, rgba(139, 92, 246, 0.15) 0%, transparent 70%);
-      filter: blur(60px);
-      animation: glow-pulse 4s ease-in-out infinite;
-      pointer-events: none;
-    }
-
-    @keyframes glow-pulse {
-      0%, 100% {
-        opacity: 0.6;
-        transform: scale(1);
-      }
-      50% {
-        opacity: 1;
-        transform: scale(1.1);
-      }
-    }
-
-    .login-btn {
-      position: relative;
+      padding: 32px 28px 24px;
       background: #ffffff;
-      border: 2px solid transparent;
-      border-radius: 16px;
-      padding: 18px 32px;
-      font-size: 15px;
-      font-weight: 600;
-      color: #1a1a1a;
-      cursor: pointer;
-      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-      overflow: hidden;
+    }
+
+    .logo {
       display: flex;
       align-items: center;
-      gap: 12px;
-      font-family: inherit;
-      letter-spacing: 0.3px;
-      box-shadow:
-        0 4px 24px rgba(139, 92, 246, 0.15),
-        0 1px 3px rgba(0, 0, 0, 0.08);
+      gap: 10px;
+      margin-bottom: 24px;
     }
 
-    .login-btn::before {
-      content: '';
-      position: absolute;
-      inset: -2px;
-      background: linear-gradient(
-        135deg,
-        #667eea,
-        #764ba2,
-        #f093fb,
-        #667eea
-      );
-      background-size: 300% 300%;
-      border-radius: 16px;
-      z-index: -1;
-      opacity: 0;
-      transition: opacity 0.4s ease;
-      animation: gradient-rotate 4s ease infinite;
-    }
-
-    @keyframes gradient-rotate {
-      0% { background-position: 0% 50%; }
-      50% { background-position: 100% 50%; }
-      100% { background-position: 0% 50%; }
-    }
-
-    .login-btn::after {
-      content: '';
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(
-        135deg,
-        rgba(139, 92, 246, 0.1) 0%,
-        transparent 50%,
-        rgba(139, 92, 246, 0.1) 100%
-      );
-      background-size: 200% 200%;
-      background-position: 100% 100%;
-      border-radius: 14px;
-      opacity: 0;
-      transition: all 0.6s ease;
-    }
-
-    .login-btn:hover {
-      color: #ffffff;
-      transform: translateY(-2px) scale(1.02);
-      box-shadow:
-        0 12px 40px rgba(139, 92, 246, 0.3),
-        0 4px 12px rgba(0, 0, 0, 0.1);
-    }
-
-    .login-btn:hover::before {
-      opacity: 1;
-    }
-
-    .login-btn:hover::after {
-      opacity: 1;
-      background-position: 0% 0%;
-    }
-
-    .login-btn:hover .btn-arrow {
-      transform: translateX(4px);
-    }
-
-    .login-btn:active {
-      transform: translateY(0) scale(0.98);
-    }
-
-    .btn-text {
-      position: relative;
-      z-index: 1;
-    }
-
-    .btn-arrow {
-      font-size: 20px;
-      transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-      position: relative;
-      z-index: 1;
-    }
-
-    input {
-      width: 100%;
-      padding: 14px 16px;
-      margin-bottom: 12px;
-      border: 1.5px solid #e0e0e0;
-      border-radius: 10px;
-      font-size: 14px;
-      background: #f8f8f8;
-      color: #1a1a1a;
-      transition: all 0.3s ease;
-      font-family: inherit;
-    }
-
-    input:focus {
-      outline: none;
-      border-color: #8b5cf6;
-      background: #ffffff;
-      box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
-    }
-
-    input::placeholder {
-      color: #999999;
-    }
-
-    .btn {
-      width: 100%;
-      padding: 14px;
-      border: none;
-      border-radius: 10px;
-      font-size: 14px;
-      font-weight: 700;
-      cursor: pointer;
-      transition: all 0.3s ease;
-      margin-bottom: 10px;
-      font-family: inherit;
-      letter-spacing: 0.3px;
-    }
-
-    .btn-primary {
+    .logo-icon {
+      width: 32px;
+      height: 32px;
       background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-      color: white;
-      box-shadow: 0 4px 15px rgba(139, 92, 246, 0.3);
-    }
-
-    .btn-primary:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 20px rgba(139, 92, 246, 0.4);
-    }
-
-    .btn-primary:active {
-      transform: translateY(0);
-    }
-
-    .btn-secondary {
-      background: #f5f5f5;
-      color: #1a1a1a;
-      border: 1.5px solid #e0e0e0;
-    }
-
-    .btn-secondary:hover {
-      background: #ebebeb;
-      border-color: #d0d0d0;
-    }
-
-    .btn-ghost {
-      background: transparent;
-      color: #8b5cf6;
-      border: 1.5px solid #8b5cf6;
-    }
-
-    .btn-ghost:hover {
-      background: rgba(139, 92, 246, 0.05);
-    }
-
-    .user-info {
-      background: #f8f8f8;
-      border: 1.5px solid #e8e8e8;
-      border-radius: 12px;
-      padding: 16px;
-      margin-bottom: 20px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .user-avatar {
-      width: 42px;
-      height: 42px;
-      border-radius: 50%;
-      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+      border-radius: 8px;
       display: flex;
       align-items: center;
       justify-content: center;
       font-size: 18px;
-      font-weight: 700;
+    }
+
+    .logo-text {
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: -0.3px;
+    }
+
+    .content {
+      padding: 0;
+    }
+
+    .nav {
+      display: flex;
+      gap: 4px;
+      padding: 0;
+      background: transparent;
+    }
+
+    .nav-item {
+      flex: 1;
+      padding: 10px 16px;
+      background: transparent;
+      border: none;
+      color: #666666;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      border-radius: 8px;
+      font-family: inherit;
+    }
+
+    .nav-item:hover {
+      background: #f5f5f5;
+      color: #1a1a1a;
+    }
+
+    .nav-item.active {
+      background: #f5f5f5;
+      color: #8b5cf6;
+      font-weight: 600;
+    }
+
+    .section {
+      padding: 24px 28px;
+    }
+
+    .login-section {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 100px 28px;
+      background: #ffffff;
+      min-height: 400px;
+    }
+
+    .login-illustration {
+      width: 80px;
+      height: 80px;
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+      border-radius: 20px;
+      margin-bottom: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 40px;
+    }
+
+    .login-btn {
+      width: 100%;
+      max-width: 280px;
+      background: #1a1a1a;
+      border: none;
+      border-radius: 12px;
+      padding: 16px 24px;
+      font-size: 15px;
+      font-weight: 500;
+      color: #ffffff;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-family: inherit;
+      letter-spacing: -0.2px;
+    }
+
+    .login-btn:hover {
+      background: #000000;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .login-btn:active {
+      transform: translateY(0);
+    }
+
+    .card {
+      background: #ffffff;
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 12px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+      transition: all 0.2s ease;
+    }
+
+    .card:hover {
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    }
+
+    .action-btn {
+      width: 100%;
+      background: #1a1a1a;
+      border: none;
+      border-radius: 12px;
+      padding: 16px;
+      font-size: 15px;
+      font-weight: 500;
+      color: #ffffff;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      margin-bottom: 8px;
+      font-family: inherit;
+      letter-spacing: -0.2px;
+      text-align: left;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .action-btn:hover {
+      background: #000000;
+      transform: translateY(-1px);
+    }
+
+    .action-btn:active {
+      transform: translateY(0);
+    }
+
+    .action-btn-secondary {
+      background: #f5f5f5;
+      color: #1a1a1a;
+    }
+
+    .action-btn-secondary:hover {
+      background: #ebebeb;
+    }
+
+    .btn-icon {
+      font-size: 18px;
+    }
+
+    .user-card {
+      background: #ffffff;
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 16px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+    }
+
+    .user-header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 4px;
+    }
+
+    .user-avatar {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      font-weight: 600;
       flex-shrink: 0;
       color: #ffffff;
     }
 
-    .user-details {
+    .user-info {
       flex: 1;
       min-width: 0;
     }
 
-    .user-email {
-      font-size: 13px;
+    .user-name {
+      font-size: 16px;
       color: #1a1a1a;
       font-weight: 600;
-      margin-bottom: 4px;
+      margin-bottom: 2px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      letter-spacing: -0.3px;
+    }
+
+    .user-email {
+      font-size: 13px;
+      color: #666666;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
 
-    .user-tier {
-      font-size: 11px;
-      color: #8b5cf6;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 16px;
     }
 
-    .divider {
-      height: 1px;
-      background: linear-gradient(90deg, transparent 0%, #e0e0e0 50%, transparent 100%);
-      margin: 16px 0;
+    .stat-box {
+      background: #ffffff;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
     }
 
-    .signup-link {
-      text-align: center;
-      margin-top: 16px;
+    .stat-value {
+      font-size: 28px;
+      font-weight: 700;
+      color: #1a1a1a;
+      margin-bottom: 4px;
+      letter-spacing: -0.5px;
+    }
+
+    .stat-label {
       font-size: 12px;
       color: #666666;
+      font-weight: 500;
     }
 
-    .signup-link a {
-      color: #8b5cf6;
-      text-decoration: none;
-      font-weight: 600;
-      transition: color 0.2s;
+    .setting-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 0;
     }
 
-    .signup-link a:hover {
-      color: #7c3aed;
+    .setting-label {
+      flex: 1;
     }
 
-    .error-message {
-      margin-top: 12px;
-      padding: 12px;
-      background: rgba(239, 68, 68, 0.05);
-      border: 1.5px solid rgba(239, 68, 68, 0.2);
-      border-radius: 8px;
-      font-size: 12px;
-      color: #dc2626;
-      text-align: center;
+    .setting-title {
+      font-size: 15px;
+      color: #1a1a1a;
+      font-weight: 500;
+      margin-bottom: 4px;
+      letter-spacing: -0.2px;
+    }
+
+    .setting-description {
+      font-size: 13px;
+      color: #666666;
+      line-height: 1.4;
     }
 
     .hidden {
       display: none;
     }
 
-    .action-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-      margin-bottom: 10px;
-    }
-
-    .footer {
-      text-align: center;
-      padding: 16px 20px;
-      border-top: 1px solid #e8e8e8;
-      margin-top: 20px;
-      background: #fafafa;
-    }
-
-    .footer a {
-      color: #999999;
-      text-decoration: none;
-      font-size: 11px;
-      margin: 0 10px;
-      transition: color 0.2s;
-    }
-
-    .footer a:hover {
-      color: #8b5cf6;
-    }
-
-    .tabs {
-      display: flex;
-      gap: 0;
-      background: #fafafa;
-      border-bottom: 2px solid #e8e8e8;
-      padding: 0 20px;
-    }
-
-    .tab {
-      flex: 1;
-      padding: 14px 16px;
-      background: transparent;
-      border: none;
-      color: #666666;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.3s ease;
-      border-bottom: 2px solid transparent;
-      margin-bottom: -2px;
-      font-family: inherit;
-    }
-
-    .tab:hover {
-      color: #1a1a1a;
-      background: rgba(139, 92, 246, 0.05);
-    }
-
-    .tab.active {
-      color: #8b5cf6;
-      border-bottom-color: #8b5cf6;
-      background: rgba(139, 92, 246, 0.08);
+    .spacer {
+      height: 12px;
     }
 
     .tab-content {
@@ -421,64 +317,10 @@
       display: block;
     }
 
-    .stat-card {
-      background: #f8f8f8;
-      border: 1.5px solid #e8e8e8;
-      border-radius: 12px;
-      padding: 16px;
-      margin-bottom: 12px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-
-    .stat-label {
-      font-size: 13px;
-      color: #666666;
-      font-weight: 500;
-    }
-
-    .stat-value {
-      font-size: 24px;
-      font-weight: 800;
-      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-
-    .setting-item {
-      background: #f8f8f8;
-      border: 1.5px solid #e8e8e8;
-      border-radius: 12px;
-      padding: 16px;
-      margin-bottom: 12px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-
-    .setting-info {
-      flex: 1;
-    }
-
-    .setting-title {
-      font-size: 14px;
-      color: #1a1a1a;
-      font-weight: 600;
-      margin-bottom: 4px;
-    }
-
-    .setting-description {
-      font-size: 11px;
-      color: #666666;
-      line-height: 1.4;
-    }
-
     .toggle-switch {
       position: relative;
-      width: 48px;
-      height: 26px;
+      width: 44px;
+      height: 24px;
       flex-shrink: 0;
     }
 
@@ -495,47 +337,29 @@
       left: 0;
       right: 0;
       bottom: 0;
-      background-color: #d0d0d0;
-      transition: 0.3s;
-      border-radius: 34px;
+      background-color: #e5e5e5;
+      transition: 0.2s;
+      border-radius: 24px;
     }
 
     .toggle-slider:before {
       position: absolute;
       content: "";
-      height: 18px;
-      width: 18px;
-      left: 4px;
-      bottom: 4px;
+      height: 20px;
+      width: 20px;
+      left: 2px;
+      bottom: 2px;
       background-color: white;
-      transition: 0.3s;
+      transition: 0.2s;
       border-radius: 50%;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     }
 
     input:checked + .toggle-slider {
-      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+      background: #1a1a1a;
     }
 
     input:checked + .toggle-slider:before {
-      transform: translateX(22px);
-    }
-
-    .empty-state {
-      text-align: center;
-      padding: 40px 20px;
-      color: #666666;
-    }
-
-    .empty-state-icon {
-      font-size: 48px;
-      margin-bottom: 12px;
-      opacity: 0.3;
-    }
-
-    .empty-state-text {
-      font-size: 13px;
-      line-height: 1.5;
+      transform: translateX(20px);
     }
   </style>
 </head>
@@ -543,7 +367,17 @@
   <div class="container">
     <!-- Header -->
     <div class="header">
-      <div class="title">StudyFlow Suite</div>
+      <div class="logo">
+        <div class="logo-icon">✨</div>
+        <div class="logo-text">StudyFlow</div>
+      </div>
+
+      <!-- Navigation (only shown when logged in) -->
+      <div class="nav hidden" id="mainNav">
+        <button class="nav-item active" data-tab="home">Home</button>
+        <button class="nav-item" data-tab="stats">Stats</button>
+        <button class="nav-item" data-tab="settings">Settings</button>
+      </div>
     </div>
 
     <!-- Content -->
@@ -551,103 +385,92 @@
       <!-- Login Section (shown when not logged in) -->
       <div id="loginSection" class="hidden">
         <div class="login-section">
-          <div class="login-glow"></div>
+          <div class="login-illustration">🔐</div>
           <button id="openWebsiteBtn" class="login-btn">
-            <span class="btn-text">Log in at studyflowsuite.com</span>
-            <span class="btn-arrow">→</span>
+            Log in at studyflowsuite.com
           </button>
         </div>
       </div>
 
       <!-- Main Section (shown when logged in) -->
       <div id="mainSection" class="hidden">
-        <!-- Tabs Navigation -->
-        <div class="tabs">
-          <button class="tab active" data-tab="home">Home</button>
-          <button class="tab" data-tab="stats">Stats</button>
-          <button class="tab" data-tab="settings">Settings</button>
-        </div>
-
         <!-- Home Tab -->
         <div class="tab-content active" id="homeTab">
-          <!-- Actions -->
-          <button id="toggleOverlayBtn" class="btn btn-primary">Open NoteFlow</button>
-          <button id="uploadNotesBtn" class="btn btn-secondary">Upload Notes</button>
-
-          <div class="divider"></div>
-
-          <button id="logoutBtn" class="btn btn-secondary">Sign Out</button>
-
-          <div class="divider"></div>
-
-          <!-- User Info -->
-          <div class="user-info">
-            <div class="user-avatar" id="userAvatar">S</div>
-            <div class="user-details">
-              <div class="user-email" id="userName"></div>
+          <div class="section">
+            <!-- User Card -->
+            <div class="user-card">
+              <div class="user-header">
+                <div class="user-avatar" id="userAvatar">S</div>
+                <div class="user-info">
+                  <div class="user-name" id="userName">Loading...</div>
+                </div>
+              </div>
             </div>
+
+            <!-- Actions -->
+            <button id="toggleOverlayBtn" class="action-btn">
+              <span>Open NoteFlow</span>
+              <span class="btn-icon">→</span>
+            </button>
+            <button id="uploadNotesBtn" class="action-btn-secondary action-btn">
+              <span>Upload Notes</span>
+              <span class="btn-icon">↗</span>
+            </button>
+
+            <div class="spacer"></div>
+
+            <button id="logoutBtn" class="action-btn-secondary action-btn">
+              <span>Sign Out</span>
+              <span class="btn-icon">→</span>
+            </button>
           </div>
         </div>
 
         <!-- Stats Tab -->
         <div class="tab-content" id="statsTab">
-          <div class="stat-card">
-            <div class="stat-label">Notes Uploaded</div>
-            <div class="stat-value" id="statNotesUploaded">0</div>
-          </div>
+          <div class="section">
+            <div class="stats-grid">
+              <div class="stat-box">
+                <div class="stat-value" id="statNotesUploaded">0</div>
+                <div class="stat-label">Notes</div>
+              </div>
 
-          <div class="stat-card">
-            <div class="stat-label">Questions Asked</div>
-            <div class="stat-value" id="statQuestionsAsked">0</div>
-          </div>
+              <div class="stat-box">
+                <div class="stat-value" id="statQuestionsAsked">0</div>
+                <div class="stat-label">Questions</div>
+              </div>
 
-          <div class="stat-card">
-            <div class="stat-label">Hints Received</div>
-            <div class="stat-value" id="statHintsReceived">0</div>
-          </div>
+              <div class="stat-box">
+                <div class="stat-value" id="statHintsReceived">0</div>
+                <div class="stat-label">Hints</div>
+              </div>
 
-          <div class="stat-card">
-            <div class="stat-label">Study Sessions</div>
-            <div class="stat-value" id="statStudySessions">0</div>
-          </div>
-
-          <div class="divider"></div>
-
-          <div class="empty-state">
-            <div class="empty-state-icon">📊</div>
-            <div class="empty-state-text">
-              Your study statistics will appear here as you use StudyFlow
+              <div class="stat-box">
+                <div class="stat-value" id="statStudySessions">0</div>
+                <div class="stat-label">Sessions</div>
+              </div>
             </div>
           </div>
         </div>
 
         <!-- Settings Tab -->
         <div class="tab-content" id="settingsTab">
-          <div class="setting-item">
-            <div class="setting-info">
-              <div class="setting-title">Collective Brain</div>
-              <div class="setting-description">Share your notes to access everyone's notes. Turn off to keep notes private (you won't see others' notes).</div>
-            </div>
-            <label class="toggle-switch">
-              <input type="checkbox" id="settingCollectiveBrain" checked>
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
-
-          <div class="empty-state" style="margin-top: 20px;">
-            <div class="empty-state-icon">🧠</div>
-            <div class="empty-state-text">
-              When enabled, your notes help other students and their notes help you. It's a win-win!
+          <div class="section">
+            <div class="card">
+              <div class="setting-row">
+                <div class="setting-label">
+                  <div class="setting-title">Collective Brain</div>
+                  <div class="setting-description">Share your notes to access everyone's notes. Turn off to keep notes private.</div>
+                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="settingCollectiveBrain" checked>
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
-
-    <!-- Footer -->
-    <div class="footer">
-      <a href="https://unclephilburt.github.io/studyflowwebsite/" target="_blank">Website</a>
-      <a href="#" id="helpLink">Support</a>
     </div>
   </div>
 
