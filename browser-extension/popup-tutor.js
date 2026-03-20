@@ -141,7 +141,7 @@ async function init() {
     document.getElementById('mainSection').classList.remove('hidden');
 
     // Display user info
-    const userName = user.name || user.email.split('@')[0];
+    const userName = user.full_name || user.name || user.email.split('@')[0];
     document.getElementById('userName').textContent = userName;
 
     // Set avatar initial
