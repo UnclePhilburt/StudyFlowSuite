@@ -1,0 +1,347 @@
+LITERARY DEVICES - ENGLISH STUDY GUIDE
+
+Figurative Language:
+
+Simile:
+- Comparison using "like" or "as"
+- Compares two unlike things
+- Examples:
+  * "Her smile was as bright as the sun"
+  * "He runs like the wind"
+  * "The clouds look like cotton candy"
+
+Metaphor:
+- Direct comparison without "like" or "as"
+- States one thing IS another
+- Examples:
+  * "Time is money"
+  * "Her eyes were daggers"
+  * "The classroom was a zoo"
+
+Extended Metaphor:
+- Metaphor developed over multiple lines or throughout entire work
+- Example: Life is a journey (with paths, destinations, obstacles)
+
+Personification:
+- Giving human qualities to non-human things
+- Examples:
+  * "The wind whispered through the trees"
+  * "Time marches on"
+  * "The flowers danced in the breeze"
+
+Hyperbole:
+- Extreme exaggeration
+- Not meant to be taken literally
+- Examples:
+  * "I'm so hungry I could eat a horse"
+  * "I've told you a million times"
+  * "This bag weighs a ton"
+
+Understatement:
+- Deliberately representing something as less important
+- Opposite of hyperbole
+- Example: "It's just a scratch" (for a deep wound)
+
+Idiom:
+- Expression with non-literal meaning
+- Culturally specific
+- Examples:
+  * "It's raining cats and dogs" (raining heavily)
+  * "Break a leg" (good luck)
+  * "Piece of cake" (very easy)
+
+Alliteration:
+- Repetition of initial consonant sounds
+- Examples:
+  * "Peter Piper picked a peck of pickled peppers"
+  * "She sells seashells by the seashore"
+  * "Big bad bear"
+
+Assonance:
+- Repetition of vowel sounds within words
+- Examples:
+  * "Try to light the fire"
+  * "Go slow over the road"
+  * "Hear the mellow wedding bells" (Poe)
+
+Consonance:
+- Repetition of consonant sounds within or at end of words
+- Examples:
+  * "Pitter patter"
+  * "All mammals named Sam are clammy"
+
+Onomatopoeia:
+- Words that imitate sounds
+- Examples:
+  * Buzz, hiss, boom, crash
+  * Meow, woof, moo
+  * Sizzle, crack, pop
+
+Oxymoron:
+- Two contradictory words together
+- Examples:
+  * "Jumbo shrimp"
+  * "Deafening silence"
+  * "Act naturally"
+  * "Living dead"
+
+Paradox:
+- Statement that seems contradictory but reveals truth
+- Examples:
+  * "Less is more"
+  * "The beginning of the end"
+  * "I can resist anything except temptation" (Oscar Wilde)
+
+Poetry Devices:
+
+Rhyme:
+- Words with same ending sounds
+- Types:
+  * End rhyme: at ends of lines
+  * Internal rhyme: within same line
+  * Slant rhyme: similar but not exact sounds
+
+Rhyme Scheme:
+- Pattern of rhymes in poem
+- Labeled with letters (ABAB, AABB, etc.)
+- Example:
+  Roses are red (A)
+  Violets are blue (B)
+  Sugar is sweet (C)
+  And so are you (B)
+  (Rhyme scheme: ABCB)
+
+Meter:
+- Rhythmic pattern of stressed and unstressed syllables
+- Common meters:
+  * Iambic: unstressed-STRESSED (da-DUM)
+  * Trochaic: STRESSED-unstressed (DUM-da)
+  * Anapestic: unstressed-unstressed-STRESSED
+  * Dactylic: STRESSED-unstressed-unstressed
+
+Iambic Pentameter:
+- Five iambs per line
+- Most common meter in English poetry
+- Example: "Shall I compare thee to a summer's day?" (Shakespeare)
+
+Stanza:
+- Group of lines forming unit
+- Like paragraph in prose
+- Types: couplet (2 lines), tercet (3), quatrain (4), etc.
+
+Enjambment:
+- Sentence continues from one line to next without punctuation
+- Creates flow and suspense
+
+Caesura:
+- Pause in middle of line
+- Often indicated by punctuation
+
+Narrative Techniques:
+
+Point of View:
+
+First Person:
+- Narrator is character in story
+- Uses "I," "me," "we"
+- Limited to narrator's knowledge
+- Example: "I walked down the street"
+
+Second Person:
+- Narrator addresses reader as "you"
+- Rare in literature
+- Example: "You enter the room"
+
+Third Person Limited:
+- Narrator outside story
+- Focuses on one character's thoughts
+- Uses "he," "she," "they"
+
+Third Person Omniscient:
+- All-knowing narrator
+- Can access all characters' thoughts
+- Can see past, present, future
+
+Unreliable Narrator:
+- Narrator whose credibility is questioned
+- May be lying, delusional, or naive
+
+Foreshadowing:
+- Hints about future events
+- Creates suspense and anticipation
+- Example: Dark clouds suggesting coming storm
+
+Flashback:
+- Scene from the past
+- Interrupts chronological narrative
+- Provides backstory or context
+
+Irony:
+
+Verbal Irony:
+- Says opposite of what is meant
+- Sarcasm is harsh form
+- Example: Saying "Great weather!" during rainstorm
+
+Situational Irony:
+- Outcome opposite of what's expected
+- Example: Fire station burns down
+
+Dramatic Irony:
+- Audience knows something characters don't
+- Creates tension
+- Example: In Romeo and Juliet, we know Juliet isn't dead
+
+Symbolism:
+- Object, character, or event represents abstract idea
+- Examples:
+  * Dove = peace
+  * Red rose = love
+  * Journey = life
+  * Spring = rebirth
+
+Motif:
+- Recurring element with symbolic significance
+- Pattern throughout work
+- Example: Blood in Macbeth
+
+Theme:
+- Central idea or message
+- Universal truth about life
+- Examples: love, death, revenge, coming of age
+
+Allegory:
+- Story with two meanings: literal and symbolic
+- Extended metaphor
+- Example: Animal Farm (Orwell) represents Russian Revolution
+
+Tone:
+- Author's attitude toward subject
+- Examples: serious, humorous, sarcastic, optimistic, pessimistic
+- Conveyed through word choice and style
+
+Mood:
+- Emotional atmosphere of work
+- How it makes reader feel
+- Examples: suspenseful, gloomy, joyful, tense
+
+Diction:
+- Word choice
+- Formal vs informal
+- Simple vs complex
+- Creates tone and mood
+
+Syntax:
+- Sentence structure
+- Simple, compound, complex sentences
+- Short vs long sentences
+- Affects pacing and emphasis
+
+Imagery:
+- Descriptive language appealing to senses
+- Visual, auditory, tactile, olfactory, gustatory
+- Creates vivid mental pictures
+- Example: "The crimson sunset blazed across the horizon"
+
+Allusion:
+- Reference to historical event, literature, mythology, religion
+- Assumes reader's knowledge
+- Examples:
+  * "He's a real Romeo" (references Shakespeare)
+  * "This is her Achilles heel" (Greek mythology)
+  * "Don't be a Scrooge" (Dickens)
+
+Juxtaposition:
+- Placing contrasting elements side by side
+- Highlights differences
+- Example: wealth next to poverty
+
+Foil:
+- Character who contrasts with another
+- Highlights traits of main character
+- Example: Mercutio as foil to Romeo
+
+Protagonist:
+- Main character
+- Hero of story
+- Reader usually sympathizes with
+
+Antagonist:
+- Opposes protagonist
+- Creates conflict
+- Not always a villain
+
+Character Development:
+
+Static Character:
+- Doesn't change throughout story
+- Same personality beginning to end
+
+Dynamic Character:
+- Changes significantly
+- Grows or learns
+- Most protagonists are dynamic
+
+Round Character:
+- Complex and realistic
+- Multiple personality traits
+- Like real people
+
+Flat Character:
+- Simple, one-dimensional
+- Often minor characters
+- Defined by one or two traits
+
+Conflict:
+
+Types of Conflict:
+- Character vs. Character
+- Character vs. Self (internal)
+- Character vs. Society
+- Character vs. Nature
+- Character vs. Technology
+- Character vs. Supernatural/Fate
+
+Plot Structure:
+
+Exposition:
+- Introduction
+- Setting, characters, background
+
+Rising Action:
+- Events building tension
+- Complications arise
+
+Climax:
+- Turning point
+- Moment of highest tension
+- Most exciting part
+
+Falling Action:
+- Events after climax
+- Consequences unfold
+
+Resolution (Denouement):
+- Conclusion
+- Loose ends tied up
+- Final outcome
+
+Dialogue:
+- Conversation between characters
+- Reveals character, advances plot
+- Can show conflict, relationships
+
+Monologue:
+- Long speech by one character
+- Other characters present
+
+Soliloquy:
+- Character speaks thoughts aloud
+- Alone on stage
+- Reveals inner thoughts
+- Common in Shakespeare
+
+Aside:
+- Comment to audience
+- Other characters don't hear
+- Used in plays

@@ -2917,6 +2917,57 @@ Return ONLY the hint with the actual information, nothing else."""
         return "Review this section to find the answer."
 
 
+@app.route("/api/settings/collective-brain", methods=["GET"])
+@supabase_auth_required
+def get_collective_brain_setting():
+    """
+    Get the user's collective brain opt-in setting.
+    """
+    try:
+        user = supabase.table("users").select("collective_brain_opt_in").eq("id", request.user_id).single().execute()
+
+        if not user.data:
+            return jsonify({"error": "User not found"}), 404
+
+        return jsonify({"enabled": user.data.get('collective_brain_opt_in', True)}), 200
+
+    except Exception as e:
+        debug_log(f"Error getting collective brain setting: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/settings/collective-brain", methods=["POST"])
+@supabase_auth_required
+def update_collective_brain_setting():
+    """
+    Update the user's collective brain opt-in setting.
+
+    If disabled (opt-out):
+    - User can ONLY see their own notes
+    - User's notes are NOT shared with others
+
+    If enabled (opt-in):
+    - User can see their own notes + everyone else's notes
+    - User's notes are shared with everyone
+    """
+    try:
+        data = request.get_json()
+        enabled = data.get('enabled', True)
+
+        # Update user setting
+        supabase.table("users").update({
+            "collective_brain_opt_in": enabled
+        }).eq("id", request.user_id).execute()
+
+        debug_log(f"✅ User {request.user_id} set collective_brain_opt_in to {enabled}")
+
+        return jsonify({"success": True, "enabled": enabled}), 200
+
+    except Exception as e:
+        debug_log(f"❌ Error updating collective brain setting: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     try:
         port = int(os.environ.get("PORT", 5000))

@@ -1,0 +1,152 @@
+THE PERIODIC TABLE - CHEMISTRY STUDY GUIDE
+
+Organization of the Periodic Table:
+
+Basic Structure:
+- Elements arranged by increasing atomic number
+- 7 horizontal rows called periods
+- 18 vertical columns called groups or families
+- Atomic number = number of protons in nucleus
+- Dmitri Mendeleev created first periodic table (1869)
+
+Reading an Element Box:
+- Atomic number (top) - number of protons
+- Element symbol (middle) - 1 or 2 letter abbreviation
+- Element name (below symbol)
+- Atomic mass (bottom) - protons + neutrons
+
+Groups (Vertical Columns):
+
+Group 1 - Alkali Metals:
+- Lithium (Li), Sodium (Na), Potassium (K), etc.
+- Highly reactive metals
+- Soft, can be cut with knife
+- React violently with water
+- Form +1 ions
+- One valence electron
+
+Group 2 - Alkaline Earth Metals:
+- Beryllium (Be), Magnesium (Mg), Calcium (Ca), etc.
+- Reactive metals
+- Form +2 ions
+- Two valence electrons
+- Less reactive than Group 1
+
+Groups 3-12 - Transition Metals:
+- Iron (Fe), Copper (Cu), Gold (Au), Silver (Ag), etc.
+- Good conductors of heat and electricity
+- High melting points
+- Can form multiple oxidation states
+- Often form colored compounds
+- Many are used as catalysts
+
+Group 17 - Halogens:
+- Fluorine (F), Chlorine (Cl), Bromine (Br), Iodine (I)
+- Highly reactive nonmetals
+- Form -1 ions
+- Seven valence electrons
+- React with metals to form salts
+- Exist as diatomic molecules (F2, Cl2, Br2, I2)
+
+Group 18 - Noble Gases:
+- Helium (He), Neon (Ne), Argon (Ar), Krypton (Kr), Xenon (Xe)
+- Inert/unreactive
+- Full outer electron shell (8 electrons, except He has 2)
+- Colorless, odorless gases
+- Don't readily form compounds
+
+Periods (Horizontal Rows):
+- Period number = number of electron shells
+- Period 1: 2 elements (H, He)
+- Period 2: 8 elements (Li through Ne)
+- Period 3: 8 elements (Na through Ar)
+- Periods 4-7: Longer periods with transition metals
+
+Periodic Trends:
+
+Atomic Radius:
+- Increases down a group (more electron shells)
+- Decreases across a period left to right (stronger nuclear pull)
+- Largest atoms: bottom left of table
+- Smallest atoms: top right of table
+
+Ionization Energy:
+- Energy needed to remove an electron
+- Increases across a period (left to right)
+- Decreases down a group
+- Highest: top right (noble gases, fluorine)
+- Lowest: bottom left (francium, cesium)
+
+Electronegativity:
+- Ability to attract electrons in a bond
+- Increases across a period
+- Decreases down a group
+- Highest: Fluorine (4.0 on Pauling scale)
+- Noble gases not assigned values (don't form bonds)
+
+Metallic Character:
+- Increases down a group
+- Decreases across a period
+- Metals: left side and center
+- Nonmetals: right side
+- Metalloids: staircase line dividing metals and nonmetals
+
+Categories of Elements:
+
+Metals:
+- Left side and center of table
+- Shiny, malleable, ductile
+- Good conductors
+- Lose electrons to form positive ions
+- Examples: Iron, Aluminum, Gold
+
+Nonmetals:
+- Right side of table
+- Dull appearance
+- Poor conductors (insulators)
+- Gain electrons to form negative ions
+- Examples: Oxygen, Nitrogen, Sulfur
+
+Metalloids (Semimetals):
+- Boron, Silicon, Germanium, Arsenic, Antimony, Tellurium
+- Properties between metals and nonmetals
+- Semiconductors
+- Used in electronics
+
+Important Element Groups:
+
+Lanthanides (Rare Earth Elements):
+- Elements 57-71
+- Shown separately below main table
+- Soft, silvery metals
+- Similar chemical properties
+
+Actinides:
+- Elements 89-103
+- Shown below lanthanides
+- All are radioactive
+- Includes Uranium and Plutonium
+
+Key Concepts:
+
+Valence Electrons:
+- Electrons in outermost shell
+- Determine chemical properties
+- Elements in same group have same number of valence electrons
+- Maximum of 8 valence electrons (octet rule)
+
+Isotopes:
+- Atoms of same element with different numbers of neutrons
+- Same atomic number, different mass number
+- Example: Carbon-12, Carbon-13, Carbon-14
+
+Ions:
+- Atoms that have gained or lost electrons
+- Cations: positive ions (lost electrons)
+- Anions: negative ions (gained electrons)
+
+Historical Development:
+- Mendeleev arranged elements by atomic mass
+- Predicted properties of undiscovered elements
+- Modern table arranged by atomic number (Henry Moseley)
+- Gaps in table led to discovery of new elements

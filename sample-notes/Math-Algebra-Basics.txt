@@ -1,0 +1,216 @@
+ALGEBRA BASICS - MATH STUDY GUIDE
+
+Fundamental Concepts:
+
+Variables:
+- Letters representing unknown values
+- Common variables: x, y, z, a, b, c
+- Can represent any number
+- Example: x + 5 = 10, then x = 5
+
+Constants:
+- Fixed numerical values
+- Don't change
+- Examples: 5, -3, 0.5, π
+
+Expressions vs Equations:
+
+Expression:
+- Mathematical phrase with numbers, variables, operations
+- No equals sign
+- Examples: 3x + 5, 2y - 7, x²
+- Cannot be solved, only simplified
+
+Equation:
+- Mathematical statement showing two expressions are equal
+- Has equals sign (=)
+- Examples: 3x + 5 = 14, y = 2x - 3
+- Can be solved to find variable value
+
+Order of Operations (PEMDAS):
+P - Parentheses first
+E - Exponents second
+M/D - Multiplication and Division (left to right)
+A/S - Addition and Subtraction (left to right)
+
+Example: 2 + 3 × (4² - 1)
+= 2 + 3 × (16 - 1)
+= 2 + 3 × 15
+= 2 + 45
+= 47
+
+Properties of Operations:
+
+Commutative Property:
+- Addition: a + b = b + a
+- Multiplication: a × b = b × a
+- Example: 3 + 5 = 5 + 3
+
+Associative Property:
+- Addition: (a + b) + c = a + (b + c)
+- Multiplication: (a × b) × c = a × (b × c)
+- Example: (2 + 3) + 4 = 2 + (3 + 4)
+
+Distributive Property:
+- a(b + c) = ab + ac
+- Example: 3(x + 5) = 3x + 15
+- Used to expand expressions
+
+Identity Property:
+- Addition: a + 0 = a
+- Multiplication: a × 1 = a
+
+Inverse Property:
+- Addition: a + (-a) = 0
+- Multiplication: a × (1/a) = 1 (if a ≠ 0)
+
+Solving Linear Equations:
+
+One-Step Equations:
+x + 5 = 12
+x + 5 - 5 = 12 - 5
+x = 7
+
+Two-Step Equations:
+2x + 3 = 11
+2x + 3 - 3 = 11 - 3
+2x = 8
+2x/2 = 8/2
+x = 4
+
+Multi-Step Equations:
+3(x + 2) - 5 = 10
+3x + 6 - 5 = 10
+3x + 1 = 10
+3x = 9
+x = 3
+
+Variables on Both Sides:
+5x + 3 = 2x + 18
+5x - 2x + 3 = 2x - 2x + 18
+3x + 3 = 18
+3x = 15
+x = 5
+
+Combining Like Terms:
+- Terms with same variable and exponent
+- Add or subtract coefficients
+- Examples:
+  3x + 5x = 8x
+  7y - 2y = 5y
+  2x² + 3x² = 5x²
+
+Exponents:
+
+Basic Rules:
+- x¹ = x
+- x⁰ = 1 (if x ≠ 0)
+- x⁻ⁿ = 1/xⁿ
+
+Product Rule:
+- xᵃ × xᵇ = xᵃ⁺ᵇ
+- Example: x³ × x² = x⁵
+
+Quotient Rule:
+- xᵃ ÷ xᵇ = xᵃ⁻ᵇ
+- Example: x⁵ ÷ x² = x³
+
+Power Rule:
+- (xᵃ)ᵇ = xᵃᵇ
+- Example: (x²)³ = x⁶
+
+Linear Equations and Graphing:
+
+Slope-Intercept Form:
+y = mx + b
+- m = slope (rate of change)
+- b = y-intercept (where line crosses y-axis)
+
+Slope Formula:
+m = (y₂ - y₁)/(x₂ - x₁)
+- Rise over run
+- Change in y over change in x
+
+Point-Slope Form:
+y - y₁ = m(x - x₁)
+- Use when you know slope and one point
+
+Standard Form:
+Ax + By = C
+- A, B, C are integers
+- A should be positive
+
+Factoring:
+
+Greatest Common Factor (GCF):
+6x + 9 = 3(2x + 3)
+- Factor out largest common term
+
+Difference of Squares:
+x² - 9 = (x + 3)(x - 3)
+- Pattern: a² - b² = (a + b)(a - b)
+
+Trinomial Factoring:
+x² + 5x + 6 = (x + 2)(x + 3)
+- Find two numbers that multiply to last term
+- Same two numbers must add to middle coefficient
+
+Quadratic Equations:
+
+Standard Form:
+ax² + bx + c = 0
+
+Quadratic Formula:
+x = [-b ± √(b² - 4ac)] / (2a)
+- Works for all quadratic equations
+- Discriminant: b² - 4ac
+  - Positive: two real solutions
+  - Zero: one real solution
+  - Negative: no real solutions
+
+Systems of Equations:
+
+Substitution Method:
+1. Solve one equation for one variable
+2. Substitute into other equation
+3. Solve for remaining variable
+4. Plug back to find other variable
+
+Elimination Method:
+1. Multiply equations to get opposite coefficients
+2. Add or subtract equations
+3. Solve for one variable
+4. Substitute to find other variable
+
+Inequalities:
+
+Symbols:
+- < less than
+- > greater than
+- ≤ less than or equal to
+- ≥ greater than or equal to
+
+Solving Inequalities:
+- Same rules as equations
+- EXCEPTION: When multiplying or dividing by negative number, flip inequality sign
+
+Example:
+-2x > 6
+-2x/-2 < 6/-2  (flip sign!)
+x < -3
+
+Absolute Value:
+
+Definition:
+- Distance from zero
+- Always positive or zero
+- |x| = x if x ≥ 0
+- |x| = -x if x < 0
+
+Examples:
+- |5| = 5
+- |-5| = 5
+- |0| = 0
+
+Solving Absolute Value Equations:
+|x| = 5 means x = 5 or x = -5

@@ -209,9 +209,9 @@ function createFloatingOverlay() {
       }
 
       .result-hint {
-        font-size: 12px;
-        color: #64748b;
-        font-style: italic;
+        font-size: 14px;
+        line-height: 1.6;
+        color: #334155;
       }
 
       .no-notes-warning {
@@ -472,8 +472,6 @@ async function handleSearch() {
       if (response.results && response.results.length > 0) {
         const resultsHTML = response.results.map(result => `
           <div class="result-card">
-            <div class="result-source">${result.source}</div>
-            <div class="result-text">${result.text}</div>
             <div class="result-hint">💡 ${result.hint}</div>
           </div>
         `).join('');

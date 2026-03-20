@@ -1,5 +1,42 @@
 // StudyFlow AI Tutor - Popup Logic (Legal Mode)
 
+// Auth helper functions (simplified for popup)
+window.auth = {
+  async getCurrentUser() {
+    const result = await chrome.storage.local.get(['user']);
+    return result.user || null;
+  },
+
+  async getAuthToken() {
+    const result = await chrome.storage.local.get(['authToken']);
+    return result.authToken || null;
+  },
+
+  showLogin() {
+    chrome.tabs.create({
+      url: chrome.runtime.getURL('login.html')
+    });
+  },
+
+  async logout() {
+    const result = await chrome.storage.local.get(['authToken']);
+
+    if (result.authToken) {
+      try {
+        await fetch('https://studyflowsuite.onrender.com/api/logout', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${result.authToken}` }
+        });
+      } catch (error) {
+        console.error('Logout API error:', error);
+      }
+    }
+
+    await chrome.storage.local.remove(['authToken', 'refreshToken', 'tokenExpiresAt', 'user']);
+    window.location.reload();
+  }
+};
+
 // Helper function to update overlay button state
 function updateOverlayButton(state) {
   const btn = document.getElementById('toggleOverlayBtn');
@@ -38,9 +75,51 @@ async function init() {
     document.getElementById('loginSection').classList.remove('hidden');
     document.getElementById('mainSection').classList.add('hidden');
 
-    // Login button
-    document.getElementById('loginBtn').addEventListener('click', () => {
-      window.auth.showLogin();
+    // Login form submission
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const email = document.getElementById('emailInput').value;
+      const password = document.getElementById('passwordInput').value;
+      const errorDiv = document.getElementById('loginError');
+
+      errorDiv.classList.add('hidden');
+
+      try {
+        const response = await fetch('https://studyflowsuite.onrender.com/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          // Store auth data
+          await chrome.storage.local.set({
+            authToken: data.access_token,
+            refreshToken: data.refresh_token,
+            tokenExpiresAt: Date.now() + (data.expires_in * 1000),
+            user: data.user
+          });
+
+          // Reload popup to show main section
+          window.location.reload();
+        } else {
+          errorDiv.textContent = data.error || 'Login failed';
+          errorDiv.classList.remove('hidden');
+        }
+      } catch (error) {
+        console.error('Login error:', error);
+        errorDiv.textContent = 'Connection error. Please try again.';
+        errorDiv.classList.remove('hidden');
+      }
+    });
+
+    // Signup link
+    document.getElementById('signupLink').addEventListener('click', (e) => {
+      e.preventDefault();
+      chrome.tabs.create({ url: 'https://unclephilburt.github.io/studyflowwebsite/signup.html' });
     });
   } else {
     // Show main section
@@ -48,7 +127,11 @@ async function init() {
     document.getElementById('mainSection').classList.remove('hidden');
 
     // Display user info
-    document.getElementById('userEmail').textContent = user.email;
+    const userName = user.name || user.email.split('@')[0];
+    document.getElementById('userName').textContent = userName;
+
+    // Set avatar initial
+    document.getElementById('userAvatar').textContent = userName.charAt(0).toUpperCase();
 
     // Display tier
     let tier = 'Free';
@@ -58,6 +141,20 @@ async function init() {
       tier = 'Beta Tester';
     }
     document.getElementById('userTier').textContent = `${tier} Plan`;
+
+    // Load stats
+    loadStats();
+
+    // Load settings
+    loadSettings();
+
+    // Tab switching
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        const tabName = tab.getAttribute('data-tab');
+        switchTab(tabName);
+      });
+    });
 
     // Check overlay state on load
     checkOverlayState();
@@ -125,13 +222,104 @@ async function init() {
         window.auth.logout();
       }
     });
+
+    // Settings change handlers
+    document.getElementById('settingCollectiveBrain').addEventListener('change', async (e) => {
+      const isEnabled = e.target.checked;
+      await chrome.storage.local.set({ settingCollectiveBrain: isEnabled });
+
+      // Update backend
+      const token = await window.auth.getAuthToken();
+      if (token) {
+        try {
+          await fetch('https://studyflowsuite.onrender.com/api/settings/collective-brain', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ enabled: isEnabled })
+          });
+        } catch (error) {
+          console.error('Error updating collective brain setting:', error);
+        }
+      }
+    });
   }
 
   // Help link
   document.getElementById('helpLink').addEventListener('click', (e) => {
     e.preventDefault();
-    alert('StudyFlow NoteFlow\n\nHow to use:\n1. Upload your class notes on the website\n2. A floating window appears on any webpage\n3. Type questions about your notes\n4. Get AI-guided hints and relevant sections\n5. Find the answer in your own study materials\n\n100% legal - uses YOUR notes to help YOU learn.\n\nFor support: support@studyflowsuite.com');
+    chrome.tabs.create({ url: 'https://unclephilburt.github.io/studyflowwebsite/' });
   });
+}
+
+// Tab switching function
+function switchTab(tabName) {
+  // Update tab buttons
+  document.querySelectorAll('.tab').forEach(tab => {
+    if (tab.getAttribute('data-tab') === tabName) {
+      tab.classList.add('active');
+    } else {
+      tab.classList.remove('active');
+    }
+  });
+
+  // Update tab content
+  document.querySelectorAll('.tab-content').forEach(content => {
+    content.classList.remove('active');
+  });
+  document.getElementById(`${tabName}Tab`).classList.add('active');
+}
+
+// Load stats from backend
+async function loadStats() {
+  const token = await window.auth.getAuthToken();
+  if (!token) return;
+
+  try {
+    const response = await fetch('https://studyflowsuite.onrender.com/api/stats', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+
+    if (response.ok) {
+      const stats = await response.json();
+      document.getElementById('statNotesUploaded').textContent = stats.notes_uploaded || 0;
+      document.getElementById('statQuestionsAsked').textContent = stats.questions_asked || 0;
+      document.getElementById('statHintsReceived').textContent = stats.hints_received || 0;
+      document.getElementById('statStudySessions').textContent = stats.study_sessions || 0;
+    }
+  } catch (error) {
+    console.error('Error loading stats:', error);
+  }
+}
+
+// Load settings from storage
+async function loadSettings() {
+  const token = await window.auth.getAuthToken();
+  if (!token) return;
+
+  try {
+    // Load from backend
+    const response = await fetch('https://studyflowsuite.onrender.com/api/settings/collective-brain', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      document.getElementById('settingCollectiveBrain').checked = data.enabled !== false;
+      await chrome.storage.local.set({ settingCollectiveBrain: data.enabled !== false });
+    } else {
+      // Fallback to local storage
+      const result = await chrome.storage.local.get(['settingCollectiveBrain']);
+      document.getElementById('settingCollectiveBrain').checked = result.settingCollectiveBrain !== false;
+    }
+  } catch (error) {
+    console.error('Error loading settings:', error);
+    // Fallback to local storage
+    const result = await chrome.storage.local.get(['settingCollectiveBrain']);
+    document.getElementById('settingCollectiveBrain').checked = result.settingCollectiveBrain !== false;
+  }
 }
 
 // Initialize when popup opens

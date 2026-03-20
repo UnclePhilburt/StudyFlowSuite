@@ -1,0 +1,407 @@
+CELL STRUCTURE AND FUNCTION - BIOLOGY STUDY GUIDE
+
+Cell Theory:
+
+Three Main Points:
+1. All living things are composed of one or more cells
+2. The cell is the basic unit of life
+3. All cells arise from pre-existing cells
+
+History:
+- Robert Hooke (1665): first observed cells in cork
+- Anton van Leeuwenhoek: observed living cells
+- Matthias Schleiden: all plants made of cells
+- Theodor Schwann: all animals made of cells
+- Rudolf Virchow: cells come from other cells
+
+Types of Cells:
+
+Prokaryotic Cells:
+- No nucleus
+- No membrane-bound organelles
+- Smaller (1-10 micrometers)
+- Simpler structure
+- DNA in nucleoid region
+- Examples: Bacteria, Archaea
+- Evolved first (3.5 billion years ago)
+
+Eukaryotic Cells:
+- Have nucleus
+- Have membrane-bound organelles
+- Larger (10-100 micrometers)
+- More complex
+- DNA in nucleus
+- Examples: Animals, Plants, Fungi, Protists
+- Evolved later (2 billion years ago)
+
+Cell Membrane (Plasma Membrane):
+
+Structure:
+- Phospholipid bilayer
+- Hydrophilic heads (water-loving) outside
+- Hydrophobic tails (water-fearing) inside
+- Embedded proteins
+- Cholesterol molecules
+- Carbohydrate chains
+
+Fluid Mosaic Model:
+- Membrane is flexible
+- Components can move laterally
+- Like fluid with floating proteins
+
+Functions:
+- Selectively permeable barrier
+- Controls what enters/exits cell
+- Cell recognition
+- Cell communication
+- Maintains homeostasis
+
+Transport Across Membrane:
+
+Passive Transport:
+- No energy required
+- Moves with concentration gradient (high to low)
+
+Types of Passive Transport:
+
+Diffusion:
+- Movement of molecules from high to low concentration
+- Example: Perfume spreading in room
+- Continues until equilibrium
+
+Osmosis:
+- Diffusion of water across membrane
+- Water moves to area of higher solute concentration
+- Affects cell size
+
+Facilitated Diffusion:
+- Uses channel or carrier proteins
+- Still passive (no energy)
+- Example: Glucose entering cell
+
+Active Transport:
+- Requires energy (ATP)
+- Moves against concentration gradient (low to high)
+- Uses protein pumps
+- Example: Sodium-potassium pump
+
+Bulk Transport:
+- Moving large particles or volumes
+
+Endocytosis:
+- Taking materials into cell
+- Cell membrane engulfs substance
+- Types:
+  * Phagocytosis: "cell eating" (solids)
+  * Pinocytosis: "cell drinking" (liquids)
+  * Receptor-mediated: specific molecules
+
+Exocytosis:
+- Removing materials from cell
+- Vesicle fuses with membrane
+- Releases contents outside
+- Example: Neurotransmitter release
+
+Nucleus:
+
+Structure:
+- Largest organelle
+- Surrounded by double membrane (nuclear envelope)
+- Nuclear pores allow material exchange
+- Contains chromatin (DNA + proteins)
+- Nucleolus inside (makes ribosomes)
+
+Functions:
+- Stores genetic information (DNA)
+- Controls cell activities
+- Site of DNA replication
+- Site of transcription (making RNA)
+
+Chromatin vs Chromosomes:
+- Chromatin: relaxed, spread out DNA
+- Chromosomes: condensed DNA (during cell division)
+
+Endoplasmic Reticulum (ER):
+
+Structure:
+- Network of folded membranes
+- Connected to nuclear envelope
+- Two types: rough and smooth
+
+Rough ER:
+- Has ribosomes attached
+- Looks bumpy
+- Functions:
+  * Protein synthesis
+  * Protein modification
+  * Protein transport
+
+Smooth ER:
+- No ribosomes
+- Looks smooth
+- Functions:
+  * Lipid synthesis
+  * Carbohydrate metabolism
+  * Detoxification (liver cells)
+  * Calcium storage (muscle cells)
+
+Ribosomes:
+
+Structure:
+- Made of RNA and protein
+- Two subunits (large and small)
+- No membrane
+- Found free in cytoplasm or attached to rough ER
+
+Function:
+- Protein synthesis
+- Read mRNA and assemble amino acids
+- "Protein factories"
+
+Golgi Apparatus (Golgi Body):
+
+Structure:
+- Stack of flattened membrane sacs
+- Like pancakes stacked
+- Distinct cis face (receiving) and trans face (shipping)
+
+Functions:
+- Modifies proteins from ER
+- Packages proteins into vesicles
+- Adds carbohydrate tags
+- Sorts and ships proteins
+- "Post office" of cell
+
+Lysosomes:
+
+Structure:
+- Membrane-bound sacs
+- Contain digestive enzymes
+- Acidic interior (pH 5)
+
+Functions:
+- Break down macromolecules
+- Digest old organelles (autophagy)
+- Digest engulfed materials
+- "Recycling center" of cell
+- More common in animal cells
+
+Mitochondria:
+
+Structure:
+- Double membrane
+- Outer membrane smooth
+- Inner membrane folded (cristae)
+- Matrix inside
+- Have own DNA (circular)
+- Can self-replicate
+
+Functions:
+- Cellular respiration
+- Produce ATP (energy)
+- "Powerhouse" of cell
+
+Cellular Respiration:
+- Glucose + Oxygen → CO2 + Water + ATP
+- C6H12O6 + 6O2 → 6CO2 + 6H2O + 36-38 ATP
+
+Endosymbiotic Theory:
+- Mitochondria were once independent bacteria
+- Engulfed by larger cell
+- Evidence: own DNA, double membrane, reproduce independently
+
+Chloroplasts (Plant Cells Only):
+
+Structure:
+- Double membrane
+- Stacks of thylakoids (grana)
+- Stroma (fluid)
+- Have own DNA (circular)
+
+Functions:
+- Photosynthesis
+- Convert light energy to chemical energy
+- Produce glucose and oxygen
+- Only in plant cells and some protists
+
+Photosynthesis:
+- 6CO2 + 6H2O + light → C6H12O6 + 6O2
+
+Cytoskeleton:
+
+Components:
+
+Microfilaments:
+- Thinnest (7 nm)
+- Made of actin protein
+- Functions:
+  * Cell shape
+  * Cell movement
+  * Muscle contraction
+  * Cell division (cleavage furrow)
+
+Intermediate Filaments:
+- Medium size (8-10 nm)
+- Various proteins
+- Functions:
+  * Structural support
+  * Anchor organelles
+  * Maintain cell shape
+
+Microtubules:
+- Thickest (25 nm)
+- Made of tubulin protein
+- Functions:
+  * Cell shape
+  * Organelle movement
+  * Chromosome movement in cell division
+  * Form cilia and flagella
+  * Tracks for motor proteins
+
+Centrosomes and Centrioles:
+
+Centrosome:
+- Organizes microtubules
+- Near nucleus
+- Microtubule organizing center (MTOC)
+
+Centrioles:
+- Pair of cylindrical structures
+- Made of microtubules
+- In centrosome
+- Important for cell division
+- Form spindle fibers
+- Present in animal cells, not plant cells
+
+Cilia and Flagella:
+
+Structure:
+- Made of microtubules
+- "9+2" arrangement
+- Extend from cell surface
+- Covered by plasma membrane
+
+Cilia:
+- Short and numerous
+- Beat in coordinated waves
+- Example: Respiratory tract cells
+- Move materials across cell surface
+
+Flagella:
+- Long and few (usually one or two)
+- Whip-like motion
+- Example: Sperm cells
+- Propel cell through liquid
+
+Vacuoles:
+
+Plant Cell Central Vacuole:
+- Very large (up to 90% of cell volume)
+- Filled with cell sap (water, ions, nutrients, wastes)
+- Functions:
+  * Storage
+  * Maintains turgor pressure
+  * Waste disposal
+  * Cell growth
+
+Animal Cell Vacuoles:
+- Smaller and more numerous
+- Temporary
+- Food vacuoles
+- Contractile vacuoles (remove excess water)
+
+Cell Wall (Plant Cells, Bacteria, Fungi):
+
+Structure:
+- Outside plasma membrane
+- Made of cellulose in plants
+- Rigid and strong
+- Porous (allows materials through)
+
+Functions:
+- Protection
+- Structural support
+- Prevents over-expansion from water uptake
+- Maintains cell shape
+
+Primary Cell Wall:
+- Thin and flexible
+- Allows growth
+- All plant cells have
+
+Secondary Cell Wall:
+- Thicker and stronger
+- Added after growth stops
+- Some plant cells (wood)
+- Contains lignin
+
+Plasmodesmata (Plant Cells):
+- Channels through cell walls
+- Connect adjacent plant cells
+- Allow communication and transport
+- Like tiny tunnels between cells
+
+Peroxisomes:
+
+Structure:
+- Membrane-bound organelle
+- Contain enzymes
+
+Functions:
+- Break down fatty acids
+- Detoxify harmful substances
+- Produce hydrogen peroxide (H2O2)
+- Convert H2O2 to water (using catalase enzyme)
+
+Comparing Plant and Animal Cells:
+
+Both Have:
+- Cell membrane
+- Nucleus
+- Ribosomes
+- Endoplasmic reticulum
+- Golgi apparatus
+- Mitochondria
+- Cytoskeleton
+
+Only Plant Cells Have:
+- Cell wall
+- Chloroplasts
+- Large central vacuole
+- Plasmodesmata
+
+Only Animal Cells Have:
+- Centrioles
+- Lysosomes (more common)
+- Small vacuoles
+
+Cell Size:
+
+Why Cells Are Small:
+- Surface area to volume ratio
+- As cell gets bigger, volume increases faster than surface area
+- Need large surface area for exchange of materials
+- Larger cells less efficient
+- Limits on how large cells can grow
+
+Surface Area to Volume Ratio:
+- Small cells: high ratio (efficient)
+- Large cells: low ratio (inefficient)
+- Explains why organisms have many small cells rather than few large cells
+
+Levels of Organization:
+1. Organelles
+2. Cells
+3. Tissues (groups of similar cells)
+4. Organs (groups of tissues)
+5. Organ systems (groups of organs)
+6. Organism (complete individual)
+
+Cell Specialization:
+- Cells become specialized for specific functions
+- Differentiation: process of becoming specialized
+- Examples:
+  * Nerve cells: long extensions for signaling
+  * Red blood cells: no nucleus, carry oxygen
+  * Muscle cells: many mitochondria for energy
+  * Root hair cells: long projections for absorption

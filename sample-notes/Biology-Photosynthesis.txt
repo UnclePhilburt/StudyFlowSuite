@@ -1,0 +1,74 @@
+PHOTOSYNTHESIS - BIOLOGY STUDY GUIDE
+
+Overview:
+Photosynthesis is the process by which plants, algae, and some bacteria convert light energy into chemical energy stored in glucose. This process is fundamental to life on Earth as it produces oxygen and organic compounds.
+
+Chemical Equation:
+6CO2 + 6H2O + light energy → C6H12O6 + 6O2
+(Carbon dioxide + Water + Light → Glucose + Oxygen)
+
+Two Main Stages:
+
+1. Light-Dependent Reactions (Light Reactions)
+- Occur in the thylakoid membranes of chloroplasts
+- Require sunlight to function
+- Water molecules are split (photolysis)
+- Produces ATP and NADPH (energy carriers)
+- Releases oxygen as a byproduct
+- Involves photosystems I and II
+- Chlorophyll absorbs light energy
+
+2. Light-Independent Reactions (Calvin Cycle)
+- Occur in the stroma of chloroplasts
+- Do not require direct sunlight (but need ATP and NADPH from light reactions)
+- Carbon dioxide is fixed into organic molecules
+- Uses ATP and NADPH from light reactions
+- Produces glucose (C6H12O6)
+- Also called the Calvin-Benson cycle
+
+Key Structures:
+
+Chloroplast:
+- Organelle where photosynthesis occurs
+- Contains chlorophyll (green pigment)
+- Has two membrane systems: outer and inner
+
+Thylakoid:
+- Flattened sac-like structures inside chloroplasts
+- Arranged in stacks called grana
+- Site of light-dependent reactions
+
+Stroma:
+- Fluid-filled space surrounding thylakoids
+- Site of Calvin cycle
+
+Important Molecules:
+
+Chlorophyll:
+- Green pigment that absorbs light
+- Primarily absorbs red and blue wavelengths
+- Reflects green light (why plants appear green)
+
+ATP (Adenosine Triphosphate):
+- Energy currency of cells
+- Produced during light reactions
+- Used in Calvin cycle
+
+NADPH:
+- Electron carrier
+- Produced in light reactions
+- Provides reducing power for Calvin cycle
+
+Factors Affecting Photosynthesis:
+1. Light intensity - more light increases rate (to a point)
+2. Carbon dioxide concentration - higher CO2 increases rate
+3. Temperature - optimal range is 25-35°C
+4. Water availability - necessary for light reactions
+5. Chlorophyll concentration - more chlorophyll = more photosynthesis
+
+Importance:
+- Produces oxygen for aerobic respiration
+- Forms base of most food chains
+- Removes CO2 from atmosphere
+- Creates organic compounds for plant growth
+- Essential for life on Earth

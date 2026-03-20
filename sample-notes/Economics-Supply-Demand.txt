@@ -1,0 +1,379 @@
+SUPPLY AND DEMAND - ECONOMICS STUDY GUIDE
+
+Basic Economic Concepts:
+
+Scarcity:
+- Limited resources vs unlimited wants
+- Fundamental economic problem
+- Forces choices and trade-offs
+- Applies to all economies
+
+Opportunity Cost:
+- Value of next best alternative given up
+- What you sacrifice when making a choice
+- Example: Going to college costs tuition PLUS lost wages from not working
+- Key to rational decision-making
+
+Market Economy:
+- Economic decisions made by individuals and firms
+- Prices determined by supply and demand
+- Private ownership of resources
+- Also called capitalism or free market
+
+Demand:
+
+Definition:
+- Quantity of good or service consumers are willing and able to buy at various prices
+- Must have both desire AND purchasing power
+
+Law of Demand:
+- As price increases, quantity demanded decreases
+- As price decreases, quantity demanded increases
+- Inverse relationship
+- Ceteris paribus (all else equal)
+
+Why Law of Demand Exists:
+
+Substitution Effect:
+- When price rises, consumers substitute cheaper alternatives
+- Example: Buy chicken instead of expensive beef
+
+Income Effect:
+- When price rises, purchasing power decreases
+- Can afford less of everything
+- Real income declines
+
+Law of Diminishing Marginal Utility:
+- Each additional unit provides less satisfaction
+- Willing to pay less for additional units
+- Example: First slice of pizza tastes better than fifth
+
+Demand Curve:
+- Graphical representation
+- Price on vertical axis (Y-axis)
+- Quantity on horizontal axis (X-axis)
+- Slopes downward (negative slope)
+- Shows inverse relationship
+
+Demand Schedule:
+- Table showing price and quantity demanded
+- Numerical representation
+- Example:
+  Price: $10, Quantity: 100
+  Price: $8, Quantity: 150
+  Price: $6, Quantity: 200
+
+Market Demand:
+- Sum of all individual demands
+- Horizontal summation of demand curves
+- Total quantity demanded at each price
+
+Factors Shifting Demand Curve:
+
+Income:
+- Normal goods: demand increases when income increases
+  * Example: restaurant meals, new cars
+- Inferior goods: demand decreases when income increases
+  * Example: ramen noodles, used clothing
+
+Price of Related Goods:
+- Substitutes: goods that replace each other
+  * Example: Coke and Pepsi
+  * If price of Coke rises, demand for Pepsi increases
+- Complements: goods used together
+  * Example: hot dogs and hot dog buns
+  * If price of hot dogs rises, demand for buns decreases
+
+Tastes and Preferences:
+- Changes in consumer preferences
+- Influenced by advertising, trends, seasons
+- Example: Fidget spinners became popular
+
+Expectations:
+- Future price expectations
+- If expect higher prices, buy more now
+- Future income expectations
+- If expect raise, increase current spending
+
+Number of Buyers:
+- More consumers = higher demand
+- Population growth
+- Example: Baby boom increased demand for baby products
+
+Change in Demand vs Change in Quantity Demanded:
+
+Change in Quantity Demanded:
+- Movement ALONG demand curve
+- Caused by price change only
+- Same curve
+
+Change in Demand:
+- SHIFT of entire demand curve
+- Caused by non-price factors
+- New curve
+- Increase: shift right
+- Decrease: shift left
+
+Supply:
+
+Definition:
+- Quantity of good or service producers are willing and able to produce at various prices
+- Must be willing AND able
+
+Law of Supply:
+- As price increases, quantity supplied increases
+- As price decreases, quantity supplied decreases
+- Direct/positive relationship
+- Ceteris paribus
+
+Why Law of Supply Exists:
+
+Profit Motive:
+- Higher prices mean higher potential profits
+- Incentive to produce more
+
+Law of Increasing Costs:
+- Producing more becomes increasingly expensive
+- Need higher prices to cover rising costs
+- Diminishing returns
+
+More Producers Enter Market:
+- High prices attract new producers
+- Low prices cause producers to exit
+
+Supply Curve:
+- Graphical representation
+- Price on vertical axis
+- Quantity on horizontal axis
+- Slopes upward (positive slope)
+- Shows direct relationship
+
+Supply Schedule:
+- Table showing price and quantity supplied
+- Example:
+  Price: $10, Quantity: 200
+  Price: $8, Quantity: 150
+  Price: $6, Quantity: 100
+
+Market Supply:
+- Sum of all individual supplies
+- Horizontal summation of supply curves
+- Total quantity supplied at each price
+
+Factors Shifting Supply Curve:
+
+Input/Resource Prices:
+- Costs of production (labor, materials, rent)
+- Higher costs decrease supply (shift left)
+- Lower costs increase supply (shift right)
+- Example: Oil price rise increases production costs
+
+Technology:
+- Better technology increases productivity
+- Lower costs per unit
+- Increases supply (shift right)
+- Example: Assembly line, computers
+
+Taxes and Subsidies:
+- Taxes: increase costs, decrease supply
+- Subsidies: decrease costs, increase supply
+- Example: Farm subsidies increase agricultural supply
+
+Expectations:
+- Future price expectations affect current supply
+- Expect higher prices: withhold supply now
+- Expect lower prices: increase supply now
+
+Number of Sellers:
+- More producers = higher supply
+- New firms enter market
+- Example: Success of iPhone led to more smartphone makers
+
+Natural Conditions:
+- Weather, natural disasters
+- Especially affects agricultural supply
+- Example: Drought decreases crop supply
+
+Change in Supply vs Change in Quantity Supplied:
+
+Change in Quantity Supplied:
+- Movement ALONG supply curve
+- Caused by price change only
+- Same curve
+
+Change in Supply:
+- SHIFT of entire supply curve
+- Caused by non-price factors
+- New curve
+- Increase: shift right
+- Decrease: shift left
+
+Market Equilibrium:
+
+Definition:
+- Point where supply equals demand
+- Quantity supplied = quantity demanded
+- Market clears
+- No shortage, no surplus
+
+Equilibrium Price:
+- Price at which market clears
+- Also called market-clearing price
+- Balance point
+
+Equilibrium Quantity:
+- Quantity bought and sold at equilibrium
+- Where supply and demand curves intersect
+
+Finding Equilibrium:
+- Graph supply and demand curves
+- Intersection point is equilibrium
+- Read price and quantity from axes
+
+Market Disequilibrium:
+
+Surplus (Excess Supply):
+- Quantity supplied > quantity demanded
+- Price above equilibrium
+- Unsold goods accumulate
+- Pressure to lower price
+- Example: Unsold inventory, clearance sales
+
+Shortage (Excess Demand):
+- Quantity demanded > quantity supplied
+- Price below equilibrium
+- Not enough goods for all buyers
+- Pressure to raise price
+- Example: Concert tickets sold out, long lines
+
+Price Adjustments:
+- Markets naturally move toward equilibrium
+- Invisible hand (Adam Smith)
+- Surplus → price falls → equilibrium
+- Shortage → price rises → equilibrium
+
+Changes in Equilibrium:
+
+Increase in Demand (shift right):
+- Higher equilibrium price
+- Higher equilibrium quantity
+- Example: New study shows coffee is healthy
+
+Decrease in Demand (shift left):
+- Lower equilibrium price
+- Lower equilibrium quantity
+- Example: Health scare about product
+
+Increase in Supply (shift right):
+- Lower equilibrium price
+- Higher equilibrium quantity
+- Example: New technology reduces production costs
+
+Decrease in Supply (shift left):
+- Higher equilibrium price
+- Lower equilibrium quantity
+- Example: Hurricane destroys crops
+
+Simultaneous Shifts:
+- Both curves can shift at same time
+- Effect on price and quantity depends on magnitudes
+- Four possible combinations
+
+Elasticity:
+
+Price Elasticity of Demand (PED):
+- Responsiveness of quantity demanded to price change
+- Percentage change in quantity demanded ÷ percentage change in price
+
+Elastic Demand (PED > 1):
+- Quantity very responsive to price
+- Price increase → large decrease in quantity
+- Example: Luxury goods, goods with many substitutes
+
+Inelastic Demand (PED < 1):
+- Quantity not very responsive to price
+- Price increase → small decrease in quantity
+- Example: Necessities (insulin, gasoline)
+
+Unit Elastic (PED = 1):
+- Percentage changes equal
+
+Factors Affecting Elasticity:
+
+Availability of Substitutes:
+- More substitutes = more elastic
+- Example: Many brands of soda
+
+Necessity vs Luxury:
+- Necessities: inelastic
+- Luxuries: elastic
+
+Proportion of Income:
+- Large portion of income: more elastic
+- Small portion: more elastic
+- Example: Car vs candy bar
+
+Time Period:
+- Short run: more inelastic
+- Long run: more elastic
+- Example: Can't immediately find substitute
+
+Price Elasticity of Supply (PES):
+- Responsiveness of quantity supplied to price change
+
+Elastic Supply (PES > 1):
+- Easy to increase production quickly
+- Example: T-shirts, simple manufactured goods
+
+Inelastic Supply (PES < 1):
+- Difficult to increase production quickly
+- Example: Oil, agricultural products
+
+Price Controls:
+
+Price Ceiling:
+- Maximum legal price
+- Set below equilibrium
+- Creates shortage
+- Example: Rent control
+
+Effects:
+- Quantity demanded > quantity supplied
+- Reduced quality
+- Black markets
+- Discrimination
+- Waiting lists
+
+Price Floor:
+- Minimum legal price
+- Set above equilibrium
+- Creates surplus
+- Example: Minimum wage
+
+Effects:
+- Quantity supplied > quantity demanded
+- Unemployment (for minimum wage)
+- Wasted resources
+- Illegal activity
+
+Applications:
+
+Consumer Surplus:
+- Difference between willingness to pay and actual price
+- Benefit to consumers
+- Area below demand curve, above price
+
+Producer Surplus:
+- Difference between price received and willingness to sell
+- Benefit to producers
+- Area above supply curve, below price
+
+Total Surplus:
+- Consumer surplus + producer surplus
+- Measure of market efficiency
+- Maximized at equilibrium
+
+Deadweight Loss:
+- Loss of total surplus from market inefficiency
+- Occurs with price controls, taxes
+- Transactions that would benefit both sides don't happen

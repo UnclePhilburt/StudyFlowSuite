@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>StudyFlow AI Tutor</title>
+  <title>StudyFlow Suite</title>
   <style>
     * {
       margin: 0;
@@ -11,188 +11,409 @@
     }
 
     body {
-      width: 360px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
+      width: 340px;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0a0a0f;
+      color: #ffffff;
     }
 
     .container {
-      padding: 24px;
+      padding: 0;
+      background: linear-gradient(145deg, #1a1a2e 0%, #0f0f1e 100%);
+      min-height: 400px;
     }
 
     .header {
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #d946ef 100%);
+      padding: 24px 20px;
       text-align: center;
-      margin-bottom: 24px;
+      border-bottom: 2px solid rgba(139, 92, 246, 0.3);
+      position: relative;
+      overflow: hidden;
     }
 
-    .logo {
-      font-size: 48px;
-      margin-bottom: 12px;
+    .header::before {
+      content: '';
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+      animation: pulse 4s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 0.3; }
+      50% { opacity: 0.6; }
     }
 
     .title {
-      font-size: 24px;
-      font-weight: 700;
-      margin-bottom: 4px;
-    }
-
-    .subtitle {
-      font-size: 13px;
-      opacity: 0.9;
-      font-weight: 500;
-    }
-
-    .legal-badge {
-      background: rgba(255, 255, 255, 0.2);
-      padding: 8px 16px;
-      border-radius: 20px;
-      font-size: 11px;
-      font-weight: 600;
-      text-transform: uppercase;
+      font-size: 22px;
+      font-weight: 800;
       letter-spacing: 0.5px;
-      margin-top: 12px;
-      display: inline-block;
+      position: relative;
+      z-index: 1;
+      text-shadow: 0 2px 10px rgba(0,0,0,0.3);
     }
 
-    .info-box {
-      background: rgba(255, 255, 255, 0.15);
-      border-radius: 12px;
-      padding: 16px;
-      margin-bottom: 16px;
-      backdrop-filter: blur(10px);
+    .content {
+      padding: 20px;
     }
 
-    .info-title {
-      font-size: 14px;
-      font-weight: 600;
-      margin-bottom: 8px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
+    .login-section {
+      padding: 0;
     }
 
-    .info-text {
-      font-size: 12px;
-      line-height: 1.6;
-      opacity: 0.95;
-    }
-
-    .status-box {
-      background: rgba(255, 255, 255, 0.1);
-      border-radius: 8px;
-      padding: 12px;
-      margin-bottom: 16px;
-      text-align: center;
-    }
-
-    .status-text {
+    .login-text {
       font-size: 13px;
-      font-weight: 500;
+      color: #a8a8b3;
+      margin-bottom: 20px;
+      text-align: center;
+      line-height: 1.5;
+    }
+
+    input {
+      width: 100%;
+      padding: 14px 16px;
+      margin-bottom: 12px;
+      border: 1.5px solid #2a2a3e;
+      border-radius: 10px;
+      font-size: 14px;
+      background: #16161f;
+      color: #ffffff;
+      transition: all 0.3s ease;
+      font-family: inherit;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: #8b5cf6;
+      background: #1a1a2e;
+      box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+    }
+
+    input::placeholder {
+      color: #5a5a6e;
     }
 
     .btn {
       width: 100%;
       padding: 14px;
       border: none;
-      border-radius: 8px;
+      border-radius: 10px;
       font-size: 14px;
-      font-weight: 600;
+      font-weight: 700;
       cursor: pointer;
-      transition: all 0.2s;
-      margin-bottom: 8px;
+      transition: all 0.3s ease;
+      margin-bottom: 10px;
+      font-family: inherit;
+      letter-spacing: 0.3px;
     }
 
     .btn-primary {
-      background: white;
-      color: #667eea;
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+      color: white;
+      box-shadow: 0 4px 15px rgba(139, 92, 246, 0.3);
     }
 
     .btn-primary:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(139, 92, 246, 0.4);
+    }
+
+    .btn-primary:active {
+      transform: translateY(0);
     }
 
     .btn-secondary {
-      background: rgba(255, 255, 255, 0.2);
-      color: white;
-      border: 1px solid rgba(255, 255, 255, 0.3);
+      background: #2a2a3e;
+      color: #e0e0e8;
+      border: 1.5px solid #3a3a4e;
     }
 
     .btn-secondary:hover {
-      background: rgba(255, 255, 255, 0.3);
+      background: #3a3a4e;
+      border-color: #4a4a5e;
+    }
+
+    .btn-ghost {
+      background: transparent;
+      color: #8b5cf6;
+      border: 1.5px solid #8b5cf6;
+    }
+
+    .btn-ghost:hover {
+      background: rgba(139, 92, 246, 0.1);
     }
 
     .user-info {
-      text-align: center;
-      padding: 12px;
-      background: rgba(255, 255, 255, 0.1);
-      border-radius: 8px;
-      margin-bottom: 16px;
+      background: linear-gradient(135deg, #2a2a3e 0%, #1a1a2e 100%);
+      border: 1.5px solid #3a3a4e;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .user-avatar {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .user-details {
+      flex: 1;
+      min-width: 0;
     }
 
     .user-email {
-      font-size: 12px;
-      opacity: 0.9;
+      font-size: 13px;
+      color: #e0e0e8;
+      font-weight: 600;
       margin-bottom: 4px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .user-tier {
       font-size: 11px;
+      color: #8b5cf6;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
 
-    .footer {
+    .divider {
+      height: 1px;
+      background: linear-gradient(90deg, transparent 0%, #3a3a4e 50%, transparent 100%);
+      margin: 16px 0;
+    }
+
+    .signup-link {
       text-align: center;
       margin-top: 16px;
-      padding-top: 16px;
-      border-top: 1px solid rgba(255, 255, 255, 0.2);
+      font-size: 12px;
+      color: #a8a8b3;
     }
 
-    .footer-link {
-      font-size: 11px;
-      color: rgba(255, 255, 255, 0.8);
+    .signup-link a {
+      color: #8b5cf6;
       text-decoration: none;
-      margin: 0 8px;
+      font-weight: 600;
+      transition: color 0.2s;
     }
 
-    .footer-link:hover {
-      color: white;
+    .signup-link a:hover {
+      color: #a78bfa;
+    }
+
+    .error-message {
+      margin-top: 12px;
+      padding: 12px;
+      background: rgba(239, 68, 68, 0.1);
+      border: 1.5px solid rgba(239, 68, 68, 0.3);
+      border-radius: 8px;
+      font-size: 12px;
+      color: #fca5a5;
+      text-align: center;
     }
 
     .hidden {
       display: none;
     }
 
-    .feature-list {
-      margin-top: 12px;
+    .action-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 10px;
     }
 
-    .feature-item {
-      font-size: 12px;
-      padding: 8px 0;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    .footer {
+      text-align: center;
+      padding: 16px 20px;
+      border-top: 1px solid #2a2a3e;
+      margin-top: 20px;
+    }
+
+    .footer a {
+      color: #6b6b7e;
+      text-decoration: none;
+      font-size: 11px;
+      margin: 0 10px;
+      transition: color 0.2s;
+    }
+
+    .footer a:hover {
+      color: #8b5cf6;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 0;
+      background: #16161f;
+      border-bottom: 2px solid #2a2a3e;
+      padding: 0 20px;
+    }
+
+    .tab {
+      flex: 1;
+      padding: 14px 16px;
+      background: transparent;
+      border: none;
+      color: #6b6b7e;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      font-family: inherit;
+    }
+
+    .tab:hover {
+      color: #a8a8b3;
+      background: rgba(139, 92, 246, 0.05);
+    }
+
+    .tab.active {
+      color: #8b5cf6;
+      border-bottom-color: #8b5cf6;
+      background: rgba(139, 92, 246, 0.1);
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    .stat-card {
+      background: linear-gradient(135deg, #2a2a3e 0%, #1a1a2e 100%);
+      border: 1.5px solid #3a3a4e;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 12px;
       display: flex;
       align-items: center;
-      gap: 8px;
+      justify-content: space-between;
     }
 
-    .feature-item:last-child {
-      border-bottom: none;
-    }
-
-    .login-section {
-      background: rgba(255, 255, 255, 0.1);
-      border-radius: 12px;
-      padding: 20px;
-      text-align: center;
-    }
-
-    .login-text {
+    .stat-label {
       font-size: 13px;
-      margin-bottom: 16px;
+      color: #a8a8b3;
+      font-weight: 500;
+    }
+
+    .stat-value {
+      font-size: 24px;
+      font-weight: 800;
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .setting-item {
+      background: linear-gradient(135deg, #2a2a3e 0%, #1a1a2e 100%);
+      border: 1.5px solid #3a3a4e;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .setting-info {
+      flex: 1;
+    }
+
+    .setting-title {
+      font-size: 14px;
+      color: #e0e0e8;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .setting-description {
+      font-size: 11px;
+      color: #6b6b7e;
+      line-height: 1.4;
+    }
+
+    .toggle-switch {
+      position: relative;
+      width: 48px;
+      height: 26px;
+      flex-shrink: 0;
+    }
+
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #3a3a4e;
+      transition: 0.3s;
+      border-radius: 34px;
+    }
+
+    .toggle-slider:before {
+      position: absolute;
+      content: "";
+      height: 18px;
+      width: 18px;
+      left: 4px;
+      bottom: 4px;
+      background-color: white;
+      transition: 0.3s;
+      border-radius: 50%;
+    }
+
+    input:checked + .toggle-slider {
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    }
+
+    input:checked + .toggle-slider:before {
+      transform: translateX(22px);
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: #6b6b7e;
+    }
+
+    .empty-state-icon {
+      font-size: 48px;
+      margin-bottom: 12px;
+      opacity: 0.5;
+    }
+
+    .empty-state-text {
+      font-size: 13px;
       line-height: 1.5;
     }
   </style>
@@ -201,94 +422,141 @@
   <div class="container">
     <!-- Header -->
     <div class="header">
-      <div class="logo">📝</div>
-      <div class="title">StudyFlow NoteFlow</div>
-      <div class="subtitle">AI-Powered Note Search</div>
-      <div class="legal-badge">✓ 100% Legal Study Tool</div>
+      <div class="title">StudyFlow Suite</div>
     </div>
 
-    <!-- Login Section (shown when not logged in) -->
-    <div id="loginSection" class="hidden">
-      <div class="login-section">
-        <div class="login-text">
-          Sign in to access AI-powered tutoring explanations
-        </div>
-        <button id="loginBtn" class="btn btn-primary">Sign In / Sign Up</button>
-      </div>
-    </div>
+    <!-- Content -->
+    <div class="content">
+      <!-- Login Section (shown when not logged in) -->
+      <div id="loginSection" class="hidden">
+        <div class="login-section">
+          <div class="login-text">
+            Sign in to access your AI study assistant
+          </div>
 
-    <!-- Main Section (shown when logged in) -->
-    <div id="mainSection" class="hidden">
-      <!-- User Info -->
-      <div id="userInfo" class="user-info">
-        <div class="user-email" id="userEmail"></div>
-        <div class="user-tier" id="userTier"></div>
-      </div>
+          <form id="loginForm">
+            <input
+              type="email"
+              id="emailInput"
+              placeholder="Email address"
+              required
+              autocomplete="email"
+            >
+            <input
+              type="password"
+              id="passwordInput"
+              placeholder="Password"
+              required
+              autocomplete="current-password"
+            >
+            <button type="submit" class="btn btn-primary">Sign In</button>
+          </form>
 
-      <!-- How It Works -->
-      <div class="info-box">
-        <div class="info-title">
-          <span>ℹ️</span>
-          <span>How It Works</span>
-        </div>
-        <div class="info-text">
-          1. Upload your class notes on the StudyFlow website<br>
-          2. A floating window appears on any webpage<br>
-          3. Type questions about your notes<br>
-          4. Get AI-guided hints from YOUR study materials
-        </div>
-      </div>
+          <div class="signup-link">
+            Don't have an account? <a href="#" id="signupLink">Sign up</a>
+          </div>
 
-      <!-- Status -->
-      <div class="status-box">
-        <div class="status-text">✅ NoteFlow overlay is active</div>
-      </div>
-
-      <!-- Features -->
-      <div class="info-box">
-        <div class="info-title">
-          <span>✨</span>
-          <span>Features</span>
-        </div>
-        <div class="feature-list">
-          <div class="feature-item">
-            <span>📚</span>
-            <span>Upload PDFs, images, handwritten notes</span>
-          </div>
-          <div class="feature-item">
-            <span>🤖</span>
-            <span>AI-powered OCR with Gemini</span>
-          </div>
-          <div class="feature-item">
-            <span>🔍</span>
-            <span>Search your personal note library</span>
-          </div>
-          <div class="feature-item">
-            <span>💡</span>
-            <span>Get hints, not answers</span>
-          </div>
-          <div class="feature-item">
-            <span>🎯</span>
-            <span>Works on ANY webpage</span>
-          </div>
+          <div id="loginError" class="error-message hidden"></div>
         </div>
       </div>
 
-      <!-- Actions -->
-      <button id="toggleOverlayBtn" class="btn btn-primary">Open NoteFlow</button>
-      <button id="uploadNotesBtn" class="btn btn-secondary">Upload Notes</button>
-      <button id="upgradeBtn" class="btn btn-secondary">Upgrade to Pro</button>
-      <button id="logoutBtn" class="btn btn-secondary">Sign Out</button>
+      <!-- Main Section (shown when logged in) -->
+      <div id="mainSection" class="hidden">
+        <!-- Tabs Navigation -->
+        <div class="tabs">
+          <button class="tab active" data-tab="home">Home</button>
+          <button class="tab" data-tab="stats">Stats</button>
+          <button class="tab" data-tab="settings">Settings</button>
+        </div>
+
+        <!-- Home Tab -->
+        <div class="tab-content active" id="homeTab">
+          <!-- Actions -->
+          <button id="toggleOverlayBtn" class="btn btn-primary">Open NoteFlow</button>
+
+          <div class="action-grid">
+            <button id="uploadNotesBtn" class="btn btn-secondary">Upload Notes</button>
+            <button id="upgradeBtn" class="btn btn-ghost">Upgrade</button>
+          </div>
+
+          <div class="divider"></div>
+
+          <button id="logoutBtn" class="btn btn-secondary">Sign Out</button>
+
+          <div class="divider"></div>
+
+          <!-- User Info -->
+          <div class="user-info">
+            <div class="user-avatar" id="userAvatar">S</div>
+            <div class="user-details">
+              <div class="user-email" id="userName"></div>
+              <div class="user-tier" id="userTier"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Stats Tab -->
+        <div class="tab-content" id="statsTab">
+          <div class="stat-card">
+            <div class="stat-label">Notes Uploaded</div>
+            <div class="stat-value" id="statNotesUploaded">0</div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-label">Questions Asked</div>
+            <div class="stat-value" id="statQuestionsAsked">0</div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-label">Hints Received</div>
+            <div class="stat-value" id="statHintsReceived">0</div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-label">Study Sessions</div>
+            <div class="stat-value" id="statStudySessions">0</div>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="empty-state">
+            <div class="empty-state-icon">📊</div>
+            <div class="empty-state-text">
+              Your study statistics will appear here as you use StudyFlow
+            </div>
+          </div>
+        </div>
+
+        <!-- Settings Tab -->
+        <div class="tab-content" id="settingsTab">
+          <div class="setting-item">
+            <div class="setting-info">
+              <div class="setting-title">Collective Brain</div>
+              <div class="setting-description">Share your notes to access everyone's notes. Turn off to keep notes private (you won't see others' notes).</div>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="settingCollectiveBrain" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div class="empty-state" style="margin-top: 20px;">
+            <div class="empty-state-icon">🧠</div>
+            <div class="empty-state-text">
+              When enabled, your notes help other students and their notes help you. It's a win-win!
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Footer -->
     <div class="footer">
-      <a href="https://unclephilburt.github.io/studyflowwebsite/" target="_blank" class="footer-link">Website</a>
-      <a href="#" id="helpLink" class="footer-link">Help</a>
+      <a href="https://unclephilburt.github.io/studyflowwebsite/" target="_blank">Website</a>
+      <a href="#" id="helpLink">Support</a>
     </div>
   </div>
 
-  <script src="auth.js"></script>
   <script src="popup-tutor.js"></script>
 </body>
 </html>

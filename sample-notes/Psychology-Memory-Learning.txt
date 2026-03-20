@@ -1,0 +1,348 @@
+MEMORY AND LEARNING - PSYCHOLOGY STUDY GUIDE
+
+Types of Memory:
+
+Sensory Memory:
+- Brief storage of sensory information
+- Lasts less than 1 second
+- Types:
+  * Iconic memory (visual) - 0.5 seconds
+  * Echoic memory (auditory) - 3-4 seconds
+- Limited capacity
+- Automatic, no conscious effort
+- Example: Seeing flash of lightning
+
+Short-Term Memory (STM):
+- Also called working memory
+- Holds information temporarily
+- Duration: 15-30 seconds without rehearsal
+- Capacity: 7 ± 2 items (Miller's Magic Number)
+- Conscious awareness
+- Example: Remembering phone number to dial
+- Can be extended through rehearsal
+
+Long-Term Memory (LTM):
+- Permanent storage
+- Unlimited capacity
+- Can last lifetime
+- Requires encoding from STM
+- Two main types: explicit and implicit
+
+Explicit Memory (Declarative):
+- Conscious recall of facts and events
+- "Knowing that"
+
+Types of Explicit Memory:
+
+Episodic Memory:
+- Personal experiences and events
+- Time and place specific
+- Example: Your 10th birthday party
+- Can include emotions and context
+
+Semantic Memory:
+- General knowledge and facts
+- Not tied to personal experience
+- Example: Knowing Paris is capital of France
+- Concepts, meanings, vocabulary
+
+Implicit Memory (Non-Declarative):
+- Unconscious memory
+- "Knowing how"
+- Automatic processes
+
+Types of Implicit Memory:
+
+Procedural Memory:
+- Skills and habits
+- Motor skills
+- Example: Riding bicycle, typing
+- Hard to verbalize
+
+Priming:
+- Exposure to stimulus influences response
+- Unconscious
+- Example: Seeing "yellow" makes you more likely to say "banana"
+
+Classical Conditioning:
+- Learned associations
+- Pavlov's dogs
+- Automatic responses
+
+Memory Processes:
+
+Encoding:
+- Converting information into memory form
+- Three methods:
+  * Visual (picture)
+  * Acoustic (sound)
+  * Semantic (meaning)
+- Semantic encoding most effective for LTM
+
+Storage:
+- Maintaining information over time
+- Creating permanent record
+- Involves brain changes (consolidation)
+
+Retrieval:
+- Accessing stored information
+- Bringing memories to consciousness
+- Types:
+  * Recall: producing information from memory
+  * Recognition: identifying previously learned information
+  * Relearning: learning again (faster than first time)
+
+Factors Affecting Memory:
+
+Attention:
+- Must pay attention to encode
+- Divided attention reduces encoding
+- Selective attention important
+
+Rehearsal:
+- Maintenance rehearsal: repetition
+- Elaborative rehearsal: connecting to existing knowledge
+- Elaborative more effective for LTM
+
+Levels of Processing:
+- Shallow processing: physical features
+- Deep processing: meaning and connections
+- Deeper processing = better memory
+
+Chunking:
+- Grouping information into meaningful units
+- Increases STM capacity
+- Example: 149217761812 → 1492, 1776, 1812
+
+Organization:
+- Structured information easier to remember
+- Hierarchies, categories
+- Example: Organizing grocery list by food type
+
+Mnemonic Devices:
+- Memory aids
+- Acronyms: ROYGBIV (colors of rainbow)
+- Acrostics: "Every Good Boy Does Fine" (music notes)
+- Method of loci: associating items with physical locations
+- Peg-word system: rhyming words with numbers
+
+Imagery:
+- Visual mental images
+- Concrete images easier than abstract
+- More vivid = better memory
+
+Spacing Effect:
+- Distributed practice better than massed practice
+- Studying over time vs cramming
+- Allows consolidation
+
+Context-Dependent Memory:
+- Better recall in same context as encoding
+- Physical environment matters
+- Example: Studying in exam room helps recall
+
+State-Dependent Memory:
+- Better recall in same internal state
+- Mood, physiological state
+- Example: Remember better when in same emotional state
+
+Forgetting:
+
+Encoding Failure:
+- Information never entered LTM
+- Never properly attended to
+- Most common reason for "forgetting"
+
+Storage Decay:
+- Memories fade over time if not used
+- Use it or lose it
+- Physical trace deteriorates
+
+Retrieval Failure:
+- Information in memory but can't access it
+- Tip-of-the-tongue phenomenon
+- Wrong retrieval cues
+
+Interference:
+- Other memories disrupt retrieval
+
+Types of Interference:
+
+Proactive Interference:
+- Old memories interfere with new
+- Example: Calling new girlfriend by ex's name
+
+Retroactive Interference:
+- New memories interfere with old
+- Example: Learning new phone number makes old one harder to recall
+
+Motivated Forgetting:
+- Repression: unconsciously forgetting traumatic events
+- Suppression: consciously trying to forget
+
+Retrieval Cues:
+- Stimuli that help recall
+- Priming: activation of associations
+- Context: environmental cues
+- Mood: emotional state
+- Free recall vs cued recall
+
+Memory Construction:
+
+Misinformation Effect:
+- Incorporating misleading information into memory
+- Elizabeth Loftus research
+- Leading questions change memories
+- Example: "How fast were cars going when they smashed?" vs "contacted?"
+
+Source Amnesia:
+- Remember information but not where it came from
+- Attribute to wrong source
+
+False Memories:
+- Memories of events that didn't happen
+- Can feel as real as true memories
+- Imagination inflation: imagining event makes it feel more real
+
+Memory Consolidation:
+- Process of stabilizing memory
+- Takes time after initial encoding
+- Sleep important for consolidation
+- Hippocampus critical for consolidation
+
+Brain and Memory:
+
+Hippocampus:
+- Critical for forming new explicit memories
+- Damage = inability to form new LTMs (anterograde amnesia)
+- H.M. case study: surgical removal
+- Not storage site for old memories
+
+Amygdala:
+- Emotional memories
+- Fear conditioning
+- Flashbulb memories (vivid emotional memories)
+
+Cerebellum:
+- Procedural memories
+- Motor skills
+- Classical conditioning
+
+Cerebral Cortex:
+- Storage of long-term memories
+- Different areas for different types
+- Distributed storage
+
+Memory Disorders:
+
+Amnesia:
+- Loss of memory
+
+Types:
+- Anterograde: can't form new memories
+- Retrograde: can't recall old memories
+- Infantile/childhood amnesia: can't recall events before age 3-4
+
+Alzheimer's Disease:
+- Progressive memory loss
+- Starts with recent memories
+- Eventually affects older memories
+- Protein plaques in brain
+- Hippocampus damage
+
+Learning:
+
+Classical Conditioning:
+- Learning through association
+- Ivan Pavlov
+- Unconditioned stimulus → unconditioned response
+- Conditioned stimulus → conditioned response
+- Example: Pavlov's dogs salivating to bell
+
+Key Concepts:
+- Acquisition: learning phase
+- Extinction: CS without UCS, response fades
+- Spontaneous recovery: response returns after extinction
+- Generalization: similar stimuli produce response
+- Discrimination: only specific stimulus produces response
+
+Operant Conditioning:
+- Learning through consequences
+- B.F. Skinner
+- Voluntary behaviors
+
+Reinforcement:
+- Increases behavior
+
+Positive Reinforcement:
+- Adding pleasant stimulus
+- Example: Giving treat for good behavior
+
+Negative Reinforcement:
+- Removing unpleasant stimulus
+- Example: Taking aspirin removes headache
+
+Punishment:
+- Decreases behavior
+
+Positive Punishment:
+- Adding unpleasant stimulus
+- Example: Spanking
+
+Negative Punishment:
+- Removing pleasant stimulus
+- Example: Taking away phone
+
+Schedules of Reinforcement:
+- Continuous: every response reinforced
+- Partial (intermittent): some responses reinforced
+  * Fixed-ratio: reinforcement after set number of responses
+  * Variable-ratio: reinforcement after unpredictable number (strongest)
+  * Fixed-interval: reinforcement after set time
+  * Variable-interval: reinforcement after unpredictable time
+
+Observational Learning:
+- Learning by watching others
+- Albert Bandura
+- Bobo doll experiment
+- Modeling behavior
+- Mirror neurons may be involved
+
+Factors Affecting Learning:
+- Attention: must observe
+- Retention: must remember
+- Reproduction: must be able to perform
+- Motivation: must want to perform
+
+Cognitive Learning:
+- Mental processes involved
+- Problem-solving
+- Insight learning: sudden realization
+- Latent learning: learning without obvious reinforcement
+- Cognitive maps: mental representations
+
+Study Techniques:
+
+Effective Strategies:
+- Distributed practice (spacing)
+- Self-testing
+- Elaborative rehearsal
+- Mnemonics
+- Organization
+- Deep processing
+- Multiple senses
+- Teaching others
+
+Ineffective Strategies:
+- Rereading passively
+- Highlighting without processing
+- Cramming
+- Multitasking while studying
+- Not self-testing
+
+Metacognition:
+- Thinking about thinking
+- Monitoring understanding
+- Planning study strategies
+- Evaluating learning
+- Adjusting approach

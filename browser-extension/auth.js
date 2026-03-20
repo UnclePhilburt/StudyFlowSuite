@@ -8,7 +8,7 @@
   if (!result.authToken || !result.user) {
     // Only redirect if we're not already on the login page
     if (!window.location.href.includes('login.html')) {
-      window.location.href = 'login.html';
+      window.location.href = chrome.runtime.getURL('login.html');
     }
   }
 })();
@@ -96,12 +96,20 @@ async function logout() {
   await chrome.storage.local.remove(['authToken', 'refreshToken', 'tokenExpiresAt', 'user']);
 
   // Redirect to login
-  window.location.href = 'login.html';
+  window.location.href = chrome.runtime.getURL('login.html');
+}
+
+// Function to show login page
+function showLogin() {
+  chrome.tabs.create({
+    url: chrome.runtime.getURL('login.html')
+  });
 }
 
 // Export functions for use in other scripts
 window.auth = {
   getCurrentUser,
   getAuthToken,
-  logout
+  logout,
+  showLogin
 };

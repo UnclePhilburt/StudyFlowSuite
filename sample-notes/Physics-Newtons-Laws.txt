@@ -1,0 +1,273 @@
+NEWTON'S LAWS OF MOTION - PHYSICS STUDY GUIDE
+
+Sir Isaac Newton (1643-1727):
+- English physicist and mathematician
+- Published "Principia Mathematica" in 1687
+- Laid foundation for classical mechanics
+- Also discovered calculus and studied optics
+
+Newton's First Law - Law of Inertia:
+
+Statement:
+"An object at rest stays at rest, and an object in motion stays in motion with the same speed and direction, unless acted upon by an unbalanced force."
+
+Key Concepts:
+
+Inertia:
+- Resistance to change in motion
+- Depends on mass
+- Greater mass = greater inertia
+- Explains why it's harder to push a car than a bicycle
+
+Balanced Forces:
+- Equal forces in opposite directions
+- Net force = 0
+- Object remains at rest or moves at constant velocity
+- Example: Book sitting on table
+
+Unbalanced Forces:
+- Forces that don't cancel out
+- Cause acceleration
+- Change in motion
+- Example: Pushing a shopping cart
+
+Examples:
+- Passengers lurch forward when car brakes suddenly
+- Objects on dashboard slide forward during sudden stop
+- Ball keeps rolling on smooth surface until friction stops it
+- Seat belts needed to restrain passengers
+
+Newton's Second Law - Force and Acceleration:
+
+Formula:
+F = ma
+Where:
+F = Force (Newtons, N)
+m = mass (kilograms, kg)
+a = acceleration (meters per second squared, m/s²)
+
+Statement:
+"The acceleration of an object depends on the mass of the object and the force applied."
+
+Key Relationships:
+
+Force and Acceleration:
+- Directly proportional
+- More force = more acceleration
+- Example: Pushing harder makes cart move faster
+
+Mass and Acceleration:
+- Inversely proportional
+- More mass = less acceleration (with same force)
+- Example: Harder to accelerate a truck than a car
+
+Net Force:
+- Sum of all forces acting on object
+- Fnet = F₁ + F₂ + F₃ + ...
+- Direction matters (use + and - for opposite directions)
+
+Weight:
+- Force of gravity on an object
+- W = mg
+- Where g = 9.8 m/s² (acceleration due to gravity on Earth)
+
+Examples:
+
+Problem 1:
+A 10 kg object accelerates at 5 m/s². What force is applied?
+F = ma
+F = 10 kg × 5 m/s²
+F = 50 N
+
+Problem 2:
+A 100 N force is applied to a 25 kg object. What's the acceleration?
+F = ma
+100 N = 25 kg × a
+a = 100 N / 25 kg
+a = 4 m/s²
+
+Newton's Third Law - Action-Reaction:
+
+Statement:
+"For every action, there is an equal and opposite reaction."
+
+Key Concepts:
+
+Action-Reaction Pairs:
+- Forces always occur in pairs
+- Equal in magnitude
+- Opposite in direction
+- Act on different objects (crucial!)
+
+Examples:
+
+Walking:
+- You push backward on ground (action)
+- Ground pushes you forward (reaction)
+
+Swimming:
+- You push water backward (action)
+- Water pushes you forward (reaction)
+
+Rocket Propulsion:
+- Rocket pushes gas downward/backward (action)
+- Gas pushes rocket upward/forward (reaction)
+
+Sitting in Chair:
+- Your weight pushes down on chair (action)
+- Chair pushes up on you (reaction)
+
+Important Note:
+- Action and reaction forces act on different objects
+- They don't cancel each other out
+- Each object experiences one force from the pair
+
+Related Concepts:
+
+Force:
+- Push or pull
+- Has magnitude and direction (vector)
+- SI unit: Newton (N)
+- 1 N = force needed to accelerate 1 kg at 1 m/s²
+
+Mass:
+- Amount of matter in object
+- Measure of inertia
+- Scalar quantity
+- SI unit: kilogram (kg)
+- Constant regardless of location
+
+Weight:
+- Force of gravity on mass
+- Vector quantity
+- Changes with location (gravity varies)
+- SI unit: Newton (N)
+- Weight on Moon = 1/6 of weight on Earth
+
+Friction:
+- Force that opposes motion
+- Caused by surface interaction
+- Always opposes direction of motion
+- Types: static, kinetic, rolling, fluid
+
+Static Friction:
+- Prevents object from starting to move
+- Must overcome to start motion
+- Usually greater than kinetic friction
+
+Kinetic Friction:
+- Acts on moving objects
+- Generally constant for given surfaces
+- Less than static friction
+
+Air Resistance:
+- Type of fluid friction
+- Opposes motion through air
+- Increases with speed
+- Depends on object's shape and size
+
+Terminal Velocity:
+- Maximum speed of falling object
+- Reached when air resistance equals weight
+- Net force = 0
+- No more acceleration
+
+Momentum:
+- Related to Newton's laws
+- p = mv (momentum = mass × velocity)
+- Vector quantity
+- SI unit: kg·m/s
+
+Conservation of Momentum:
+- Total momentum before collision = total momentum after
+- Applies when no external forces
+- Based on Newton's Third Law
+
+Free Body Diagrams:
+- Diagram showing all forces on object
+- Arrows represent forces
+- Length of arrow = magnitude of force
+- Direction of arrow = direction of force
+- Essential for analyzing forces
+
+Normal Force:
+- Perpendicular force from surface
+- Reaction to object pressing on surface
+- Often equal to weight (if on horizontal surface)
+- Can be greater or less than weight on inclines
+
+Applied Force:
+- Force applied by person or object
+- Can be at angles
+- Resolved into components (horizontal and vertical)
+
+Tension:
+- Force transmitted through rope, string, cable
+- Always pulls, never pushes
+- Same throughout rope (if massless)
+
+Gravity:
+- Attractive force between masses
+- Gives objects weight
+- Acceleration due to gravity (g) = 9.8 m/s² on Earth
+- Acts toward center of Earth
+
+Real-World Applications:
+
+Safety Features:
+- Airbags: increase time of impact, reduce force
+- Seatbelts: restrain passengers (First Law)
+- Crumple zones: extend collision time, reduce force
+
+Sports:
+- Baseball: greater force = greater ball acceleration
+- Basketball: action-reaction in jumping
+- Swimming: push water to move forward
+
+Transportation:
+- Cars: engine force overcomes friction
+- Airplanes: thrust overcomes air resistance
+- Rockets: action-reaction in space
+
+Common Misconceptions:
+
+Misconception 1:
+"Heavier objects fall faster"
+- Actually: In vacuum, all objects fall at same rate
+- Air resistance affects falling speeds
+- Mass doesn't affect gravitational acceleration
+
+Misconception 2:
+"Force is needed to maintain motion"
+- Actually: Force needed to change motion
+- Constant velocity requires no net force
+- Friction makes it seem like force is needed
+
+Misconception 3:
+"Action and reaction forces cancel out"
+- Actually: They act on different objects
+- Can't cancel because they're not on same object
+
+Problem-Solving Steps:
+
+1. Draw free body diagram
+2. Identify all forces
+3. Choose coordinate system
+4. Break forces into components if needed
+5. Apply F = ma in each direction
+6. Solve for unknown
+
+Units:
+
+Force: Newton (N)
+- 1 N = 1 kg·m/s²
+
+Mass: kilogram (kg)
+
+Acceleration: meters per second squared (m/s²)
+
+Velocity: meters per second (m/s)
+
+Distance: meters (m)
+
+Time: seconds (s)
