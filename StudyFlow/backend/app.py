@@ -2928,7 +2928,9 @@ def get_collective_brain_setting():
     Get the user's collective brain opt-in setting.
     """
     try:
-        user = supabase.table("users").select("collective_brain_opt_in").eq("id", request.user_id).single().execute()
+        from StudyFlow.backend.supabase_client import supabase
+
+        user = supabase.table("user_profiles").select("collective_brain_opt_in").eq("id", request.user_id).single().execute()
 
         if not user.data:
             return jsonify({"error": "User not found"}), 404
@@ -2955,11 +2957,13 @@ def update_collective_brain_setting():
     - User's notes are shared with everyone
     """
     try:
+        from StudyFlow.backend.supabase_client import supabase
+
         data = request.get_json()
         enabled = data.get('enabled', True)
 
         # Update user setting
-        supabase.table("users").update({
+        supabase.table("user_profiles").update({
             "collective_brain_opt_in": enabled
         }).eq("id", request.user_id).execute()
 

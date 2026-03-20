@@ -108,7 +108,7 @@ BEGIN
     -- Check if the searching user has opted into collective brain
     SELECT COALESCE(collective_brain_opt_in, TRUE)
     INTO searcher_opted_in
-    FROM users
+    FROM user_profiles
     WHERE id = search_user_id;
 
     RETURN QUERY
@@ -122,7 +122,7 @@ BEGIN
         nc.course_code,
         (nc.user_id = search_user_id) AS is_own_note
     FROM note_chunks nc
-    INNER JOIN users note_owner ON nc.user_id = note_owner.id
+    INNER JOIN user_profiles note_owner ON nc.user_id = note_owner.id
     WHERE
         (
             -- Always show user's own notes
