@@ -588,7 +588,7 @@ def create_subscription():
 
 @app.route("/api/me", methods=["GET"])
 @token_required
-def get_current_user():
+def get_me():
     """Get current user info (protected route)"""
     try:
         conn = psycopg2.connect(os.environ["DATABASE_URL"])
