@@ -2803,7 +2803,9 @@ def search_notes():
             text_to_show = result['content_summary'] if result['content_summary'] else result['chunk_text']
 
             # Generate a hint using the text
+            print(f"🔍 About to generate hint for: {question[:50]}...")
             hint = generate_hint_from_text(question, text_to_show)
+            print(f"💡 Generated hint: {hint[:100]}...")
 
             formatted_results.append({
                 "source": f"{filename} ({result['university']} - {result['course_code']})" if result['university'] else filename,
