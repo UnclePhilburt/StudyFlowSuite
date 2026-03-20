@@ -11,15 +11,43 @@ let sameQuestionCount = 0;
 let currentTabId = null;
 let currentFrameId = 0; // Track which frame has the quiz (0 = main frame, >0 = iframe)
 let latestAnswer = null;
+let currentActivity = 'Idle'; // Current activity for popup display
 
 // Quiz settings
 let quizSettings = {
   totalQuestions: null,
   targetTime: null, // in minutes
   onePageMode: false,
-  aiModel: 'gpt-4o-mini' // default model
+  aiModel: 'gpt-4o-mini', // default model
+  questionDelay: 5, // seconds to wait between questions
+  submitDelay: 2, // seconds to wait before clicking submit
+  skipEssays: false, // skip essay questions
+  skipFillInBlank: false, // skip fill-in-blank questions
+  soundOnError: true, // play sound on errors
+  soundOnComplete: true // play sound when quiz completes
 };
 let quizStartTime = null;
+
+// Sound effects - send message to content script to play (service workers can't play audio)
+function playErrorSound() {
+  if (quizSettings.soundOnError && currentTabId) {
+    sendMessageToFrame(currentTabId, { action: 'playErrorSound' }, (response) => {
+      if (response && !response.success) {
+        console.log('Could not play error sound');
+      }
+    });
+  }
+}
+
+function playCompleteSound() {
+  if (quizSettings.soundOnComplete && currentTabId) {
+    sendMessageToFrame(currentTabId, { action: 'playCompleteSound' }, (response) => {
+      if (response && !response.success) {
+        console.log('Could not play completion sound');
+      }
+    });
+  }
+}
 
 // Listen for messages from popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -37,7 +65,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       questionCount,
       errorCount,
       currentQuestion: lastQuestionText?.substring(0, 100),
-      latestAnswer
+      latestAnswer,
+      currentActivity
     });
   } else if (request.action === 'resume') {
     // Resume from waiting state
@@ -81,12 +110,19 @@ function startQuizMode(tabId, settings = {}) {
   runQuizLoop();
 }
 
-function stopQuizMode() {
+function stopQuizMode(completed = false) {
+  // Play completion sound BEFORE clearing state (needs currentTabId)
+  if (completed) {
+    playCompleteSound();
+  }
+
   isRunning = false;
   isPaused = false;
   waitingForNavigation = false;
   currentTabId = null;
-  quizSettings = { totalQuestions: null, targetTime: null, onePageMode: false, aiModel: 'gpt-4o-mini' };
+
+  quizSettings = { totalQuestions: null, targetTime: null, onePageMode: false, aiModel: 'gpt-4o-mini', questionDelay: 5, submitDelay: 2, skipEssays: false, skipFillInBlank: false, soundOnError: true, soundOnComplete: true };
+  currentActivity = completed ? 'Quiz completed!' : 'Stopped';
   quizStartTime = null;
   console.log('Quiz mode stopped');
   updateBadge('', '');
@@ -184,9 +220,11 @@ async function runQuizLoop() {
       }
 
       // Detect quiz on current tab - try all frames (including iframes)
+      currentActivity = 'Looking for question...';
       const quiz = await detectQuizInAllFrames(currentTabId);
 
       if (!quiz || !quiz.found) {
+        currentActivity = 'Waiting for quiz to load...';
         // Check if this is the end of a one-page quiz
         if (quiz && quiz.debug && quiz.debug.includes('One-page quiz: all questions completed')) {
           console.log('✅ All questions on this page completed!');
@@ -228,16 +266,47 @@ async function runQuizLoop() {
       sameQuestionCount = 0;
       lastQuestionText = currentQuestionText;
       console.log('✅ New question detected:', currentQuestionText.substring(0, 50));
+      currentActivity = `Reading question ${questionCount + 1}...`;
 
       // Check if one-page mode is enabled
       const isOnePageQuiz = quizSettings.onePageMode;
 
       // Check if it's an essay question
       if (quiz.isEssay) {
-        console.log('📝 Essay question detected - writing AI answer...');
+        // Determine if it's an essay or fill-in-blank
+        const isEssayQuestion = quiz.isRichTextEditor === true;
+        const isFillInBlank = !quiz.isRichTextEditor;
+
+        // Check if we should skip this type
+        const shouldSkip = (isEssayQuestion && quizSettings.skipEssays) || (isFillInBlank && quizSettings.skipFillInBlank);
+
+        if (shouldSkip) {
+          const questionType = isEssayQuestion ? 'essay' : 'fill-in-blank';
+          console.log(`⏭️ Skipping ${questionType} question (skip ${questionType} enabled)`);
+          currentActivity = `Skipped ${questionType} question`;
+
+          // Mark as answered so we don't process it again
+          if (quiz.questionHash) {
+            await new Promise((resolve) => {
+              sendMessageToFrame(currentTabId, {
+                action: 'markQuestionAnswered',
+                questionHash: quiz.questionHash
+              }, resolve);
+            });
+          }
+
+          // Small delay before moving to next
+          await sleep(2000);
+          continue;
+        }
+
+        const questionType = isEssayQuestion ? 'Essay' : 'Fill-in-blank';
+        console.log(`📝 ${questionType} question detected - writing AI answer...`);
+        currentActivity = `Getting AI answer for ${questionType.toLowerCase()}...`;
 
         // Get essay answer from AI
         const essayAnswer = await getEssayAnswer(quiz.question);
+        currentActivity = `Writing ${questionType.toLowerCase()} answer...`;
         console.log('AI Essay Answer:', essayAnswer.substring(0, 100));
 
         // Fill in the essay field
@@ -289,6 +358,14 @@ async function runQuizLoop() {
         // Only click submit if NOT a one-page quiz
         // One-page quizzes have all questions visible - no submit between questions
         if (!isOnePageQuiz) {
+          // Wait before clicking submit (human-like behavior)
+          const submitDelay = quizSettings.submitDelay || 2;
+          if (submitDelay > 0) {
+            currentActivity = `Waiting ${submitDelay}s before submit...`;
+            await sleep(submitDelay * 1000);
+          }
+
+          currentActivity = 'Clicking Submit...';
           const submitResponse = await new Promise((resolve) => {
             sendMessageToFrame(currentTabId, { action: 'clickSubmit' }, (response) => {
               if (chrome.runtime.lastError) {
@@ -301,6 +378,7 @@ async function runQuizLoop() {
           // Button was auto-clicked, wait for page to load new content
           if (submitResponse && submitResponse.success) {
             console.log('✅ Submit button clicked, waiting for next question to load...');
+            currentActivity = 'Waiting for next question...';
 
             // Wait minimum 2 seconds for page transition to start
             await sleep(2000);
@@ -341,6 +419,7 @@ async function runQuizLoop() {
         questionCount++;
         console.log(`✅ Essay question ${questionCount} completed`);
         updateBadge(questionCount.toString(), '#00c853');
+        currentActivity = `Completed question ${questionCount}`;
 
         // Check if we've hit the total questions limit
         if (quizSettings.totalQuestions && questionCount >= quizSettings.totalQuestions) {
@@ -348,22 +427,33 @@ async function runQuizLoop() {
 
           // If one-page quiz, click submit now
           if (isOnePageQuiz) {
+            // Wait before clicking final submit
+            const submitDelay = quizSettings.submitDelay || 2;
+            if (submitDelay > 0) {
+              currentActivity = `Waiting ${submitDelay}s before final submit...`;
+              await sleep(submitDelay * 1000);
+            }
+
             await new Promise((resolve) => {
               sendMessageToFrame(currentTabId, { action: 'clickSubmit' }, resolve);
             });
           }
 
-          stopQuizMode();
+          stopQuizMode(true); // Pass true to indicate successful completion
           break;
         }
 
-        // Use smart delay
+        // Use smart delay or question delay setting
         const delay = calculateSmartDelay();
-        await sleep(delay);
+        if (delay > 0) {
+          currentActivity = `Waiting ${Math.round(delay / 1000)}s before next question...`;
+          await sleep(delay);
+        }
         continue; // Skip the multiple choice logic below
       }
 
       // Multiple choice question - continue with normal flow below
+      currentActivity = 'Getting AI answer...';
 
       // Get AI answer
       const answer = await getAIAnswer(quiz);
@@ -371,8 +461,11 @@ async function runQuizLoop() {
       // Handle both single and multiple answer questions
       if (quiz.isMultipleAnswer) {
         console.log('AI Answer (Multiple):', answer.correct_indices);
+        currentActivity = `Selecting ${answer.correct_indices.length} answers...`;
       } else {
         console.log('AI Answer:', answer.correct_index);
+        const answerText = quiz.answers[answer.correct_index - 1]?.text.substring(0, 30) || `#${answer.correct_index}`;
+        currentActivity = `Selecting: ${answerText}...`;
       }
 
       // Clean the question text (remove common headers)
@@ -460,6 +553,14 @@ async function runQuizLoop() {
       // Only click submit if NOT a one-page quiz
       // One-page quizzes have all questions visible - no submit between questions
       if (!isOnePageQuiz) {
+        // Wait before clicking submit (human-like behavior)
+        const submitDelay = quizSettings.submitDelay || 2;
+        if (submitDelay > 0) {
+          currentActivity = `Waiting ${submitDelay}s before submit...`;
+          await sleep(submitDelay * 1000);
+        }
+
+        currentActivity = 'Clicking Submit...';
         const submitResponse = await new Promise((resolve) => {
           sendMessageToFrame(currentTabId, { action: 'clickSubmit' }, (response) => {
             if (chrome.runtime.lastError) {
@@ -472,6 +573,7 @@ async function runQuizLoop() {
         // Button was auto-clicked, wait for page to load new content
         if (submitResponse && submitResponse.success) {
           console.log('✅ Submit button clicked, waiting for next question to load...');
+          currentActivity = 'Waiting for next question...';
 
           // Wait minimum 4 seconds for Canvas LTI session to complete and page transition to start
           // This prevents 403 errors and "invalid launch" issues
@@ -533,6 +635,7 @@ async function runQuizLoop() {
       questionCount++;
       console.log(`✅ Question ${questionCount} completed`);
       updateBadge(questionCount.toString(), '#00c853');
+      currentActivity = `Completed question ${questionCount}`;
 
       // Check if we've hit the total questions limit
       if (quizSettings.totalQuestions && questionCount >= quizSettings.totalQuestions) {
@@ -540,6 +643,13 @@ async function runQuizLoop() {
 
         // If one-page quiz, click submit now
         if (isOnePageQuiz) {
+          // Wait before clicking final submit
+          const submitDelay = quizSettings.submitDelay || 2;
+          if (submitDelay > 0) {
+            currentActivity = `Waiting ${submitDelay}s before final submit...`;
+            await sleep(submitDelay * 1000);
+          }
+
           await new Promise((resolve) => {
             sendMessageToFrame(currentTabId, { action: 'clickSubmit' }, (response) => {
               if (chrome.runtime.lastError) {
@@ -550,18 +660,24 @@ async function runQuizLoop() {
           });
         }
 
-        stopQuizMode();
+        stopQuizMode(true); // Pass true to indicate successful completion
         break;
       }
 
-      // Use smart delay based on target time
+      // Use smart delay based on target time or question delay setting
       const delay = calculateSmartDelay();
-      await sleep(delay);
+      if (delay > 0) {
+        currentActivity = `Waiting ${Math.round(delay / 1000)}s before next question...`;
+        await sleep(delay);
+      }
 
     } catch (error) {
       console.error('❌ Error in quiz loop:', error);
       console.error('Error details:', error.message);
       console.error('Stack trace:', error.stack);
+
+      // Play error sound
+      playErrorSound();
 
       // Check for rate limit error
       if (error.message && error.message.startsWith('RATE_LIMIT:')) {
@@ -589,6 +705,13 @@ async function runQuizLoop() {
       if (error.message && error.message.includes('Failed to get AI answer')) {
         console.log('⏭️ Skipping question due to API failure - clicking submit to move on');
         lastQuestionText = null; // Reset so we don't get stuck
+
+        // Wait before clicking submit (even on error, for consistency)
+        const submitDelay = quizSettings.submitDelay || 2;
+        if (submitDelay > 0) {
+          currentActivity = `Waiting ${submitDelay}s before submit...`;
+          await sleep(submitDelay * 1000);
+        }
 
         // Click submit to move to next question
         try {
@@ -721,33 +844,48 @@ function sleep(ms) {
 
 // Calculate smart delay for next question based on target time
 function calculateSmartDelay() {
-  // If no target time set, return no delay (0 seconds)
-  if (!quizSettings.targetTime || !quizSettings.totalQuestions) {
+  // Priority 1: If target time is set, use smart delay calculation
+  if (quizSettings.targetTime && quizSettings.totalQuestions) {
+    const elapsedMinutes = (Date.now() - quizStartTime) / 1000 / 60;
+    const remainingMinutes = quizSettings.targetTime - elapsedMinutes;
+    const questionsLeft = quizSettings.totalQuestions - questionCount;
+
+    // If we're out of time or done, use minimal delay
+    if (remainingMinutes <= 0 || questionsLeft <= 0) {
+      return 2000;
+    }
+
+    // Calculate average time per question remaining (in milliseconds)
+    const avgTimePerQuestion = (remainingMinutes / questionsLeft) * 60 * 1000;
+
+    // Add randomization (±30%) to make it feel more human
+    const variation = avgTimePerQuestion * 0.3;
+    const randomDelay = avgTimePerQuestion + (Math.random() * variation * 2 - variation);
+
+    // Ensure delay is between 2-30 seconds for realism
+    const clampedDelay = Math.max(2000, Math.min(30000, randomDelay));
+
+    console.log(`Smart delay: ${Math.round(clampedDelay / 1000)}s (${questionsLeft} questions left, ${remainingMinutes.toFixed(1)}min remaining)`);
+
+    return clampedDelay;
+  }
+
+  // Priority 2: Use fixed question delay with randomization
+  const questionDelay = quizSettings.questionDelay || 5;
+
+  // If delay is 0, return immediately (fastest mode)
+  if (questionDelay === 0) {
     return 0;
   }
 
-  const elapsedMinutes = (Date.now() - quizStartTime) / 1000 / 60;
-  const remainingMinutes = quizSettings.targetTime - elapsedMinutes;
-  const questionsLeft = quizSettings.totalQuestions - questionCount;
+  // Add randomization (±20%) to make it more human-like
+  const baseDelay = questionDelay * 1000; // Convert to ms
+  const variation = baseDelay * 0.2;
+  const randomDelay = baseDelay + (Math.random() * variation * 2 - variation);
 
-  // If we're out of time or done, use minimal delay
-  if (remainingMinutes <= 0 || questionsLeft <= 0) {
-    return 2000;
-  }
+  console.log(`Question delay: ${Math.round(randomDelay / 1000)}s`);
 
-  // Calculate average time per question remaining (in milliseconds)
-  const avgTimePerQuestion = (remainingMinutes / questionsLeft) * 60 * 1000;
-
-  // Add randomization (±30%) to make it feel more human
-  const variation = avgTimePerQuestion * 0.3;
-  const randomDelay = avgTimePerQuestion + (Math.random() * variation * 2 - variation);
-
-  // Ensure delay is between 2-30 seconds for realism
-  const clampedDelay = Math.max(2000, Math.min(30000, randomDelay));
-
-  console.log(`Smart delay: ${Math.round(clampedDelay / 1000)}s (${questionsLeft} questions left, ${remainingMinutes.toFixed(1)}min remaining)`);
-
-  return clampedDelay;
+  return randomDelay;
 }
 
 // Listen for navigation events to auto-resume after manual button click

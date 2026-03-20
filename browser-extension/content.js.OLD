@@ -947,7 +947,10 @@ function detectQuiz() {
 
 // Listen for messages from popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === 'detectQuiz') {
+  if (request.action === 'ping') {
+    // Respond to ping to confirm content script is loaded
+    sendResponse({ success: true });
+  } else if (request.action === 'detectQuiz') {
     // Check if one-page mode is enabled
     const onePageMode = request.onePageMode || false;
 
@@ -1056,6 +1059,42 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 
     return true; // Keep channel open for async response
+  } else if (request.action === 'playErrorSound') {
+    // Play error sound
+    const audio = new Audio(chrome.runtime.getURL('error.mp3'));
+    audio.play().catch(e => console.log('Could not play error sound:', e));
+    sendResponse({ success: true });
+  } else if (request.action === 'playCompleteSound') {
+    // Play completion beep using Web Audio API
+    try {
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+      const beep = (frequency, startTime, duration) => {
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+
+        oscillator.frequency.value = frequency;
+        oscillator.type = 'sine';
+
+        gainNode.gain.setValueAtTime(0.3, startTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
+
+        oscillator.start(startTime);
+        oscillator.stop(startTime + duration);
+      };
+
+      const now = audioContext.currentTime;
+      beep(800, now, 0.15); // First beep
+      beep(1000, now + 0.15, 0.2); // Second higher beep
+
+      sendResponse({ success: true });
+    } catch (e) {
+      console.log('Could not play completion sound:', e);
+      sendResponse({ success: false, error: e.message });
+    }
   } else if (request.action === 'fillEssay') {
     // Fill in essay answer
     const essayAnswer = request.essayAnswer;

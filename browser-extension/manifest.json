@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "StudyFlow NoteFlow",
-  "version": "2.0.3",
+  "version": "2.0.4",
   "description": "Search your uploaded notes with AI - Get hints and guidance without direct answers",
   "permissions": [
     "activeTab",
@@ -12,6 +12,9 @@
   "host_permissions": [
     "https://studyflowsuite.onrender.com/*"
   ],
+  "background": {
+    "service_worker": "background-noteflow.js"
+  },
   "action": {
     "default_popup": "popup-tutor.html",
     "default_icon": {

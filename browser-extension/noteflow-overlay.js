@@ -410,69 +410,89 @@ async function handleSearch() {
   `;
 
   try {
-    // Get JWT token (check both authToken and jwtToken for compatibility)
-    const result = await chrome.storage.local.get(['authToken', 'jwtToken']);
-    const token = result.authToken || result.jwtToken;
-
-    if (!token) {
-      throw new Error('Not logged in');
-    }
-
-    // Call backend to search notes
-    const response = await fetch(`${BACKEND_URL}/api/notes/search`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({
-        question: question
-      })
-    });
-
-    if (!response.ok) {
-      if (response.status === 404) {
-        // No notes uploaded
+    // Send search request to background worker (bypasses CORS)
+    chrome.runtime.sendMessage({
+      action: 'searchNotes',
+      question: question
+    }, (response) => {
+      if (chrome.runtime.lastError) {
+        console.error('Message error:', chrome.runtime.lastError);
         resultsContainer.innerHTML = `
-          <div class="no-notes-warning">
-            <div class="no-notes-icon">📚</div>
-            <div class="no-notes-text">
-              You haven't uploaded any notes yet. Upload your class notes on the StudyFlow website to get started!
+          <div class="error-state">
+            <div class="error-icon">⚠️</div>
+            <div class="error-text">
+              Error connecting to extension. Please reload the page.
             </div>
-            <button class="upload-btn" id="upload-notes-btn">Upload Notes</button>
           </div>
         `;
-        document.getElementById('upload-notes-btn').addEventListener('click', () => {
-          chrome.tabs.create({ url: 'https://unclephilburt.github.io/studyflowwebsite/upload.html' });
-        });
+        searchBtn.disabled = false;
+        searchBtn.textContent = 'Ask';
         return;
       }
-      throw new Error('Failed to search notes');
-    }
 
-    const data = await response.json();
+      if (!response.success) {
+        if (response.loginRequired) {
+          resultsContainer.innerHTML = `
+            <div class="error-state">
+              <div class="error-icon">🔒</div>
+              <div class="error-text">
+                Please log in to use NoteFlow
+              </div>
+            </div>
+          `;
+        } else if (response.noNotes) {
+          resultsContainer.innerHTML = `
+            <div class="no-notes-warning">
+              <div class="no-notes-icon">📚</div>
+              <div class="no-notes-text">
+                You haven't uploaded any notes yet. Upload your class notes on the StudyFlow website to get started!
+              </div>
+              <button class="upload-btn" id="upload-notes-btn">Upload Notes</button>
+            </div>
+          `;
+          document.getElementById('upload-notes-btn').addEventListener('click', () => {
+            window.open('https://unclephilburt.github.io/studyflowwebsite/upload.html', '_blank');
+          });
+        } else {
+          resultsContainer.innerHTML = `
+            <div class="error-state">
+              <div class="error-icon">⚠️</div>
+              <div class="error-text">
+                ${response.error || 'Error searching notes. Please try again.'}
+              </div>
+            </div>
+          `;
+        }
+        searchBtn.disabled = false;
+        searchBtn.textContent = 'Ask';
+        return;
+      }
 
-    // Display results
-    if (data.results && data.results.length > 0) {
-      const resultsHTML = data.results.map(result => `
-        <div class="result-card">
-          <div class="result-source">${result.source}</div>
-          <div class="result-text">${result.text}</div>
-          <div class="result-hint">💡 ${result.hint}</div>
-        </div>
-      `).join('');
-
-      resultsContainer.innerHTML = resultsHTML;
-    } else {
-      resultsContainer.innerHTML = `
-        <div class="idle-state">
-          <div class="idle-icon">🤷</div>
-          <div class="idle-text">
-            I couldn't find anything about that in your notes. Try rephrasing your question or upload more notes!
+      // Display results
+      if (response.results && response.results.length > 0) {
+        const resultsHTML = response.results.map(result => `
+          <div class="result-card">
+            <div class="result-source">${result.source}</div>
+            <div class="result-text">${result.text}</div>
+            <div class="result-hint">💡 ${result.hint}</div>
           </div>
-        </div>
-      `;
-    }
+        `).join('');
+
+        resultsContainer.innerHTML = resultsHTML;
+      } else {
+        resultsContainer.innerHTML = `
+          <div class="idle-state">
+            <div class="idle-icon">🤷</div>
+            <div class="idle-text">
+              I couldn't find anything about that in your notes. Try rephrasing your question or upload more notes!
+            </div>
+          </div>
+        `;
+      }
+
+      searchBtn.disabled = false;
+      searchBtn.textContent = 'Ask';
+    });
 
   } catch (error) {
     console.error('Search error:', error);
@@ -480,11 +500,10 @@ async function handleSearch() {
       <div class="error-state">
         <div class="error-icon">⚠️</div>
         <div class="error-text">
-          ${error.message === 'Not logged in' ? 'Please log in to use NoteFlow' : 'Error searching notes. Please try again.'}
+          Error searching notes. Please try again.
         </div>
       </div>
     `;
-  } finally {
     searchBtn.disabled = false;
     searchBtn.textContent = 'Ask';
   }

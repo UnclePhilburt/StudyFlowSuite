@@ -1,0 +1,1432 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>StudyFlowSuite</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+    :root {
+      --primary-color: #667eea;
+      --secondary-color: #764ba2;
+      --accent-color: #00c853;
+      --bg-color: #ffffff;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 3px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    body {
+      width: 360px;
+      min-height: 500px;
+      background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      padding: 0;
+      margin: 0;
+      overflow: hidden;
+    }
+
+    .container {
+      background: var(--bg-color);
+      min-height: 500px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Header */
+    .header {
+      background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+      padding: 16px 20px;
+      color: white;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .header-content {
+      position: relative;
+      z-index: 1;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-icon {
+      width: 28px;
+      height: 28px;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(10px);
+    }
+
+    .brand-icon img {
+      width: 18px;
+      height: 18px;
+    }
+
+    .brand h1 {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+
+    .brand .version {
+      background: rgba(255, 255, 255, 0.15);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 9px;
+      font-weight: 600;
+      margin-left: auto;
+    }
+
+    /* Main Content */
+    .content {
+      flex: 1;
+      padding: 20px;
+      overflow-y: auto;
+    }
+
+    /* Settings Section */
+    .section {
+      margin-bottom: 20px;
+    }
+
+    .settings-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .input-group {
+      position: relative;
+    }
+
+    .input-group label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: #475569;
+      margin-bottom: 8px;
+    }
+
+    .input-group input,
+    .input-group select {
+      width: 100%;
+      background: #fff;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 12px 14px;
+      color: #1e293b;
+      font-size: 13px;
+      font-weight: 500;
+      font-family: 'Inter', sans-serif;
+      transition: all 0.2s;
+      outline: none;
+    }
+
+    .input-group input:focus,
+    .input-group select:focus {
+      border-color: #667eea;
+      box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+
+    .input-group input::placeholder {
+      color: #94a3b8;
+    }
+
+    .input-hint {
+      font-size: 11px;
+      color: #94a3b8;
+      margin-top: 6px;
+      line-height: 1.4;
+    }
+
+    .clear-setup-link {
+      font-size: 11px;
+      color: #dc2626;
+      margin-top: 8px;
+      cursor: pointer;
+      text-decoration: underline;
+      transition: color 0.2s;
+    }
+
+    .clear-setup-link:hover {
+      color: #b91c1c;
+    }
+
+    .checkbox-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px;
+      background: var(--bg-color);
+      border: 1.5px solid #e2e8f0;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .checkbox-wrapper:hover {
+      border-color: #667eea;
+      background: #f1f5f9;
+    }
+
+    .checkbox-wrapper input[type="checkbox"] {
+      width: 20px;
+      height: 20px;
+      cursor: pointer;
+      accent-color: #667eea;
+    }
+
+    .checkbox-wrapper label {
+      flex: 1;
+      font-size: 13px;
+      font-weight: 500;
+      color: #475569;
+      cursor: pointer;
+      margin: 0;
+    }
+
+    input[type="checkbox"].toggle-input {
+      display: none;
+    }
+
+    /* Buttons */
+    .actions {
+      padding: 16px 20px 20px;
+      background: var(--bg-color);
+      border-top: 1px solid #e2e8f0;
+    }
+
+    .btn {
+      width: 100%;
+      padding: 14px;
+      font-size: 14px;
+      font-weight: 600;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+      color: white;
+      box-shadow: 0 4px 14px rgba(102, 126, 234, 0.3);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+    }
+
+    .btn-primary:active {
+      transform: translateY(0);
+    }
+
+    .btn-secondary {
+      background: #f1f5f9;
+      color: #64748b;
+      margin-top: 8px;
+    }
+
+    .btn-secondary:hover {
+      background: #e2e8f0;
+    }
+
+    .btn-danger {
+      background: #fee2e2;
+      color: #dc2626;
+      margin-top: 8px;
+    }
+
+    .btn-danger:hover {
+      background: #fecaca;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    /* User Profile */
+    .user-profile {
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--bg-color);
+      border-top: 1px solid #e2e8f0;
+    }
+
+    .user-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex: 1;
+    }
+
+    .user-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    .user-details {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .user-name {
+      font-size: 12px;
+      font-weight: 600;
+      color: #1e293b;
+    }
+
+    .user-plan {
+      font-size: 10px;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-weight: 600;
+    }
+
+    .logout-btn {
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      font-size: 11px;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 6px;
+      transition: all 0.2s;
+      font-weight: 500;
+    }
+
+    .logout-btn:hover {
+      background: #e2e8f0;
+      color: #64748b;
+    }
+
+    /* Welcome Animation */
+    .welcome-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      animation: fadeOut 0.5s ease 2s forwards;
+    }
+
+    .welcome-content {
+      text-align: center;
+      color: white;
+      animation: slideUp 0.6s ease;
+    }
+
+    .welcome-title {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      animation: fadeInUp 0.6s ease;
+    }
+
+    .welcome-name {
+      font-size: 20px;
+      font-weight: 600;
+      opacity: 0.9;
+      animation: fadeInUp 0.6s ease 0.2s backwards;
+    }
+
+    @keyframes fadeOut {
+      to {
+        opacity: 0;
+        visibility: hidden;
+      }
+    }
+
+    @keyframes slideUp {
+      from {
+        transform: translateY(20px);
+        opacity: 0;
+      }
+      to {
+        transform: translateY(0);
+        opacity: 1;
+      }
+    }
+
+    @keyframes fadeInUp {
+      from {
+        transform: translateY(15px);
+        opacity: 0;
+      }
+      to {
+        transform: translateY(0);
+        opacity: 1;
+      }
+    }
+
+    /* Loading animation */
+    .loading {
+      display: inline-block;
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: currentColor;
+      animation: loading 1.4s infinite;
+    }
+
+    @keyframes loading {
+      0%, 80%, 100% { opacity: 0; }
+      40% { opacity: 1; }
+    }
+
+    .loading::before,
+    .loading::after {
+      content: '';
+      display: inline-block;
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: currentColor;
+      animation: loading 1.4s infinite;
+    }
+
+    .loading::before {
+      margin-right: 4px;
+      animation-delay: -0.32s;
+    }
+
+    .loading::after {
+      margin-left: 4px;
+      animation-delay: 0.32s;
+    }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      background: var(--bg-color);
+      border-bottom: 2px solid #e2e8f0;
+    }
+
+    .tab-btn {
+      flex: 1;
+      padding: 14px;
+      background: transparent;
+      border: none;
+      font-size: 13px;
+      font-weight: 600;
+      color: #64748b;
+      cursor: pointer;
+      transition: all 0.2s;
+      position: relative;
+    }
+
+    .tab-btn:hover {
+      color: #475569;
+      background: #f1f5f9;
+    }
+
+    .tab-btn.active {
+      color: #667eea;
+    }
+
+    .tab-btn.active::after {
+      content: '';
+      position: absolute;
+      bottom: -2px;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content:not(.hidden) {
+      display: block;
+    }
+
+    /* Stats Container */
+    .stats-container {
+      padding: 0;
+    }
+
+    .stats-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .stats-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #1e293b;
+      margin: 0;
+    }
+
+    .refresh-btn {
+      background: #f1f5f9;
+      border: none;
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 16px;
+      color: #64748b;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .refresh-btn:hover {
+      background: #e2e8f0;
+      transform: rotate(90deg);
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .stat-card {
+      background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+      padding: 16px;
+      border-radius: 12px;
+      text-align: center;
+    }
+
+    .stat-label {
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.9);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+
+    .stat-value {
+      font-size: 24px;
+      font-weight: 700;
+      color: white;
+    }
+
+    .stats-section {
+      margin-bottom: 20px;
+    }
+
+    .section-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #475569;
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .question-types {
+      background: var(--bg-color);
+      border-radius: 10px;
+      padding: 14px;
+      border: 1.5px solid #e2e8f0;
+    }
+
+    .type-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .type-row:last-child {
+      border-bottom: none;
+    }
+
+    .type-name {
+      font-size: 13px;
+      font-weight: 500;
+      color: #475569;
+    }
+
+    .type-count {
+      font-size: 14px;
+      font-weight: 700;
+      color: #667eea;
+    }
+
+    .info-rows {
+      background: var(--bg-color);
+      border-radius: 10px;
+      padding: 14px;
+      border: 1.5px solid #e2e8f0;
+    }
+
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .info-row:last-child {
+      border-bottom: none;
+    }
+
+    .info-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: #64748b;
+    }
+
+    .info-value {
+      font-size: 12px;
+      font-weight: 500;
+      color: #1e293b;
+    }
+
+    .loading-spinner {
+      text-align: center;
+      color: #94a3b8;
+      font-size: 12px;
+      padding: 20px;
+    }
+
+    /* Settings Container */
+    .settings-container {
+      padding: 0;
+    }
+
+    .settings-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .settings-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #1e293b;
+      margin: 0;
+    }
+
+    .reset-btn {
+      background: #fee2e2;
+      color: #dc2626;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+
+    .reset-btn:hover {
+      background: #fecaca;
+    }
+
+    .color-section {
+      margin-bottom: 24px;
+    }
+
+    .color-picker-group {
+      margin-bottom: 14px;
+    }
+
+    .color-label {
+      display: block;
+      cursor: pointer;
+    }
+
+    .color-name {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: #475569;
+      margin-bottom: 8px;
+    }
+
+    .color-input-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: #fff;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 8px 12px;
+      transition: all 0.2s;
+    }
+
+    .color-input-wrapper:hover {
+      border-color: var(--primary-color, #667eea);
+    }
+
+    .color-input {
+      width: 40px;
+      height: 40px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .color-hex {
+      flex: 1;
+      font-size: 13px;
+      font-weight: 500;
+      color: #64748b;
+      font-family: 'Monaco', 'Courier New', monospace;
+    }
+
+    .preview-container {
+      background: var(--bg-color);
+      border-radius: 10px;
+      padding: 20px;
+      border: 1.5px solid #e2e8f0;
+    }
+
+    .preview-card {
+      text-align: center;
+    }
+
+    .preview-gradient {
+      height: 60px;
+      background: linear-gradient(135deg, var(--primary-color, #667eea) 0%, var(--secondary-color, #764ba2) 100%);
+      border-radius: 10px;
+      margin-bottom: 12px;
+      box-shadow: 0 4px 14px rgba(102, 126, 234, 0.3);
+    }
+
+    .preview-text {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--primary-color, #667eea);
+    }
+
+    .preset-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .preset-btn {
+      background: #fff;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .preset-btn:hover {
+      border-color: var(--primary-color, #667eea);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    .preset-colors {
+      display: flex;
+      gap: 6px;
+      width: 100%;
+      justify-content: center;
+    }
+
+    .preset-colors span {
+      width: 30px;
+      height: 30px;
+      border-radius: 6px;
+      display: block;
+    }
+
+    .preset-btn span:last-child {
+      font-size: 11px;
+      font-weight: 600;
+      color: #64748b;
+    }
+
+    /* Pro Lock Overlay */
+    .pro-lock-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(255, 255, 255, 0.98);
+      backdrop-filter: blur(8px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    .pro-lock-content {
+      text-align: center;
+      padding: 30px;
+      max-width: 280px;
+    }
+
+    .pro-lock-icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+    }
+
+    .pro-lock-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: #1e293b;
+      margin-bottom: 8px;
+    }
+
+    .pro-lock-text {
+      font-size: 13px;
+      color: #64748b;
+      line-height: 1.6;
+      margin-bottom: 16px;
+    }
+
+    .pro-lock-badge {
+      display: inline-block;
+      background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+      color: white;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 20px;
+    }
+
+    .pro-lock-btn {
+      display: inline-block;
+      background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+      color: white;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all 0.2s;
+      box-shadow: 0 4px 14px rgba(102, 126, 234, 0.3);
+    }
+
+    .pro-lock-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+    }
+
+    /* Assistant Tab */
+    .assistant-container {
+      padding: 0;
+    }
+
+    .assistant-hero {
+      text-align: center;
+      padding: 20px 0 24px;
+    }
+
+    .assistant-icon {
+      font-size: 48px;
+      margin-bottom: 12px;
+    }
+
+    .assistant-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: #1e293b;
+      margin-bottom: 4px;
+    }
+
+    .assistant-subtitle {
+      font-size: 13px;
+      color: #64748b;
+    }
+
+    .assistant-controls {
+      margin-bottom: 24px;
+    }
+
+    .assistant-controls .btn {
+      width: 100%;
+      margin-bottom: 0;
+    }
+
+    .activity-feed {
+      background: var(--bg-color);
+      border: 1.5px solid #e2e8f0;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .activity-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+      color: white;
+    }
+
+    .activity-title {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .activity-status {
+      font-size: 11px;
+      opacity: 0.9;
+      font-weight: 600;
+    }
+
+    .activity-items {
+      max-height: 200px;
+      overflow-y: auto;
+      padding: 12px;
+    }
+
+    .activity-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
+      background: #f8fafc;
+      border-radius: 8px;
+      margin-bottom: 8px;
+      animation: slideInRight 0.3s ease;
+    }
+
+    .activity-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .activity-item.idle {
+      background: #f1f5f9;
+      opacity: 0.7;
+    }
+
+    .activity-item.active {
+      background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+      border: 1px solid rgba(102, 126, 234, 0.2);
+    }
+
+    .activity-item.success {
+      background: #d1fae5;
+      border: 1px solid #6ee7b7;
+    }
+
+    .activity-item.error {
+      background: #fee2e2;
+      border: 1px solid #fca5a5;
+    }
+
+    .activity-icon {
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    .activity-text {
+      font-size: 13px;
+      font-weight: 500;
+      color: #475569;
+      flex: 1;
+      line-height: 1.4;
+    }
+
+    @keyframes slideInRight {
+      from {
+        transform: translateX(10px);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+
+    /* Checkbox Group */
+    .checkbox-group {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .checkbox-label {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      padding: 10px 12px;
+      background: var(--bg-color);
+      border: 1.5px solid #e2e8f0;
+      border-radius: 8px;
+      transition: all 0.2s;
+    }
+
+    .checkbox-label:hover {
+      border-color: var(--primary-color);
+      background: #f8fafc;
+    }
+
+    .checkbox-input {
+      display: none;
+    }
+
+    .checkbox-custom {
+      width: 20px;
+      height: 20px;
+      border: 2px solid #cbd5e1;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      flex-shrink: 0;
+    }
+
+    .checkbox-input:checked + .checkbox-custom {
+      background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+      border-color: var(--primary-color);
+    }
+
+    .checkbox-input:checked + .checkbox-custom::after {
+      content: '✓';
+      color: white;
+      font-size: 14px;
+      font-weight: bold;
+    }
+
+    .checkbox-text {
+      font-size: 13px;
+      font-weight: 500;
+      color: #475569;
+      flex: 1;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <div class="header-content">
+        <div class="brand">
+          <div class="brand-icon">
+            <img src="icon128.png" alt="StudyFlowSuite">
+          </div>
+          <h1>StudyFlow</h1>
+          <span class="version">v0.2.0</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="assistant">Assistant</button>
+      <button class="tab-btn" data-tab="control">Settings</button>
+      <button class="tab-btn" data-tab="stats">Stats</button>
+      <button class="tab-btn" data-tab="theme">Theme</button>
+    </div>
+
+    <!-- Assistant Tab Content -->
+    <div class="content tab-content" id="assistant-tab">
+      <div class="assistant-container">
+        <div class="assistant-hero">
+          <div class="assistant-icon">🤖</div>
+          <h2 class="assistant-title">AI Assistant</h2>
+          <p class="assistant-subtitle">Ready to help with your quiz</p>
+        </div>
+
+        <!-- Start/Stop Buttons -->
+        <div class="assistant-controls">
+          <button id="startBtn" class="btn btn-primary">
+            <span>▶</span>
+            <span>Start Assistant</span>
+          </button>
+          <button id="resumeBtn" class="btn btn-primary hidden">
+            <span>▶</span>
+            <span>Resume</span>
+          </button>
+          <button id="stopBtn" class="btn btn-danger hidden">
+            <span>■</span>
+            <span>Stop Assistant</span>
+          </button>
+        </div>
+
+        <!-- Live Activity Feed -->
+        <div class="activity-feed">
+          <div class="activity-header">
+            <span class="activity-title">Activity</span>
+            <span class="activity-status" id="activityStatus">Idle</span>
+          </div>
+          <div class="activity-items" id="activityItems">
+            <div class="activity-item idle">
+              <div class="activity-icon">💤</div>
+              <div class="activity-text">Click Start to begin</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Control Tab Content (Settings) -->
+    <div class="content tab-content hidden" id="control-tab">
+      <!-- Quick Settings -->
+      <div class="section">
+        <div class="input-group">
+          <label>Model Selection</label>
+          <select id="aiModel">
+            <option value="gpt-4o-mini">Basic Model</option>
+            <option value="gpt-4o">Advanced Model (Pro Only)</option>
+          </select>
+          <div class="input-hint" id="modelHint">Basic: Fast & accurate • Advanced: Maximum accuracy</div>
+        </div>
+      </div>
+
+      <!-- Settings Grid -->
+      <div class="settings-row">
+        <div class="input-group">
+          <label>Question Limit</label>
+          <input type="number" id="totalQuestions" placeholder="Unlimited">
+          <div class="input-hint">Stop after N questions</div>
+        </div>
+        <div class="input-group">
+          <label>Target Time (min)</label>
+          <input type="number" id="targetTime" placeholder="Auto pace">
+          <div class="input-hint">Adds delays</div>
+        </div>
+      </div>
+
+      <!-- Answer Mode -->
+      <div class="section">
+        <div class="input-group">
+          <label>Answer Mode</label>
+          <select id="quizMode">
+            <option value="sequential">Sequential - One question per page with auto-navigation</option>
+            <option value="multi-question">Multi-Question - Multiple questions per page, manual navigation</option>
+            <option value="single-page">Single-Page - All questions on one page</option>
+          </select>
+          <div class="input-hint">How questions are displayed in your assignment</div>
+        </div>
+      </div>
+
+      <!-- Delay Between Questions -->
+      <div class="section">
+        <div class="input-group">
+          <label>Delay Between Questions</label>
+          <select id="questionDelay">
+            <option value="0">No delay (Fastest)</option>
+            <option value="2">2 seconds</option>
+            <option value="3">3 seconds</option>
+            <option value="5" selected>5 seconds (Recommended)</option>
+            <option value="7">7 seconds</option>
+            <option value="10">10 seconds (Most human-like)</option>
+            <option value="15">15 seconds</option>
+          </select>
+          <div class="input-hint">Pause between questions to appear more human</div>
+        </div>
+      </div>
+
+      <!-- Submit Button Delay -->
+      <div class="section">
+        <div class="input-group">
+          <label>Submit Button Delay</label>
+          <select id="submitDelay">
+            <option value="0">Instant (Fastest)</option>
+            <option value="1">1 second</option>
+            <option value="2" selected>2 seconds (Recommended)</option>
+            <option value="3">3 seconds</option>
+            <option value="4">4 seconds</option>
+            <option value="5">5 seconds (Most human-like)</option>
+          </select>
+          <div class="input-hint">Wait before clicking submit button</div>
+        </div>
+      </div>
+
+      <!-- Skip Question Types -->
+      <div class="section">
+        <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 12px;">Skip Question Types</label>
+        <div class="checkbox-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="skipEssays" class="checkbox-input">
+            <span class="checkbox-custom"></span>
+            <span class="checkbox-text">Skip Essays</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="skipFillInBlank" class="checkbox-input">
+            <span class="checkbox-custom"></span>
+            <span class="checkbox-text">Skip Fill-in-the-Blank</span>
+          </label>
+        </div>
+        <div class="input-hint">Answer these question types manually</div>
+      </div>
+
+      <!-- Sound Notifications -->
+      <div class="section">
+        <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 12px;">Sound Notifications</label>
+        <div class="checkbox-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="soundOnError" class="checkbox-input" checked>
+            <span class="checkbox-custom"></span>
+            <span class="checkbox-text">Play sound on errors</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="soundOnComplete" class="checkbox-input" checked>
+            <span class="checkbox-custom"></span>
+            <span class="checkbox-text">Play sound when quiz completes</span>
+          </label>
+        </div>
+        <div class="input-hint">Audio alerts for important events</div>
+      </div>
+
+    </div>
+
+    <!-- Stats Tab Content -->
+    <div class="content tab-content hidden" id="stats-tab">
+      <div class="stats-container">
+        <div class="stats-header">
+          <h2 class="stats-title">Account Statistics</h2>
+          <button class="refresh-btn" id="refreshStats">↻</button>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-label">Total Questions</div>
+            <div class="stat-value" id="totalQuestions">--</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Today</div>
+            <div class="stat-value" id="questionsToday">--</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">This Week</div>
+            <div class="stat-value" id="questionsWeek">--</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Account Tier</div>
+            <div class="stat-value" id="accountTier">--</div>
+          </div>
+        </div>
+
+        <div class="stats-section">
+          <h3 class="section-title">Question Types</h3>
+          <div class="question-types" id="questionTypes">
+            <div class="loading-spinner">Loading...</div>
+          </div>
+        </div>
+
+        <div class="stats-section">
+          <h3 class="section-title">Account Info</h3>
+          <div class="info-rows">
+            <div class="info-row">
+              <span class="info-label">Email:</span>
+              <span class="info-value" id="userEmail">--</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Member Since:</span>
+              <span class="info-value" id="memberSince">--</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Last Activity:</span>
+              <span class="info-value" id="lastActivity">--</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Theme Tab Content -->
+    <div class="content tab-content hidden" id="theme-tab">
+      <!-- Pro Lock Overlay -->
+      <div class="pro-lock-overlay hidden" id="settingsProLock">
+        <div class="pro-lock-content">
+          <div class="pro-lock-icon">🎨</div>
+          <h3 class="pro-lock-title">Color Customization</h3>
+          <p class="pro-lock-text">Customize the extension's appearance with your own colors!</p>
+          <p class="pro-lock-badge">Pro Feature</p>
+          <a href="https://unclephilburt.github.io/studyflowwebsite/" target="_blank" class="pro-lock-btn">Upgrade to Pro</a>
+        </div>
+      </div>
+
+      <div class="settings-container" id="settingsContent">
+        <div class="settings-header">
+          <h2 class="settings-title">Appearance</h2>
+          <button class="reset-btn" id="resetColors">Reset</button>
+        </div>
+
+        <div class="color-section">
+          <h3 class="section-title">Theme Colors</h3>
+
+          <div class="color-picker-group">
+            <label class="color-label">
+              <span class="color-name">Primary Color</span>
+              <div class="color-input-wrapper">
+                <input type="color" id="primaryColor" class="color-input" value="#667eea">
+                <span class="color-hex" id="primaryColorHex">#667eea</span>
+              </div>
+            </label>
+          </div>
+
+          <div class="color-picker-group">
+            <label class="color-label">
+              <span class="color-name">Secondary Color</span>
+              <div class="color-input-wrapper">
+                <input type="color" id="secondaryColor" class="color-input" value="#764ba2">
+                <span class="color-hex" id="secondaryColorHex">#764ba2</span>
+              </div>
+            </label>
+          </div>
+
+          <div class="color-picker-group">
+            <label class="color-label">
+              <span class="color-name">Accent Color</span>
+              <div class="color-input-wrapper">
+                <input type="color" id="accentColor" class="color-input" value="#00c853">
+                <span class="color-hex" id="accentColorHex">#00c853</span>
+              </div>
+            </label>
+          </div>
+
+          <div class="color-picker-group">
+            <label class="color-label">
+              <span class="color-name">Background Color</span>
+              <div class="color-input-wrapper">
+                <input type="color" id="bgColor" class="color-input" value="#ffffff">
+                <span class="color-hex" id="bgColorHex">#ffffff</span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div class="color-section">
+          <h3 class="section-title">Preview</h3>
+          <div class="preview-container">
+            <div class="preview-card">
+              <div class="preview-gradient"></div>
+              <div class="preview-text">Sample Button</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="color-section">
+          <h3 class="section-title">Presets</h3>
+          <div class="preset-grid">
+            <button class="preset-btn" data-preset="default">
+              <div class="preset-colors">
+                <span style="background: #667eea;"></span>
+                <span style="background: #764ba2;"></span>
+              </div>
+              <span>Default</span>
+            </button>
+            <button class="preset-btn" data-preset="ocean">
+              <div class="preset-colors">
+                <span style="background: #2E3192;"></span>
+                <span style="background: #1BFFFF;"></span>
+              </div>
+              <span>Ocean</span>
+            </button>
+            <button class="preset-btn" data-preset="sunset">
+              <div class="preset-colors">
+                <span style="background: #FF512F;"></span>
+                <span style="background: #F09819;"></span>
+              </div>
+              <span>Sunset</span>
+            </button>
+            <button class="preset-btn" data-preset="forest">
+              <div class="preset-colors">
+                <span style="background: #134E5E;"></span>
+                <span style="background: #71B280;"></span>
+              </div>
+              <span>Forest</span>
+            </button>
+            <button class="preset-btn" data-preset="midnight">
+              <div class="preset-colors">
+                <span style="background: #000428;"></span>
+                <span style="background: #004e92;"></span>
+              </div>
+              <span>Midnight</span>
+            </button>
+            <button class="preset-btn" data-preset="candy">
+              <div class="preset-colors">
+                <span style="background: #D3CCE3;"></span>
+                <span style="background: #E9E4F0;"></span>
+              </div>
+              <span>Candy</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- User Profile -->
+    <div class="user-profile" id="userProfile">
+      <div class="user-info">
+        <div class="user-avatar" id="userAvatar">?</div>
+        <div class="user-details">
+          <span class="user-name" id="userName">Loading...</span>
+          <span class="user-plan" id="userPlan">Free Plan</span>
+        </div>
+      </div>
+      <button class="logout-btn" id="logoutBtn">Logout</button>
+    </div>
+  </div>
+
+  <script src="auth.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

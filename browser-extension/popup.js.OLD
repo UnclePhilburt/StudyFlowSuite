@@ -192,12 +192,94 @@ document.getElementById('targetTime').addEventListener('click', async (e) => {
   }
 });
 
+// Load saved settings
+async function loadSavedSettings() {
+  const result = await chrome.storage.local.get(['quizMode', 'aiModel', 'totalQuestions', 'targetTime', 'questionDelay', 'submitDelay', 'skipEssays', 'skipFillInBlank', 'soundOnError', 'soundOnComplete']);
+
+  if (result.quizMode) {
+    document.getElementById('quizMode').value = result.quizMode;
+  }
+  if (result.aiModel) {
+    document.getElementById('aiModel').value = result.aiModel;
+  }
+  if (result.totalQuestions) {
+    document.getElementById('totalQuestions').value = result.totalQuestions;
+  }
+  if (result.targetTime) {
+    document.getElementById('targetTime').value = result.targetTime;
+  }
+  if (result.questionDelay !== undefined) {
+    document.getElementById('questionDelay').value = result.questionDelay;
+  }
+  if (result.submitDelay !== undefined) {
+    document.getElementById('submitDelay').value = result.submitDelay;
+  }
+  if (result.skipEssays !== undefined) {
+    document.getElementById('skipEssays').checked = result.skipEssays;
+  }
+  if (result.skipFillInBlank !== undefined) {
+    document.getElementById('skipFillInBlank').checked = result.skipFillInBlank;
+  }
+  if (result.soundOnError !== undefined) {
+    document.getElementById('soundOnError').checked = result.soundOnError;
+  } else {
+    document.getElementById('soundOnError').checked = true; // Default to enabled
+  }
+  if (result.soundOnComplete !== undefined) {
+    document.getElementById('soundOnComplete').checked = result.soundOnComplete;
+  } else {
+    document.getElementById('soundOnComplete').checked = true; // Default to enabled
+  }
+}
+
+// Save settings when changed
+document.getElementById('quizMode').addEventListener('change', (e) => {
+  chrome.storage.local.set({ quizMode: e.target.value });
+});
+
+document.getElementById('aiModel').addEventListener('change', async (e) => {
+  chrome.storage.local.set({ aiModel: e.target.value });
+});
+
+document.getElementById('totalQuestions').addEventListener('change', (e) => {
+  chrome.storage.local.set({ totalQuestions: e.target.value });
+});
+
+document.getElementById('targetTime').addEventListener('change', (e) => {
+  chrome.storage.local.set({ targetTime: e.target.value });
+});
+
+document.getElementById('questionDelay').addEventListener('change', (e) => {
+  chrome.storage.local.set({ questionDelay: e.target.value });
+});
+
+document.getElementById('submitDelay').addEventListener('change', (e) => {
+  chrome.storage.local.set({ submitDelay: e.target.value });
+});
+
+document.getElementById('skipEssays').addEventListener('change', (e) => {
+  chrome.storage.local.set({ skipEssays: e.target.checked });
+});
+
+document.getElementById('skipFillInBlank').addEventListener('change', (e) => {
+  chrome.storage.local.set({ skipFillInBlank: e.target.checked });
+});
+
+document.getElementById('soundOnError').addEventListener('change', (e) => {
+  chrome.storage.local.set({ soundOnError: e.target.checked });
+});
+
+document.getElementById('soundOnComplete').addEventListener('change', (e) => {
+  chrome.storage.local.set({ soundOnComplete: e.target.checked });
+});
+
 // Initialize on page load
 initUserProfile();
+loadSavedSettings();
 
 // Tab switching
 document.querySelectorAll('.tab-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
+  btn.addEventListener('click', async () => {
     const tab = btn.dataset.tab;
 
     // Update tab buttons
@@ -213,6 +295,32 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     // Load stats if switching to stats tab
     if (tab === 'stats') {
       loadStats();
+    }
+
+    // Check Pro lock for theme tab
+    if (tab === 'theme') {
+      const user = await window.auth.getCurrentUser();
+      const tier = getUserTier(user);
+      const isPro = tier === 'pro' || tier === 'beta';
+
+      if (!isPro) {
+        // Show Pro lock overlay
+        document.getElementById('settingsProLock').classList.remove('hidden');
+        document.getElementById('settingsContent').style.filter = 'blur(4px)';
+        document.getElementById('settingsContent').style.pointerEvents = 'none';
+      } else {
+        // Hide Pro lock overlay
+        document.getElementById('settingsProLock').classList.add('hidden');
+        document.getElementById('settingsContent').style.filter = 'none';
+        document.getElementById('settingsContent').style.pointerEvents = 'auto';
+      }
+    }
+
+    // Start status polling if switching to assistant tab
+    if (tab === 'assistant') {
+      startActivityMonitoring();
+    } else {
+      stopActivityMonitoring();
     }
   });
 });
@@ -312,6 +420,161 @@ document.getElementById('refreshStats').addEventListener('click', () => {
   loadStats();
 });
 
+// ============================================================================
+// COLOR CUSTOMIZATION
+// ============================================================================
+
+// Default colors
+const defaultColors = {
+  primaryColor: '#667eea',
+  secondaryColor: '#764ba2',
+  accentColor: '#00c853',
+  bgColor: '#ffffff'
+};
+
+// Presets
+const colorPresets = {
+  default: {
+    primaryColor: '#667eea',
+    secondaryColor: '#764ba2',
+    accentColor: '#00c853',
+    bgColor: '#ffffff'
+  },
+  ocean: {
+    primaryColor: '#2E3192',
+    secondaryColor: '#1BFFFF',
+    accentColor: '#00c853',
+    bgColor: '#e0f2fe'
+  },
+  sunset: {
+    primaryColor: '#FF512F',
+    secondaryColor: '#F09819',
+    accentColor: '#ff6b35',
+    bgColor: '#ffedd5'
+  },
+  forest: {
+    primaryColor: '#134E5E',
+    secondaryColor: '#71B280',
+    accentColor: '#10b981',
+    bgColor: '#dcfce7'
+  },
+  midnight: {
+    primaryColor: '#000428',
+    secondaryColor: '#004e92',
+    accentColor: '#3b82f6',
+    bgColor: '#e2e8f0'
+  },
+  candy: {
+    primaryColor: '#D3CCE3',
+    secondaryColor: '#E9E4F0',
+    accentColor: '#a78bfa',
+    bgColor: '#faf5ff'
+  }
+};
+
+// Load saved colors
+async function loadSavedColors() {
+  const result = await chrome.storage.local.get(['customColors']);
+  const colors = result.customColors || defaultColors;
+  applyColors(colors);
+  updateColorInputs(colors);
+}
+
+// Apply colors to UI
+function applyColors(colors) {
+  document.documentElement.style.setProperty('--primary-color', colors.primaryColor);
+  document.documentElement.style.setProperty('--secondary-color', colors.secondaryColor);
+  document.documentElement.style.setProperty('--accent-color', colors.accentColor);
+  document.documentElement.style.setProperty('--bg-color', colors.bgColor);
+
+  // Update all gradient backgrounds
+  const gradientElements = document.querySelectorAll('.header, .btn-primary, .stat-card, .user-avatar, .preview-gradient, .brand-icon');
+  gradientElements.forEach(el => {
+    if (el.classList.contains('btn-primary') || el.classList.contains('stat-card') || el.classList.contains('header') || el.classList.contains('user-avatar') || el.classList.contains('preview-gradient')) {
+      el.style.background = `linear-gradient(135deg, ${colors.primaryColor} 0%, ${colors.secondaryColor} 100%)`;
+    }
+  });
+}
+
+// Update color inputs
+function updateColorInputs(colors) {
+  document.getElementById('primaryColor').value = colors.primaryColor;
+  document.getElementById('secondaryColor').value = colors.secondaryColor;
+  document.getElementById('accentColor').value = colors.accentColor;
+  document.getElementById('bgColor').value = colors.bgColor;
+
+  document.getElementById('primaryColorHex').textContent = colors.primaryColor;
+  document.getElementById('secondaryColorHex').textContent = colors.secondaryColor;
+  document.getElementById('accentColorHex').textContent = colors.accentColor;
+  document.getElementById('bgColorHex').textContent = colors.bgColor;
+}
+
+// Save colors
+async function saveColors(colors) {
+  await chrome.storage.local.set({ customColors: colors });
+  applyColors(colors);
+}
+
+// Color input handlers
+document.getElementById('primaryColor').addEventListener('input', (e) => {
+  const color = e.target.value;
+  document.getElementById('primaryColorHex').textContent = color;
+  chrome.storage.local.get(['customColors'], (result) => {
+    const colors = result.customColors || defaultColors;
+    colors.primaryColor = color;
+    saveColors(colors);
+  });
+});
+
+document.getElementById('secondaryColor').addEventListener('input', (e) => {
+  const color = e.target.value;
+  document.getElementById('secondaryColorHex').textContent = color;
+  chrome.storage.local.get(['customColors'], (result) => {
+    const colors = result.customColors || defaultColors;
+    colors.secondaryColor = color;
+    saveColors(colors);
+  });
+});
+
+document.getElementById('accentColor').addEventListener('input', (e) => {
+  const color = e.target.value;
+  document.getElementById('accentColorHex').textContent = color;
+  chrome.storage.local.get(['customColors'], (result) => {
+    const colors = result.customColors || defaultColors;
+    colors.accentColor = color;
+    saveColors(colors);
+  });
+});
+
+document.getElementById('bgColor').addEventListener('input', (e) => {
+  const color = e.target.value;
+  document.getElementById('bgColorHex').textContent = color;
+  chrome.storage.local.get(['customColors'], (result) => {
+    const colors = result.customColors || defaultColors;
+    colors.bgColor = color;
+    saveColors(colors);
+  });
+});
+
+// Reset colors
+document.getElementById('resetColors').addEventListener('click', () => {
+  saveColors(defaultColors);
+  updateColorInputs(defaultColors);
+});
+
+// Preset buttons
+document.querySelectorAll('.preset-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const preset = btn.dataset.preset;
+    const colors = colorPresets[preset];
+    saveColors(colors);
+    updateColorInputs(colors);
+  });
+});
+
+// Load colors on startup
+loadSavedColors();
+
 // Settings validation
 document.getElementById('totalQuestions').addEventListener('input', (e) => {
   const totalQuestions = parseInt(e.target.value);
@@ -352,6 +615,16 @@ document.getElementById('stopBtn').addEventListener('click', () => {
       document.getElementById('stopBtn').classList.add('hidden');
       updateStatus('Assistant stopped', 'idle');
       stopStatusPolling();
+      stopActivityMonitoring();
+
+      // Reset activity feed to idle
+      const activityItems = document.getElementById('activityItems');
+      activityItems.innerHTML = `
+        <div class="activity-item idle">
+          <div class="activity-icon">💤</div>
+          <div class="activity-text">Click Start to begin</div>
+        </div>
+      `;
     }
   });
 });
@@ -360,6 +633,20 @@ document.getElementById('stopBtn').addEventListener('click', () => {
 async function checkAndStartSetup() {
   console.log('checkAndStartSetup called');
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+  // Check if content script is loaded by sending a test message
+  try {
+    const testResponse = await chrome.tabs.sendMessage(tab.id, { action: 'ping' });
+    if (!testResponse || testResponse.error) {
+      // Content script not loaded
+      alert('⚠️ Extension not ready!\n\nPlease refresh the page (F5) before starting the assistant.\n\nThis is needed when you first install or reload the extension.');
+      return;
+    }
+  } catch (e) {
+    // Content script not loaded
+    alert('⚠️ Extension not ready!\n\nPlease refresh the page (F5) before starting the assistant.\n\nThis is needed when you first install or reload the extension.');
+    return;
+  }
 
   // All modes now skip setup wizard and auto-detect questions
   console.log('Starting assistant...');
@@ -373,6 +660,12 @@ function startQuizMode(tabId) {
   const targetTime = parseInt(document.getElementById('targetTime').value) || null;
   const quizMode = document.getElementById('quizMode').value;
   const aiModel = document.getElementById('aiModel').value;
+  const questionDelay = parseInt(document.getElementById('questionDelay').value) || 5;
+  const submitDelay = parseInt(document.getElementById('submitDelay').value) || 2;
+  const skipEssays = document.getElementById('skipEssays').checked;
+  const skipFillInBlank = document.getElementById('skipFillInBlank').checked;
+  const soundOnError = document.getElementById('soundOnError').checked;
+  const soundOnComplete = document.getElementById('soundOnComplete').checked;
 
   // Send to background with settings
   chrome.runtime.sendMessage({
@@ -383,7 +676,13 @@ function startQuizMode(tabId) {
       targetTime: targetTime,
       answerMode: quizMode,
       onePageMode: quizMode === 'single-page' || quizMode === 'multi-question',
-      aiModel: aiModel
+      aiModel: aiModel,
+      questionDelay: questionDelay,
+      submitDelay: submitDelay,
+      skipEssays: skipEssays,
+      skipFillInBlank: skipFillInBlank,
+      soundOnError: soundOnError,
+      soundOnComplete: soundOnComplete
     }
   }, (response) => {
     if (response.success) {
@@ -392,11 +691,22 @@ function startQuizMode(tabId) {
       document.getElementById('stopBtn').classList.remove('hidden');
       document.getElementById('startBtn').innerHTML = '<span>▶</span><span>Start Assistant</span>';
       updateStatus('Assistant started!', 'running');
+
+      // Clear activity feed and add starting message
+      const activityItems = document.getElementById('activityItems');
+      activityItems.innerHTML = '';
+      addActivityItem('Assistant started!', '🚀', 'success');
+
+      // Start activity monitoring
+      startActivityMonitoring();
     }
   });
 
   startStatusPolling();
 }
+
+let activityMonitorInterval = null;
+let lastActivityMessage = '';
 
 function startStatusPolling() {
   statusInterval = setInterval(() => {
@@ -432,8 +742,111 @@ function stopStatusPolling() {
 }
 
 function updateStatus(message, type) {
-  // Just log status updates since we removed the status bar UI
+  // Just log status updates
   console.log(`Status [${type}]: ${message}`);
+}
+
+// Activity feed monitoring
+function startActivityMonitoring() {
+  if (activityMonitorInterval) return; // Already monitoring
+
+  activityMonitorInterval = setInterval(() => {
+    chrome.runtime.sendMessage({ action: 'getStatus' }, (status) => {
+      if (status) {
+        updateActivityFeed(status);
+      }
+    });
+  }, 500); // Poll every 500ms for smoother updates
+}
+
+function stopActivityMonitoring() {
+  if (activityMonitorInterval) {
+    clearInterval(activityMonitorInterval);
+    activityMonitorInterval = null;
+  }
+}
+
+function updateActivityFeed(status) {
+  const activityItems = document.getElementById('activityItems');
+  const activityStatus = document.getElementById('activityStatus');
+
+  // Update status badge
+  if (status.isRunning) {
+    if (status.waitingForNavigation) {
+      activityStatus.textContent = 'Paused';
+    } else {
+      activityStatus.textContent = 'Active';
+    }
+  } else {
+    activityStatus.textContent = 'Idle';
+  }
+
+  // Generate activity message based on status
+  let message = '';
+  let icon = '💤';
+  let itemClass = 'idle';
+
+  if (!status.isRunning) {
+    message = 'Click Start to begin';
+    icon = '💤';
+    itemClass = 'idle';
+  } else if (status.waitingForNavigation) {
+    message = 'Waiting for you to click Next/Submit';
+    icon = '⏸️';
+    itemClass = 'active';
+  } else if (status.currentActivity) {
+    // Use activity from background
+    message = status.currentActivity;
+    icon = getActivityIcon(message);
+    itemClass = 'active';
+  } else {
+    message = 'Processing...';
+    icon = '⚙️';
+    itemClass = 'active';
+  }
+
+  // Only update if message changed
+  if (message !== lastActivityMessage) {
+    lastActivityMessage = message;
+    addActivityItem(message, icon, itemClass);
+  }
+}
+
+function getActivityIcon(message) {
+  const lowerMsg = message.toLowerCase();
+  if (lowerMsg.includes('detecting') || lowerMsg.includes('looking for')) return '🔍';
+  if (lowerMsg.includes('reading') || lowerMsg.includes('found question')) return '📖';
+  if (lowerMsg.includes('getting ai') || lowerMsg.includes('thinking')) return '🤖';
+  if (lowerMsg.includes('answering') || lowerMsg.includes('answer:')) return '✍️';
+  if (lowerMsg.includes('clicking') || lowerMsg.includes('selecting')) return '👆';
+  if (lowerMsg.includes('essay') || lowerMsg.includes('writing')) return '📝';
+  if (lowerMsg.includes('submit') || lowerMsg.includes('next')) return '✅';
+  if (lowerMsg.includes('completed') || lowerMsg.includes('finished')) return '🎉';
+  if (lowerMsg.includes('error') || lowerMsg.includes('failed')) return '❌';
+  return '⚙️';
+}
+
+function addActivityItem(text, icon, itemClass) {
+  const activityItems = document.getElementById('activityItems');
+
+  // Create new item
+  const item = document.createElement('div');
+  item.className = `activity-item ${itemClass}`;
+  item.innerHTML = `
+    <div class="activity-icon">${icon}</div>
+    <div class="activity-text">${text}</div>
+  `;
+
+  // Add to top of list
+  activityItems.insertBefore(item, activityItems.firstChild);
+
+  // Keep only last 3 items
+  while (activityItems.children.length > 3) {
+    activityItems.removeChild(activityItems.lastChild);
+  }
+
+  // Scroll to top
+  activityItems.scrollTop = 0;
 }
 
 
@@ -454,6 +867,12 @@ chrome.runtime.sendMessage({ action: 'getStatus' }, async (status) => {
     }
 
     startStatusPolling();
+
+    // Start activity monitoring if on assistant tab
+    const activeTab = document.querySelector('.tab-btn.active');
+    if (activeTab && activeTab.dataset.tab === 'assistant') {
+      startActivityMonitoring();
+    }
   } else {
     // Not running - ready to start
     updateStatus('Click "Start Assistant" to begin', 'idle');
@@ -463,6 +882,7 @@ chrome.runtime.sendMessage({ action: 'getStatus' }, async (status) => {
 // Cleanup on popup close
 window.addEventListener('unload', () => {
   stopStatusPolling();
+  stopActivityMonitoring();
 });
 
 // Dev Inspector removed for production build
