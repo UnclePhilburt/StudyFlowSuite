@@ -1943,6 +1943,126 @@ Return ONLY valid JSON, no markdown, no other text."""
         return jsonify({"error": str(e)}), 500
 
 
+# ============ LEGAL TUTOR EXPLANATION ENDPOINT ============
+@app.route("/api/tutor/explain", methods=["POST"])
+@token_required
+def tutor_explain():
+    """
+    Legal AI tutoring endpoint - Returns step-by-step explanations WITHOUT selecting answers.
+    Complies with Missouri HB 2271 by acting as a tutor, not a cheating tool.
+
+    Human-in-the-loop: Student must read explanation and click answer themselves.
+
+    Expects JSON:
+    {
+        "question": "What is the capital of France? A) London B) Paris C) Berlin D) Madrid"
+    }
+
+    Returns:
+    {
+        "explanation": "1. This question asks about...\n2. Consider the geography...\n3. Paris is located in...",
+        "concept": "European Geography - Capital Cities",
+        "engagement_time": 0  // Server tracks when explanation was generated
+    }
+    """
+    try:
+        # Check rate limit
+        can_proceed, remaining = check_question_limit(request.user_id)
+        if not can_proceed:
+            return jsonify({
+                "error": "Daily question limit exceeded",
+                "message": "Free users are limited to 10 questions per day. Upgrade to Pro for unlimited access!",
+                "limit_exceeded": True
+            }), 429
+
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "No JSON provided"}), 400
+
+        question = data.get("question", "")
+        if not question:
+            return jsonify({"error": "Missing question"}), 400
+
+        # Use GPT-4o-mini for cost-effectiveness (tutoring requires explanation, not just accuracy)
+        from openai import OpenAI
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+        prompt = f"""You are an AI tutor helping a student understand a quiz question. Your job is to explain the CONCEPT and REASONING, not to directly give the answer.
+
+Question: {question}
+
+Provide a step-by-step explanation that helps the student understand:
+1. What concept is being tested
+2. How to approach this type of question
+3. Key facts or formulas they should consider
+4. How to eliminate wrong answers (if multiple choice)
+5. A hint toward the correct approach (WITHOUT saying "the answer is X")
+
+Format your response as numbered steps. Be educational and helpful, like a tutor.
+
+IMPORTANT: Do NOT say "The answer is..." or "Click option B". Guide them to figure it out themselves.
+
+Your explanation:"""
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are a helpful AI tutor focused on teaching concepts, not giving direct answers."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,
+            max_tokens=500
+        )
+
+        explanation = response.choices[0].message.content.strip()
+
+        # Identify concept being tested (simple extraction)
+        concept_response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You identify educational concepts in one short phrase."},
+                {"role": "user", "content": f"What concept is this question testing? Return ONLY the concept name in 3-5 words.\n\nQuestion: {question}"}
+            ],
+            temperature=0.3,
+            max_tokens=20
+        )
+
+        concept = concept_response.choices[0].message.content.strip()
+
+        # Store in database for analytics (as tutoring session, not answer)
+        try:
+            conn = psycopg2.connect(os.environ.get("DATABASE_URL"))
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO questions (user_id, question_text, question_type, answer_text, ai_reasoning)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (
+                request.user_id,
+                question,
+                'tutoring_session',  # Different type to distinguish from automated answers
+                '',  # No answer provided in tutoring mode
+                explanation
+            ))
+            conn.commit()
+            conn.close()
+            debug_log(f"✅ Tutoring session stored for user {request.user_id}")
+        except Exception as db_error:
+            debug_log(f"⚠️ Failed to store tutoring session: {db_error}")
+
+        result = {
+            "explanation": explanation,
+            "concept": concept,
+            "engagement_time": 0,  # Client will track actual read time
+            "legal_mode": True  # Flag indicating this is legal tutoring, not automation
+        }
+
+        return jsonify(result), 200
+
+    except Exception as e:
+        debug_log(f"TUTOR API error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 # ============ ESSAY ANSWER ENDPOINT ============
 @app.route("/api/essay", methods=["POST"])
 @token_required

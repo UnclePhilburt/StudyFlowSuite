@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>StudyFlow AI Tutor</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      width: 360px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+
+    .container {
+      padding: 24px;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    .logo {
+      font-size: 48px;
+      margin-bottom: 12px;
+    }
+
+    .title {
+      font-size: 24px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .subtitle {
+      font-size: 13px;
+      opacity: 0.9;
+      font-weight: 500;
+    }
+
+    .legal-badge {
+      background: rgba(255, 255, 255, 0.2);
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-top: 12px;
+      display: inline-block;
+    }
+
+    .info-box {
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+      backdrop-filter: blur(10px);
+    }
+
+    .info-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .info-text {
+      font-size: 12px;
+      line-height: 1.6;
+      opacity: 0.95;
+    }
+
+    .status-box {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 16px;
+      text-align: center;
+    }
+
+    .status-text {
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .btn {
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-bottom: 8px;
+    }
+
+    .btn-primary {
+      background: white;
+      color: #667eea;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.2);
+      color: white;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.3);
+    }
+
+    .user-info {
+      text-align: center;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      margin-bottom: 16px;
+    }
+
+    .user-email {
+      font-size: 12px;
+      opacity: 0.9;
+      margin-bottom: 4px;
+    }
+
+    .user-tier {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .footer {
+      text-align: center;
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .footer-link {
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.8);
+      text-decoration: none;
+      margin: 0 8px;
+    }
+
+    .footer-link:hover {
+      color: white;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .feature-list {
+      margin-top: 12px;
+    }
+
+    .feature-item {
+      font-size: 12px;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .feature-item:last-child {
+      border-bottom: none;
+    }
+
+    .login-section {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 20px;
+      text-align: center;
+    }
+
+    .login-text {
+      font-size: 13px;
+      margin-bottom: 16px;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <div class="logo">🧠</div>
+      <div class="title">StudyFlow AI Tutor</div>
+      <div class="subtitle">Legal Cognitive Support Tool</div>
+      <div class="legal-badge">✓ HB 2271 Compliant</div>
+    </div>
+
+    <!-- Login Section (shown when not logged in) -->
+    <div id="loginSection" class="hidden">
+      <div class="login-section">
+        <div class="login-text">
+          Sign in to access AI-powered tutoring explanations
+        </div>
+        <button id="loginBtn" class="btn btn-primary">Sign In / Sign Up</button>
+      </div>
+    </div>
+
+    <!-- Main Section (shown when logged in) -->
+    <div id="mainSection" class="hidden">
+      <!-- User Info -->
+      <div id="userInfo" class="user-info">
+        <div class="user-email" id="userEmail"></div>
+        <div class="user-tier" id="userTier"></div>
+      </div>
+
+      <!-- How It Works -->
+      <div class="info-box">
+        <div class="info-title">
+          <span>ℹ️</span>
+          <span>How It Works</span>
+        </div>
+        <div class="info-text">
+          Navigate to any quiz question and the AI Tutor sidebar will automatically appear with step-by-step explanations. You read the explanation, understand the concept, and click your answer manually.
+        </div>
+      </div>
+
+      <!-- Status -->
+      <div class="status-box">
+        <div class="status-text">✅ AI Tutor is active on this page</div>
+      </div>
+
+      <!-- Features -->
+      <div class="info-box">
+        <div class="info-title">
+          <span>✨</span>
+          <span>Legal Features</span>
+        </div>
+        <div class="feature-list">
+          <div class="feature-item">
+            <span>📖</span>
+            <span>Step-by-step explanations</span>
+          </div>
+          <div class="feature-item">
+            <span>🎯</span>
+            <span>Concept identification</span>
+          </div>
+          <div class="feature-item">
+            <span>👨‍🎓</span>
+            <span>Human-in-the-loop (you click)</span>
+          </div>
+          <div class="feature-item">
+            <span>📊</span>
+            <span>Engagement tracking</span>
+          </div>
+          <div class="feature-item">
+            <span>⚖️</span>
+            <span>Missouri HB 2271 compliant</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <button id="upgradeBtn" class="btn btn-primary">Upgrade to Pro</button>
+      <button id="logoutBtn" class="btn btn-secondary">Sign Out</button>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <a href="https://unclephilburt.github.io/studyflowwebsite/" target="_blank" class="footer-link">Website</a>
+      <a href="#" id="helpLink" class="footer-link">Help</a>
+    </div>
+  </div>
+
+  <script src="auth.js"></script>
+  <script src="popup-tutor.js"></script>
+</body>
+</html>
