@@ -2673,10 +2673,13 @@ def search_notes():
             all_notes_text += f"\n\n=== {filename} ===\n{ocr_text}"
 
         # Use Gemini to search and provide hints
-        import google.generativeai as genai
-        genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-
-        model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        try:
+            import google.generativeai as genai
+            genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+            model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        except Exception as e:
+            debug_log(f"❌ Gemini init error: {e}")
+            return jsonify({"error": "AI service unavailable"}), 503
 
         prompt = f"""You are a helpful study assistant. A student is asking about their notes.
 
@@ -2709,8 +2712,13 @@ IMPORTANT: Guide them to the answer, don't give it directly. Use phrases like:
 
 Return ONLY valid JSON, no other text."""
 
-        response = model.generate_content(prompt)
-        response_text = response.text.strip()
+        try:
+            response = model.generate_content(prompt)
+            response_text = response.text.strip()
+            debug_log(f"📝 Gemini response: {response_text[:200]}...")
+        except Exception as e:
+            debug_log(f"❌ Gemini API error: {e}")
+            return jsonify({"error": "AI service error", "results": []}), 200
 
         # Parse JSON response
         if response_text.startswith('```json'):
@@ -2718,16 +2726,17 @@ Return ONLY valid JSON, no other text."""
         if response_text.endswith('```'):
             response_text = response_text[:-3]
 
-        result = json.loads(response_text.strip())
+        try:
+            result = json.loads(response_text.strip())
+            return jsonify(result), 200
+        except json.JSONDecodeError as e:
+            debug_log(f"❌ Search JSON parse error: {e}\nResponse was: {response_text}")
+            # Return empty results instead of error
+            return jsonify({"results": []}), 200
 
-        return jsonify(result), 200
-
-    except json.JSONDecodeError as e:
-        debug_log(f"❌ Search JSON parse error: {e}")
-        return jsonify({"error": "Failed to parse AI response"}), 500
     except Exception as e:
         debug_log(f"❌ Search notes error: {e}\n{traceback.format_exc()}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": str(e), "results": []}), 500
 
 
 if __name__ == "__main__":
