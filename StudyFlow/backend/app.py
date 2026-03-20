@@ -176,14 +176,19 @@ def check_question_limit(user_id):
         conn = psycopg2.connect(os.environ["DATABASE_URL"])
         cur = conn.cursor()
 
-        # Check user's subscription status
-        cur.execute("SELECT subscription_status FROM users WHERE id = %s", (user_id,))
+        # Check user's subscription status and beta status
+        cur.execute("SELECT subscription_status, is_beta FROM users WHERE id = %s", (user_id,))
         user = cur.fetchone()
         if not user:
             conn.close()
             return False, 0
 
-        subscription_status = user[0]
+        subscription_status, is_beta = user
+
+        # Beta testers (grandfathered) have unlimited questions
+        if is_beta:
+            conn.close()
+            return True, -1  # -1 means unlimited
 
         # Pro/trialing users have unlimited questions
         if subscription_status in ['active', 'trialing']:
@@ -267,6 +272,7 @@ def init_users_table():
                 stripe_customer_id VARCHAR(255) UNIQUE,
                 stripe_subscription_id VARCHAR(255),
                 subscription_status VARCHAR(50) DEFAULT 'free',
+                is_beta BOOLEAN DEFAULT FALSE,
                 trial_ends_at TIMESTAMP,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -284,6 +290,37 @@ def init_users_table():
             );
         """)
 
+        # Create questions table for storing all questions and answers
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS questions (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                question_text TEXT NOT NULL,
+                question_type VARCHAR(50) NOT NULL,
+                answers_json TEXT,
+                ai_answer TEXT,
+                ai_reasoning TEXT,
+                correct BOOLEAN,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+
+        # Create indexes for fast lookups
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_question_hash
+            ON questions(MD5(question_text));
+        """)
+
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_user_questions
+            ON questions(user_id, created_at);
+        """)
+
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_question_type
+            ON questions(question_type);
+        """)
+
         conn.commit()
         print("✅ Table creation/check complete")
 
@@ -293,6 +330,7 @@ def init_users_table():
             ("password_hash", "VARCHAR(255)"),
             ("stripe_customer_id", "VARCHAR(255)"),
             ("stripe_subscription_id", "VARCHAR(255)"),
+            ("is_beta", "BOOLEAN DEFAULT FALSE"),
             ("trial_ends_at", "TIMESTAMP"),
             ("created_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
             ("updated_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
@@ -530,7 +568,7 @@ def get_current_user():
         conn = psycopg2.connect(os.environ["DATABASE_URL"])
         cur = conn.cursor()
         cur.execute("""
-            SELECT id, email, name, subscription_status, stripe_customer_id, trial_ends_at, created_at
+            SELECT id, email, name, subscription_status, stripe_customer_id, trial_ends_at, created_at, is_beta
             FROM users WHERE id = %s
         """, (request.user_id,))
         user = cur.fetchone()
@@ -539,7 +577,7 @@ def get_current_user():
         if not user:
             return jsonify({'error': 'User not found'}), 404
 
-        user_id, email, name, subscription_status, stripe_customer_id, trial_ends_at, created_at = user
+        user_id, email, name, subscription_status, stripe_customer_id, trial_ends_at, created_at, is_beta = user
 
         return jsonify({
             'id': user_id,
@@ -548,6 +586,7 @@ def get_current_user():
             'subscription_status': subscription_status,
             'stripe_customer_id': stripe_customer_id,
             'trial_ends_at': trial_ends_at.isoformat() if trial_ends_at else None,
+            'is_beta': is_beta if is_beta is not None else False,
             'created_at': created_at.isoformat()
         }), 200
 
@@ -1627,6 +1666,37 @@ Return ONLY valid JSON, no markdown, no other text."""
                 return jsonify({"error": "AI processing failed"}), 500
             debug_log(f"TEXT API (OpenAI {openai_model}): Answer={result.get('correct_answer_index')}, Confidence={result.get('confidence')}")
 
+        # Store question in database for analytics/caching
+        try:
+            conn = psycopg2.connect(os.environ["DATABASE_URL"])
+            cur = conn.cursor()
+
+            # Prepare answer text based on question type
+            if is_multiple_answer:
+                answer_indices = result.get('correct_answer_indices', [])
+                ai_answer = ', '.join([answers[idx - 1] for idx in answer_indices if idx <= len(answers)])
+            else:
+                answer_idx = result.get('correct_answer_index', 1)
+                ai_answer = answers[answer_idx - 1] if answer_idx <= len(answers) else 'Unknown'
+
+            cur.execute("""
+                INSERT INTO questions (user_id, question_text, question_type, answers_json, ai_answer, ai_reasoning)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, (
+                request.user_id,
+                question,
+                'multiple_answer' if is_multiple_answer else 'multiple_choice',
+                json.dumps(answers),
+                ai_answer,
+                result.get('reasoning', '')
+            ))
+            conn.commit()
+            conn.close()
+            debug_log(f"✅ Question stored in database for user {request.user_id}")
+        except Exception as db_error:
+            debug_log(f"⚠️ Failed to store question in database: {db_error}")
+            # Don't fail the request if database storage fails
+
         return jsonify(result), 200
 
     except json.JSONDecodeError as e:
@@ -1711,6 +1781,37 @@ Return ONLY the answer text, nothing else."""
             return jsonify({"error": "AI processing failed"}), 500
 
         debug_log(f"ESSAY API (OpenAI {openai_model}): Generated {len(essay_answer)} characters")
+
+        # Store question in database for analytics/caching
+        try:
+            conn = psycopg2.connect(os.environ["DATABASE_URL"])
+            cur = conn.cursor()
+
+            # Determine question type based on answer length
+            if len(essay_answer) < 50:
+                question_type = 'fill_in_blank'
+            elif len(essay_answer) < 200:
+                question_type = 'short_answer'
+            else:
+                question_type = 'essay'
+
+            cur.execute("""
+                INSERT INTO questions (user_id, question_text, question_type, answers_json, ai_answer, ai_reasoning)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, (
+                request.user_id,
+                question,
+                question_type,
+                None,  # No multiple choice options for essay questions
+                essay_answer,
+                None  # No reasoning for essay questions
+            ))
+            conn.commit()
+            conn.close()
+            debug_log(f"✅ Essay question stored in database for user {request.user_id}")
+        except Exception as db_error:
+            debug_log(f"⚠️ Failed to store essay question in database: {db_error}")
+            # Don't fail the request if database storage fails
 
         return jsonify({"essay_answer": essay_answer}), 200
 

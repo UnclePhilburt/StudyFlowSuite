@@ -6,6 +6,57 @@ let statusInterval = null;
 let lastQuestionCount = 0;
 let lastErrorCount = 0;
 
+// Utility function to check user tier
+function getUserTier(user) {
+  if (!user) return 'free';
+
+  // Beta testers (grandfathered) get Pro features
+  if (user.is_beta) return 'beta';
+
+  // Pro/trialing users
+  if (user.subscription_status === 'active' || user.subscription_status === 'trialing') {
+    return 'pro';
+  }
+
+  return 'free';
+}
+
+// Lock Pro features for free users
+function lockProFeatures(isPro) {
+  const questionLimitInput = document.getElementById('totalQuestions');
+  const targetTimeInput = document.getElementById('targetTime');
+
+  if (!isPro) {
+    // Disable pro settings
+    questionLimitInput.disabled = true;
+    targetTimeInput.disabled = true;
+
+    // Add placeholder text indicating Pro feature
+    questionLimitInput.placeholder = 'Pro Only';
+    targetTimeInput.placeholder = 'Pro Only';
+
+    // Add visual styling to show locked
+    questionLimitInput.style.opacity = '0.5';
+    targetTimeInput.style.opacity = '0.5';
+    questionLimitInput.style.cursor = 'not-allowed';
+    targetTimeInput.style.cursor = 'not-allowed';
+  } else {
+    // Enable pro settings
+    questionLimitInput.disabled = false;
+    targetTimeInput.disabled = false;
+
+    // Restore normal placeholders
+    questionLimitInput.placeholder = 'Unlimited';
+    targetTimeInput.placeholder = 'Auto pace';
+
+    // Remove locked styling
+    questionLimitInput.style.opacity = '1';
+    targetTimeInput.style.opacity = '1';
+    questionLimitInput.style.cursor = 'text';
+    targetTimeInput.style.cursor = 'text';
+  }
+}
+
 // Initialize user profile
 async function initUserProfile() {
   let user = await window.auth.getCurrentUser();
@@ -38,10 +89,21 @@ async function initUserProfile() {
     // Set user name
     document.getElementById('userName').textContent = user.name || user.email;
 
+    // Get user tier
+    const tier = getUserTier(user);
+    const isPro = tier === 'pro' || tier === 'beta';
+
     // Set user plan
-    const isPro = user.subscription_status === 'active' || user.subscription_status === 'trialing';
-    const planText = isPro ? 'Pro Plan' : 'Free Plan';
+    let planText = 'Free Plan';
+    if (tier === 'beta') {
+      planText = 'Beta (Pro)';
+    } else if (tier === 'pro') {
+      planText = 'Pro Plan';
+    }
     document.getElementById('userPlan').textContent = planText;
+
+    // Lock Pro features for free users
+    lockProFeatures(isPro);
 
     // Restrict AI model selection based on subscription
     const aiModelSelect = document.getElementById('aiModel');
@@ -106,6 +168,27 @@ document.getElementById('aiModel').addEventListener('change', async (e) => {
     // Revert to basic model
     e.target.value = 'gpt-4o-mini';
     alert('Advanced Model is only available for Pro users. Upgrade to unlock!');
+  }
+});
+
+// Add click handlers for locked Pro features
+document.getElementById('totalQuestions').addEventListener('click', async (e) => {
+  const user = await window.auth.getCurrentUser();
+  const tier = getUserTier(user);
+  const isPro = tier === 'pro' || tier === 'beta';
+
+  if (!isPro) {
+    alert('Question Limit is a Pro feature. Upgrade to Pro for unlimited questions and advanced controls!\n\nVisit: https://unclephilburt.github.io/studyflowwebsite/');
+  }
+});
+
+document.getElementById('targetTime').addEventListener('click', async (e) => {
+  const user = await window.auth.getCurrentUser();
+  const tier = getUserTier(user);
+  const isPro = tier === 'pro' || tier === 'beta';
+
+  if (!isPro) {
+    alert('Target Time is a Pro feature. Upgrade to Pro for unlimited questions and advanced controls!\n\nVisit: https://unclephilburt.github.io/studyflowwebsite/');
   }
 });
 
