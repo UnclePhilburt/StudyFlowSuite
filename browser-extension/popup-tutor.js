@@ -133,20 +133,14 @@ async function init() {
     // Set avatar initial
     document.getElementById('userAvatar').textContent = userName.charAt(0).toUpperCase();
 
-    // Display tier
-    let tier = 'Free';
-    if (user.subscription_status === 'active' || user.subscription_status === 'trialing') {
-      tier = 'Pro';
-    } else if (user.is_beta) {
-      tier = 'Beta Tester';
-    }
-    document.getElementById('userTier').textContent = `${tier} Plan`;
-
     // Load stats
     loadStats();
 
     // Load settings
     loadSettings();
+
+    // Poll for setting changes from website every 5 seconds
+    setInterval(syncSettingsFromBackend, 5000);
 
     // Tab switching
     document.querySelectorAll('.tab').forEach(tab => {
@@ -205,16 +199,6 @@ async function init() {
     document.getElementById('uploadNotesBtn').addEventListener('click', () => {
       chrome.tabs.create({ url: 'https://unclephilburt.github.io/studyflowwebsite/upload.html' });
     });
-
-    // Upgrade button
-    document.getElementById('upgradeBtn').addEventListener('click', () => {
-      chrome.tabs.create({ url: 'https://unclephilburt.github.io/studyflowwebsite/#pricing' });
-    });
-
-    // Hide upgrade button for Pro/Beta users
-    if (tier === 'Pro' || tier === 'Beta Tester') {
-      document.getElementById('upgradeBtn').style.display = 'none';
-    }
 
     // Logout button
     document.getElementById('logoutBtn').addEventListener('click', () => {
@@ -319,6 +303,37 @@ async function loadSettings() {
     // Fallback to local storage
     const result = await chrome.storage.local.get(['settingCollectiveBrain']);
     document.getElementById('settingCollectiveBrain').checked = result.settingCollectiveBrain !== false;
+  }
+}
+
+// Sync settings from backend (called periodically to detect changes from website)
+async function syncSettingsFromBackend() {
+  const token = await window.auth.getAuthToken();
+  if (!token) return;
+
+  const toggleEl = document.getElementById('settingCollectiveBrain');
+  if (!toggleEl) return;
+
+  const currentChecked = toggleEl.checked;
+
+  try {
+    const response = await fetch('https://studyflowsuite.onrender.com/api/settings/collective-brain', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      const serverEnabled = data.enabled !== false;
+
+      // If server value differs from current UI, update UI
+      if (serverEnabled !== currentChecked) {
+        toggleEl.checked = serverEnabled;
+        await chrome.storage.local.set({ settingCollectiveBrain: serverEnabled });
+        console.log('✓ Collective brain setting synced from website');
+      }
+    }
+  } catch (error) {
+    // Silently fail - don't spam console during polling
   }
 }
 

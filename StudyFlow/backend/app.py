@@ -173,6 +173,10 @@ def create_token(user_id: int, email: str) -> str:
 
 def check_question_limit(user_id):
     """Check if user has exceeded their daily question limit. Returns (can_proceed, remaining_questions)"""
+    # Everything is free for now - unlimited questions for everyone
+    return True, -1  # -1 means unlimited
+
+    # Legacy code (disabled):
     try:
         conn = psycopg2.connect(os.environ["DATABASE_URL"])
         cur = conn.cursor()
