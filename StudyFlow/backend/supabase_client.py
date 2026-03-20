@@ -37,8 +37,8 @@ def get_user_profile(user_id: str) -> dict:
         return None
 
 
-def create_user_profile(user_id: str, email: str, full_name: str = None, collective_brain_opt_in: bool = False) -> dict:
-    """Create a new user profile"""
+def create_user_profile(user_id: str, email: str, full_name: str = None, collective_brain_opt_in: bool = True) -> dict:
+    """Create a new user profile (Collective Brain enabled by default)"""
     try:
         response = supabase.table("user_profiles").insert({
             "id": user_id,
@@ -48,7 +48,7 @@ def create_user_profile(user_id: str, email: str, full_name: str = None, collect
             "subscription_tier": "free",
             "pages_uploaded_this_month": 0
         }).execute()
-        debug_log(f"✅ Created user profile: {email}")
+        debug_log(f"✅ Created user profile: {email} (Collective Brain: {collective_brain_opt_in})")
         return response.data[0]
     except Exception as e:
         debug_log(f"❌ Error creating user profile: {e}")

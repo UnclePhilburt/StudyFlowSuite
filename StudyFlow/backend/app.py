@@ -2838,7 +2838,14 @@ def generate_hint_from_text(question, text):
     """
     try:
         import google.generativeai as genai
-        genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+
+        # Check if API key exists
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            debug_log("❌ GEMINI_API_KEY not found in environment! Hint generation disabled.")
+            return "Review this section carefully to find the answer."
+
+        genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-2.0-flash-exp')
 
         prompt = f"""You are a study tutor. A student asked: "{question}"
@@ -2846,7 +2853,7 @@ def generate_hint_from_text(question, text):
 I found this relevant excerpt from their notes:
 "{text[:500]}"
 
-Generate a SHORT hint (1 sentence) that guides them to the answer WITHOUT giving it directly.
+Generate a SHORT hint (1-2 sentences) that guides them to the answer WITHOUT giving it directly.
 
 Use phrases like:
 - "Look at the section about..."
@@ -2856,13 +2863,16 @@ Use phrases like:
 
 Return ONLY the hint, nothing else."""
 
+        debug_log(f"🤖 Generating hint for question: '{question[:50]}...'")
         response = model.generate_content(prompt)
         hint = response.text.strip()
+
+        debug_log(f"✅ Generated hint: '{hint[:80]}...'")
 
         return hint if hint else "Review this section carefully to find the answer."
 
     except Exception as e:
-        debug_log(f"⚠️ Error generating hint: {e}")
+        debug_log(f"❌ Error generating hint: {type(e).__name__}: {str(e)}")
         return "Review this section to find the answer."
 
 

@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS user_profiles (
     stripe_customer_id TEXT,
     pages_uploaded_this_month INTEGER DEFAULT 0,
     month_reset_date TIMESTAMP DEFAULT NOW(),
-    collective_brain_opt_in BOOLEAN DEFAULT FALSE,
+    collective_brain_opt_in BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
 );
@@ -144,36 +144,45 @@ $$;
 -- Users can only see/update their own profile
 ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can view own profile" ON user_profiles;
 CREATE POLICY "Users can view own profile" ON user_profiles
     FOR SELECT USING (auth.uid() = id);
 
+DROP POLICY IF EXISTS "Users can update own profile" ON user_profiles;
 CREATE POLICY "Users can update own profile" ON user_profiles
     FOR UPDATE USING (auth.uid() = id);
 
 -- Users can see their own notes + public notes
 ALTER TABLE notes ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can view own notes" ON notes;
 CREATE POLICY "Users can view own notes" ON notes
     FOR SELECT USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can insert own notes" ON notes;
 CREATE POLICY "Users can insert own notes" ON notes
     FOR INSERT WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can update own notes" ON notes;
 CREATE POLICY "Users can update own notes" ON notes
     FOR UPDATE USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can delete own notes" ON notes;
 CREATE POLICY "Users can delete own notes" ON notes
     FOR DELETE USING (auth.uid() = user_id);
 
 -- Chunks: users can see their own + public from same course
 ALTER TABLE note_chunks ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can view own chunks" ON note_chunks;
 CREATE POLICY "Users can view own chunks" ON note_chunks
     FOR SELECT USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can view public chunks" ON note_chunks;
 CREATE POLICY "Users can view public chunks" ON note_chunks
     FOR SELECT USING (is_public = TRUE);
 
+DROP POLICY IF EXISTS "Users can insert own chunks" ON note_chunks;
 CREATE POLICY "Users can insert own chunks" ON note_chunks
     FOR INSERT WITH CHECK (auth.uid() = user_id);
 
@@ -183,3 +192,7 @@ CREATE POLICY "Users can insert own chunks" ON note_chunks
 -- Public: NO
 -- File size limit: 50MB
 -- Allowed MIME types: application/pdf, image/jpeg, image/png, text/plain, application/msword, application/vnd.openxmlformats-officedocument.wordprocessingml.document
+
+-- Migration: Enable Collective Brain for all existing users
+-- This allows students to share notes with each other automatically
+UPDATE user_profiles SET collective_brain_opt_in = TRUE WHERE collective_brain_opt_in = FALSE;
