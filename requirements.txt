@@ -6,7 +6,7 @@ gevent
 openai>=1.50.0
 anthropic
 cohere
-google-genai
+google-generativeai
 python-dotenv
 Pillow
 pytesseract
@@ -23,3 +23,5 @@ stripe
 sendgrid
 bcrypt
 pyjwt
+PyPDF2
+python-docx

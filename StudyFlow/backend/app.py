@@ -305,6 +305,22 @@ def init_users_table():
             );
         """)
 
+        # Create notes table for NoteFlow
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS notes (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                filename VARCHAR(255) NOT NULL,
+                original_filename VARCHAR(255) NOT NULL,
+                file_path TEXT,
+                file_type VARCHAR(50),
+                file_size INTEGER,
+                ocr_text TEXT,
+                page_count INTEGER,
+                uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+
         # Create indexes for fast lookups
         cur.execute("""
             CREATE INDEX IF NOT EXISTS idx_question_hash
@@ -319,6 +335,16 @@ def init_users_table():
         cur.execute("""
             CREATE INDEX IF NOT EXISTS idx_question_type
             ON questions(question_type);
+        """)
+
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_user_notes
+            ON notes(user_id, uploaded_at DESC);
+        """)
+
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_notes_ocr_text
+            ON notes USING gin(to_tsvector('english', ocr_text));
         """)
 
         conn.commit()
@@ -2337,6 +2363,332 @@ CRITICAL RULES:
         return jsonify({"error": "JSON parse failed", "raw": response_text}), 500
     except Exception as e:
         debug_log(f"❌ Vision API error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ============ NOTEFLOW ENDPOINTS ============
+
+@app.route("/api/notes/upload", methods=["POST"])
+@token_required
+def upload_note():
+    """
+    Upload a note file (PDF, image, Word doc) and extract text using Gemini OCR.
+
+    Expects: multipart/form-data with 'file' field
+
+    Returns:
+    {
+        "success": true,
+        "note_id": 123,
+        "filename": "Biology_Chapter_3.pdf",
+        "ocr_text": "extracted text...",
+        "pages": 5
+    }
+    """
+    try:
+        # Check if file was uploaded
+        if 'file' not in request.files:
+            return jsonify({"error": "No file uploaded"}), 400
+
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({"error": "No file selected"}), 400
+
+        # Get file info
+        original_filename = file.filename
+        file_size = len(file.read())
+        file.seek(0)  # Reset file pointer after reading size
+
+        # Determine file type
+        file_ext = original_filename.rsplit('.', 1)[1].lower() if '.' in original_filename else ''
+        if file_ext not in ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx']:
+            return jsonify({"error": "Unsupported file type. Allowed: PDF, JPG, PNG, DOC, DOCX"}), 400
+
+        # Read file content
+        file_content = file.read()
+
+        # Use Gemini 3 Flash for OCR
+        import google.generativeai as genai
+        genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+
+        model = genai.GenerativeModel('gemini-2.0-flash-exp')
+
+        # For images and PDFs, send directly to Gemini
+        if file_ext in ['jpg', 'jpeg', 'png']:
+            # Image file
+            import PIL.Image
+            import io
+            image = PIL.Image.open(io.BytesIO(file_content))
+
+            prompt = """Extract ALL text from this image. This is a student's class notes.
+
+            Return ONLY the extracted text, preserving:
+            - All text content
+            - Line breaks and structure
+            - Headings and bullet points
+
+            Do not add any commentary. Just return the extracted text."""
+
+            response = model.generate_content([prompt, image])
+            ocr_text = response.text.strip()
+            page_count = 1
+
+        elif file_ext == 'pdf':
+            # PDF file - convert to images and OCR each page
+            import PyPDF2
+            import io
+
+            pdf_reader = PyPDF2.PdfReader(io.BytesIO(file_content))
+            page_count = len(pdf_reader.pages)
+
+            # Try extracting text first (faster if PDF has text layer)
+            ocr_text = ""
+            for page in pdf_reader.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    ocr_text += page_text + "\n\n"
+
+            # If no text extracted, use Gemini OCR (for scanned PDFs)
+            if not ocr_text.strip():
+                # For now, just save without OCR
+                # TODO: Add pdf2image conversion for scanned PDFs
+                ocr_text = f"[PDF document: {page_count} pages]"
+
+        else:
+            # Word docs - extract text
+            # TODO: Add python-docx for .doc/.docx files
+            ocr_text = f"[{file_ext.upper()} document]"
+            page_count = 1
+
+        # Save to database
+        conn = psycopg2.connect(os.environ.get("DATABASE_URL"))
+        cur = conn.cursor()
+
+        # Generate unique filename
+        import uuid
+        unique_filename = f"{uuid.uuid4()}_{original_filename}"
+
+        cur.execute("""
+            INSERT INTO notes (user_id, filename, original_filename, file_type, file_size, ocr_text, page_count)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+        """, (
+            request.user_id,
+            unique_filename,
+            original_filename,
+            file_ext,
+            file_size,
+            ocr_text,
+            page_count
+        ))
+
+        note_id = cur.fetchone()[0]
+        conn.commit()
+        conn.close()
+
+        debug_log(f"✅ Note uploaded: {original_filename} ({file_size} bytes, {page_count} pages)")
+
+        return jsonify({
+            "success": True,
+            "note_id": note_id,
+            "filename": original_filename,
+            "ocr_text": ocr_text[:500] + "..." if len(ocr_text) > 500 else ocr_text,  # Preview
+            "pages": page_count
+        }), 200
+
+    except Exception as e:
+        debug_log(f"❌ Upload error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/notes/list", methods=["GET"])
+@token_required
+def list_notes():
+    """
+    Get list of all notes for current user.
+
+    Returns:
+    [
+        {
+            "id": 1,
+            "filename": "Biology_Chapter_3.pdf",
+            "pages": 5,
+            "uploaded_at": "2024-01-15T10:30:00"
+        },
+        ...
+    ]
+    """
+    try:
+        conn = psycopg2.connect(os.environ.get("DATABASE_URL"))
+        cur = conn.cursor()
+
+        cur.execute("""
+            SELECT id, original_filename, file_type, file_size, page_count, uploaded_at
+            FROM notes
+            WHERE user_id = %s
+            ORDER BY uploaded_at DESC
+        """, (request.user_id,))
+
+        notes = []
+        for row in cur.fetchall():
+            notes.append({
+                "id": row[0],
+                "filename": row[1],
+                "file_type": row[2],
+                "file_size": row[3],
+                "pages": row[4],
+                "uploaded_at": row[5].isoformat() if row[5] else None
+            })
+
+        conn.close()
+
+        return jsonify(notes), 200
+
+    except Exception as e:
+        debug_log(f"❌ List notes error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/notes/<int:note_id>", methods=["DELETE"])
+@token_required
+def delete_note(note_id):
+    """
+    Delete a note by ID (only if it belongs to current user).
+    """
+    try:
+        conn = psycopg2.connect(os.environ.get("DATABASE_URL"))
+        cur = conn.cursor()
+
+        # Verify ownership before deleting
+        cur.execute("""
+            DELETE FROM notes
+            WHERE id = %s AND user_id = %s
+            RETURNING id
+        """, (note_id, request.user_id))
+
+        deleted = cur.fetchone()
+        conn.commit()
+        conn.close()
+
+        if deleted:
+            return jsonify({"success": True}), 200
+        else:
+            return jsonify({"error": "Note not found or unauthorized"}), 404
+
+    except Exception as e:
+        debug_log(f"❌ Delete note error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/notes/search", methods=["POST"])
+@token_required
+def search_notes():
+    """
+    Search through user's notes using AI to find relevant information.
+
+    Expects JSON:
+    {
+        "question": "What is photosynthesis?"
+    }
+
+    Returns:
+    {
+        "results": [
+            {
+                "source": "Biology_Chapter_3.pdf (Page 1)",
+                "text": "Photosynthesis is the process by which...",
+                "hint": "Look at the section about cellular processes and energy production."
+            }
+        ]
+    }
+    """
+    try:
+        data = request.get_json()
+        if not data or not data.get('question'):
+            return jsonify({"error": "Missing question"}), 400
+
+        question = data.get('question')
+
+        # Get all user's notes
+        conn = psycopg2.connect(os.environ.get("DATABASE_URL"))
+        cur = conn.cursor()
+
+        cur.execute("""
+            SELECT id, original_filename, ocr_text, page_count
+            FROM notes
+            WHERE user_id = %s AND ocr_text IS NOT NULL AND ocr_text != ''
+            ORDER BY uploaded_at DESC
+        """, (request.user_id,))
+
+        user_notes = cur.fetchall()
+        conn.close()
+
+        if not user_notes:
+            return jsonify({"error": "No notes found", "results": []}), 404
+
+        # Combine all notes for AI search
+        all_notes_text = ""
+        note_sources = {}
+
+        for note_id, filename, ocr_text, page_count in user_notes:
+            note_sources[filename] = ocr_text
+            all_notes_text += f"\n\n=== {filename} ===\n{ocr_text}"
+
+        # Use Gemini to search and provide hints
+        import google.generativeai as genai
+        genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+
+        model = genai.GenerativeModel('gemini-2.0-flash-exp')
+
+        prompt = f"""You are a helpful study assistant. A student is asking about their notes.
+
+Student's Question: {question}
+
+Student's Notes:
+{all_notes_text[:10000]}  # Limit to first 10k chars to avoid token limits
+
+Your task:
+1. Search through the notes for relevant information
+2. Provide HINTS and GUIDANCE, not direct answers
+3. Point the student to specific sections of their notes
+4. Help them learn by guiding their thinking
+
+Return a JSON array with 1-3 results in this format:
+{{
+    "results": [
+        {{
+            "source": "filename (section or page)",
+            "text": "Relevant quote from notes (max 200 chars)",
+            "hint": "Helpful hint guiding them toward the answer without giving it away"
+        }}
+    ]
+}}
+
+IMPORTANT: Guide them to the answer, don't give it directly. Use phrases like:
+- "Look at the section about..."
+- "Consider the relationship between..."
+- "Check the definition of..."
+
+Return ONLY valid JSON, no other text."""
+
+        response = model.generate_content(prompt)
+        response_text = response.text.strip()
+
+        # Parse JSON response
+        if response_text.startswith('```json'):
+            response_text = response_text[7:]
+        if response_text.endswith('```'):
+            response_text = response_text[:-3]
+
+        result = json.loads(response_text.strip())
+
+        return jsonify(result), 200
+
+    except json.JSONDecodeError as e:
+        debug_log(f"❌ Search JSON parse error: {e}")
+        return jsonify({"error": "Failed to parse AI response"}), 500
+    except Exception as e:
+        debug_log(f"❌ Search notes error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
 
