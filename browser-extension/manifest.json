@@ -1,12 +1,13 @@
 {
   "manifest_version": 3,
-  "name": "StudyFlow AI Tutor",
-  "version": "1.0.0",
-  "description": "Legal AI tutoring tool - Shows step-by-step explanations to help you understand quiz concepts",
+  "name": "StudyFlow NoteFlow",
+  "version": "2.0.3",
+  "description": "Search your uploaded notes with AI - Get hints and guidance without direct answers",
   "permissions": [
     "activeTab",
     "tabs",
-    "storage"
+    "storage",
+    "scripting"
   ],
   "host_permissions": [
     "https://studyflowsuite.onrender.com/*"
@@ -22,7 +23,7 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["tutor-sidebar.js"],
+      "js": ["noteflow-overlay.js"],
       "run_at": "document_idle",
       "all_frames": false
     }
