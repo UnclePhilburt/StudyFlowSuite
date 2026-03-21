@@ -1,14 +1,14 @@
 import os
 from dotenv import load_dotenv
 
-# Optional: Load variables from a .env file (if you want to override hardcoded values)
+# Load environment variables from .env file
 load_dotenv()
 
-# For testing purposes, we're hardcoding API keys here.
-# Replace the following strings with your actual API keys.
-OPENAI_API_KEY = "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"
-ANTHROPIC_API_KEY = "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"
-COHERE_API_KEY = "ICfqLeG3uky6PzX9XT5eyo1KCjSvW93XKQRSBaFp"
+# Get API keys from environment variables
+# These should be set in .env file locally or in Render environment variables for production
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+COHERE_API_KEY = os.getenv("COHERE_API_KEY")
 
 # Set up OpenAI API key
 try:

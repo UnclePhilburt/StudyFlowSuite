@@ -2921,6 +2921,114 @@ Return ONLY the hint with the actual information, nothing else."""
         return "Review this section to find the answer."
 
 
+@app.route("/api/notes/chat", methods=["POST"])
+@supabase_auth_required
+def chat_with_notes():
+    """
+    Conversational AI chat with memory - students can have back-and-forth discussions
+
+    Expects JSON:
+    {
+        "message": "How does DNA replicate?",
+        "conversation_id": "optional-uuid" // omit to start new conversation
+    }
+
+    Returns:
+    {
+        "conversation_id": "uuid",
+        "response": "DNA replicates through semiconservative replication...",
+        "sources": [
+            {
+                "filename": "DNA.txt (Wikipedia - Biology)",
+                "similarity": 0.89
+            }
+        ]
+    }
+    """
+    try:
+        from StudyFlow.backend.supabase_client import search_notes_vector, get_user_profile, supabase
+        from StudyFlow.backend.embedding_client import generate_embedding
+        from StudyFlow.backend.conversational_noteflow import (
+            create_conversation,
+            get_conversation,
+            add_message,
+            generate_conversational_response
+        )
+
+        data = request.get_json()
+        if not data or not data.get('message'):
+            return jsonify({"error": "Missing message"}), 400
+
+        message = data.get('message')
+        conv_id = data.get('conversation_id')
+
+        # Get or create conversation
+        if conv_id:
+            conversation = get_conversation(conv_id, request.user_id)
+            if not conversation:
+                return jsonify({"error": "Conversation not found or access denied"}), 404
+        else:
+            conv_id = create_conversation(request.user_id)
+            conversation = get_conversation(conv_id, request.user_id)
+
+        debug_log(f"💬 Chat message in conversation {conv_id}: '{message[:50]}...'")
+
+        # Generate embedding for the question
+        query_embedding = generate_embedding(message)
+        if not query_embedding:
+            return jsonify({"error": "Failed to generate query embedding"}), 500
+
+        # Search database for relevant content
+        search_results = search_notes_vector(
+            query_embedding=query_embedding,
+            user_id=request.user_id,
+            university=None,
+            course_code=None,
+            match_threshold=0.4,
+            match_count=5
+        )
+
+        debug_log(f"🔍 Found {len(search_results) if search_results else 0} relevant chunks")
+
+        # Add search result metadata
+        sources = []
+        if search_results:
+            for result in search_results[:3]:  # Top 3 sources
+                note = supabase.table("notes").select("original_filename").eq("id", result['note_id']).single().execute()
+                filename = note.data['original_filename'] if note.data else "Unknown"
+                sources.append({
+                    "filename": f"{filename} ({result['university']} - {result['course_code']})" if result['university'] else filename,
+                    "similarity": round(result['similarity'], 2)
+                })
+                # Add original_filename to result for context
+                result['original_filename'] = filename
+
+        # Add user message to conversation
+        add_message(conv_id, 'user', message)
+
+        # Generate conversational AI response
+        ai_response = generate_conversational_response(
+            question=message,
+            search_results=search_results or [],
+            conversation_history=conversation['messages']
+        )
+
+        # Add AI response to conversation
+        add_message(conv_id, 'assistant', ai_response, sources)
+
+        debug_log(f"✅ Generated conversational response ({len(ai_response)} chars)")
+
+        return jsonify({
+            "conversation_id": conv_id,
+            "response": ai_response,
+            "sources": sources
+        }), 200
+
+    except Exception as e:
+        debug_log(f"❌ Chat error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/settings/collective-brain", methods=["GET"])
 @supabase_auth_required
 def get_collective_brain_setting():
