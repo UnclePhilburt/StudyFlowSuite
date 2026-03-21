@@ -6,9 +6,8 @@ load_dotenv()
 
 # Get API keys from environment variables
 # These should be set in .env file locally or in Render environment variables for production
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
-COHERE_API_KEY = os.getenv("COHERE_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")  # Used for embeddings (vector search)
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")  # Used for conversational chat and quiz answering
 
 # Set up OpenAI API key
 try:
@@ -16,21 +15,6 @@ try:
     openai.api_key = OPENAI_API_KEY
 except ImportError:
     print("Warning: OpenAI library is not installed. Install it via 'pip install openai'.")
-
-# Set up Anthropic API key
-try:
-    import anthropic
-    # If the library requires client instantiation, adjust accordingly.
-    anthropic.api_key = ANTHROPIC_API_KEY
-except ImportError:
-    print("Warning: Anthropic library is not installed. Install it via 'pip install anthropic'.")
-
-# Set up Cohere client
-try:
-    import cohere
-    co = cohere.Client(COHERE_API_KEY)
-except ImportError:
-    print("Warning: Cohere library is not installed. Install it via 'pip install cohere'.")
 
 # Define debug-related paths
 DEBUG_DIR = os.getenv("DEBUG_DIR", "debug")

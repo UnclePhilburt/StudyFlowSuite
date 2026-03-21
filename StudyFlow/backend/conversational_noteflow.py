@@ -77,7 +77,16 @@ def generate_conversational_response(
         AI-generated conversational response
     """
     try:
-        import openai
+        import google.generativeai as genai
+        import os
+
+        # Configure Gemini
+        gemini_api_key = os.getenv("GEMINI_API_KEY")
+        if not gemini_api_key:
+            debug_log("❌ GEMINI_API_KEY not found in environment!")
+            raise ValueError("GEMINI_API_KEY not configured")
+
+        genai.configure(api_key=gemini_api_key)
 
         # Build context from search results
         context_chunks = []
@@ -88,11 +97,14 @@ def generate_conversational_response(
 
         context = "\n\n".join(context_chunks)
 
-        # Build conversation messages for GPT
-        messages = [
-            {
-                "role": "system",
-                "content": """You are a helpful study tutor assistant. Students ask you questions about their study materials.
+        # Build conversation history for Gemini
+        conversation_context = ""
+        for msg in conversation_history[-6:]:  # Last 6 messages
+            role = "Student" if msg['role'] == 'user' else "Tutor"
+            conversation_context += f"{role}: {msg['content']}\n\n"
+
+        # Build the full prompt for Gemini
+        system_instruction = """You are a helpful study tutor assistant. Students ask you questions about their study materials.
 
 Your job:
 1. Answer questions using the provided context from their notes
@@ -103,46 +115,43 @@ Your job:
 6. If you don't know something, be honest and suggest they upload more notes or rephrase the question
 
 Keep responses concise (2-3 paragraphs max) unless they explicitly ask for more detail."""
-            }
-        ]
 
-        # Add conversation history (last 6 messages to keep context manageable)
-        for msg in conversation_history[-6:]:
-            messages.append({
-                "role": msg['role'],
-                "content": msg['content']
-            })
-
-        # Add current question with context
         if context:
-            user_message = f"""Question: {question}
+            prompt = f"""{system_instruction}
 
-Relevant information from my notes:
+Previous conversation:
+{conversation_context}
+
+Current Question: {question}
+
+Relevant information from their notes:
 {context}
 
 Please answer based on this context."""
         else:
-            user_message = f"""Question: {question}
+            prompt = f"""{system_instruction}
+
+Previous conversation:
+{conversation_context}
+
+Current Question: {question}
 
 I don't have any relevant information in my notes about this. Please let me know."""
 
-        messages.append({
-            "role": "user",
-            "content": user_message
-        })
+        debug_log(f"🤖 Generating conversational response with Gemini 3.1 Flash-Lite ({len(search_results)} context chunks)")
 
-        debug_log(f"🤖 Generating conversational response with {len(search_results)} context chunks")
-
-        # Call OpenAI
-        response = openai.chat.completions.create(
-            model="gpt-4o-mini",  # Fast and cost-effective
-            messages=messages,
-            temperature=0.7,  # Slightly creative but still focused
-            max_tokens=500  # Limit response length
+        # Call Gemini 3.1 Flash-Lite (cheapest + fastest)
+        model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
+        response = model.generate_content(
+            prompt,
+            generation_config=genai.GenerationConfig(
+                temperature=0.7,
+                max_output_tokens=500
+            )
         )
 
-        answer = response.choices[0].message.content
-        debug_log(f"✅ Generated {len(answer)} character response")
+        answer = response.text
+        debug_log(f"✅ Generated {len(answer)} character response with Gemini")
 
         return answer
 

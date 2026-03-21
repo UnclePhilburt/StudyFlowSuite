@@ -1,19 +1,21 @@
 import os
 import re
 import traceback
-import cohere
+import google.generativeai as genai
 from StudyFlow.logging_utils import debug_log
 from StudyFlow import config  # centralized config with API key
 
-# Load from centralized config or fallback
-COHERE_API_KEY = config.COHERE_API_KEY or os.getenv("COHERE_API_KEY")
-if COHERE_API_KEY is None:
-    raise ValueError("❌ COHERE_API_KEY not found in environment variables.")
+# Load Gemini API key from config or environment
+GEMINI_API_KEY = config.GEMINI_API_KEY if hasattr(config, 'GEMINI_API_KEY') else os.getenv("GEMINI_API_KEY")
+if GEMINI_API_KEY is None:
+    raise ValueError("❌ GEMINI_API_KEY not found in environment variables.")
+
+genai.configure(api_key=GEMINI_API_KEY)
 
 def get_cohere_answer(ocr_json, cohere_client_instance=None):
-    if cohere_client_instance is None:
-        cohere_client_instance = cohere.ClientV2(api_key=COHERE_API_KEY)
-
+    """
+    Get answer using Gemini 3.1 Flash-Lite (renamed from get_cohere_answer for backwards compatibility)
+    """
     # Build a clearer prompt with explicit option numbering
     question = ocr_json.get("question", "")
     answers = ocr_json.get("answers", {})
@@ -32,42 +34,21 @@ Which option number (1, 2, 3, or 4) is the correct answer?
 
 IMPORTANT: Reply with ONLY a single digit: 1, 2, 3, or 4. Nothing else."""
 
-    debug_log("🟢 Sending prompt to Cohere: " + prompt)
+    debug_log("🟢 Sending prompt to Gemini 3.1 Flash-Lite: " + prompt)
 
     try:
-        response = cohere_client_instance.chat(
-            model="command-r-plus-08-2024",
-            messages=[{"role": "user", "content": prompt}],
+        # Use Gemini 3.1 Flash-Lite (fastest, cheapest)
+        model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
+        response = model.generate_content(
+            prompt,
+            generation_config=genai.GenerationConfig(
+                temperature=0.1,  # Very low for factual answers
+                max_output_tokens=10  # Only need 1 digit
+            )
         )
 
-        # Normalize response structure
-        if isinstance(response, list):
-            first_message = response[0]
-        elif isinstance(response, dict) and "message" in response:
-            first_message = response["message"]
-            if isinstance(first_message, list):
-                first_message = first_message[0]
-        else:
-            first_message = response
-
-        content = ""
-        if hasattr(first_message, "content"):
-            content = first_message.content
-        elif hasattr(first_message, "message") and hasattr(first_message.message, "content"):
-            content = first_message.message.content
-        elif isinstance(first_message, dict):
-            content = first_message.get("content", "")
-
-        # Normalize list to string
-        if isinstance(content, list):
-            content = " ".join(
-                item.get("text", "") if isinstance(item, dict) else str(item)
-                for item in content
-            ).strip()
-        else:
-            content = str(content).strip()
-
-        debug_log("📨 Extracted Cohere response: " + content)
+        content = response.text.strip()
+        debug_log("📨 Extracted Gemini response: " + content)
 
         # Only accept 1, 2, 3, or 4 as valid answers
         # First try exact match

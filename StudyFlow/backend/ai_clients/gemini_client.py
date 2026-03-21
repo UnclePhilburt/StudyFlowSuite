@@ -9,7 +9,7 @@ import google.generativeai as genai
 from StudyFlow.logging_utils import debug_log
 
 
-def get_gemini_answer_single(question, answers, attempt_num=1, model_name='gemini-2.5-flash'):
+def get_gemini_answer_single(question, answers, attempt_num=1, model_name='gemini-3.1-flash-lite-preview'):
     """
     Get a single answer from Gemini.
 
@@ -106,7 +106,7 @@ Rules: Index is 1-based. Keep reasoning under 10 words. Return ONLY valid JSON."
         return None
 
 
-def get_gemini_answer(question, answers, model='gemini-2.5-flash'):
+def get_gemini_answer(question, answers, model='gemini-3.1-flash-lite-preview'):
     """
     Get answer from Gemini with 3-vote system for improved accuracy.
     Calls Gemini 3 times and returns the majority answer.
@@ -164,7 +164,7 @@ def get_gemini_answer(question, answers, model='gemini-2.5-flash'):
     return winning_result
 
 
-def get_gemini_essay(question, model='gemini-2.5-flash'):
+def get_gemini_essay(question, model='gemini-3.1-flash-lite-preview'):
     """
     Generate an essay/short answer using Gemini.
 
@@ -201,7 +201,10 @@ Return ONLY the answer text, nothing else."""
         # Map model name
         model_mapping = {
             'gemini-2.5-flash': 'gemini-2.5-flash',
-            'gemini-2.5-pro': 'gemini-2.5-pro'
+            'gemini-2.5-pro': 'gemini-2.5-pro',
+            'gemini-3-flash-preview': 'gemini-3-flash-preview',
+            'gemini-3.1-flash-lite-preview': 'gemini-3.1-flash-lite-preview',
+            'gemini-3.1-pro-preview': 'gemini-3.1-pro-preview'
         }
         actual_model = model_mapping.get(model, model)
         debug_log(f"Using Gemini model for essay: {actual_model}")
