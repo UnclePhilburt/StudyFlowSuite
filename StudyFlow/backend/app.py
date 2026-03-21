@@ -2951,6 +2951,7 @@ def chat_with_notes():
         from StudyFlow.backend.conversational_noteflow import (
             create_conversation,
             get_conversation,
+            get_conversation_messages,
             add_message,
             generate_conversational_response
         )
@@ -3006,11 +3007,14 @@ def chat_with_notes():
         # Add user message to conversation
         add_message(conv_id, 'user', message)
 
+        # Get conversation history from database
+        conversation_history = get_conversation_messages(conv_id, request.user_id)
+
         # Generate conversational AI response
         ai_response = generate_conversational_response(
             question=message,
             search_results=search_results or [],
-            conversation_history=conversation['messages']
+            conversation_history=conversation_history
         )
 
         # Add AI response to conversation
@@ -3026,6 +3030,104 @@ def chat_with_notes():
 
     except Exception as e:
         debug_log(f"❌ Chat error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/conversations", methods=["GET"])
+@supabase_auth_required
+def list_conversations():
+    """
+    List all conversations for the authenticated user
+
+    Returns:
+    {
+        "conversations": [
+            {
+                "id": "uuid",
+                "title": "First question snippet...",
+                "created_at": "2026-03-21T10:00:00Z",
+                "updated_at": "2026-03-21T10:05:00Z"
+            }
+        ]
+    }
+    """
+    try:
+        from StudyFlow.backend.conversational_noteflow import list_user_conversations
+
+        conversations = list_user_conversations(request.user_id, limit=50)
+
+        return jsonify({"conversations": conversations}), 200
+
+    except Exception as e:
+        debug_log(f"❌ Error listing conversations: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/conversations/<conversation_id>/messages", methods=["GET"])
+@supabase_auth_required
+def get_conversation_history(conversation_id):
+    """
+    Get all messages in a specific conversation
+
+    Returns:
+    {
+        "messages": [
+            {
+                "id": "uuid",
+                "role": "user",
+                "content": "What is DNA?",
+                "created_at": "2026-03-21T10:00:00Z"
+            },
+            {
+                "id": "uuid",
+                "role": "assistant",
+                "content": "DNA is...",
+                "sources": [...],
+                "created_at": "2026-03-21T10:00:05Z"
+            }
+        ]
+    }
+    """
+    try:
+        from StudyFlow.backend.conversational_noteflow import get_conversation_messages, get_conversation
+
+        # Verify user owns this conversation
+        conversation = get_conversation(conversation_id, request.user_id)
+        if not conversation:
+            return jsonify({"error": "Conversation not found or access denied"}), 404
+
+        messages = get_conversation_messages(conversation_id, request.user_id)
+
+        return jsonify({"messages": messages}), 200
+
+    except Exception as e:
+        debug_log(f"❌ Error getting conversation history: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/conversations/<conversation_id>", methods=["DELETE"])
+@supabase_auth_required
+def delete_conversation_endpoint(conversation_id):
+    """
+    Delete a conversation and all its messages
+
+    Returns:
+    {
+        "success": true
+    }
+    """
+    try:
+        from StudyFlow.backend.conversational_noteflow import delete_conversation
+
+        success = delete_conversation(conversation_id, request.user_id)
+
+        if success:
+            return jsonify({"success": True}), 200
+        else:
+            return jsonify({"error": "Conversation not found or access denied"}), 404
+
+    except Exception as e:
+        debug_log(f"❌ Error deleting conversation: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
 

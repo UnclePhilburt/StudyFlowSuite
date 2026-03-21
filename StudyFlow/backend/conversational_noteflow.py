@@ -1,63 +1,107 @@
 """
-Conversational NoteFlow - AI Chat with Memory
-Allows students to have back-and-forth conversations about their notes
+Conversational NoteFlow - AI Chat with Memory (Database-backed)
+Allows students to have back-and-forth conversations about their notes with persistent history
 """
 import os
 import uuid
-from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 from StudyFlow.logging_utils import debug_log
-
-# In-memory conversation store (use Redis in production for multi-server)
-conversations: Dict[str, Dict] = {}
-
-# Cleanup old conversations (older than 1 hour)
-def cleanup_old_conversations():
-    """Remove conversations older than 1 hour"""
-    cutoff = datetime.now() - timedelta(hours=1)
-    to_delete = [
-        conv_id for conv_id, conv in conversations.items()
-        if conv.get('last_updated', datetime.now()) < cutoff
-    ]
-    for conv_id in to_delete:
-        del conversations[conv_id]
-    if to_delete:
-        debug_log(f"🧹 Cleaned up {len(to_delete)} old conversations")
+from StudyFlow.backend.supabase_client import supabase
 
 
 def create_conversation(user_id: str) -> str:
-    """Create a new conversation and return its ID"""
-    cleanup_old_conversations()
+    """Create a new conversation in the database and return its ID"""
+    try:
+        conv_id = str(uuid.uuid4())
 
-    conv_id = str(uuid.uuid4())
-    conversations[conv_id] = {
-        'user_id': user_id,
-        'messages': [],
-        'created_at': datetime.now(),
-        'last_updated': datetime.now()
-    }
-    debug_log(f"💬 Created conversation {conv_id} for user {user_id}")
-    return conv_id
+        response = supabase.table("conversations").insert({
+            "id": conv_id,
+            "user_id": user_id,
+            "title": None  # Will be auto-generated from first message
+        }).execute()
+
+        debug_log(f"💬 Created conversation {conv_id} for user {user_id}")
+        return conv_id
+
+    except Exception as e:
+        debug_log(f"❌ Error creating conversation: {e}")
+        return None
 
 
 def get_conversation(conv_id: str, user_id: str) -> Optional[Dict]:
     """Get a conversation by ID (verifies ownership)"""
-    conv = conversations.get(conv_id)
-    if conv and conv['user_id'] == user_id:
-        return conv
-    return None
+    try:
+        response = supabase.table("conversations").select("*").eq("id", conv_id).eq("user_id", user_id).single().execute()
+        return response.data if response.data else None
+
+    except Exception as e:
+        debug_log(f"❌ Error getting conversation: {e}")
+        return None
+
+
+def get_conversation_messages(conv_id: str, user_id: str) -> List[Dict]:
+    """Get all messages in a conversation"""
+    try:
+        # Verify user owns this conversation
+        conv = get_conversation(conv_id, user_id)
+        if not conv:
+            return []
+
+        # Get messages ordered by creation time
+        response = supabase.table("conversation_messages").select("*").eq("conversation_id", conv_id).order("created_at").execute()
+
+        return response.data if response.data else []
+
+    except Exception as e:
+        debug_log(f"❌ Error getting conversation messages: {e}")
+        return []
 
 
 def add_message(conv_id: str, role: str, content: str, sources: List[Dict] = None):
-    """Add a message to conversation history"""
-    if conv_id in conversations:
-        conversations[conv_id]['messages'].append({
-            'role': role,
-            'content': content,
-            'sources': sources or [],
-            'timestamp': datetime.now()
-        })
-        conversations[conv_id]['last_updated'] = datetime.now()
+    """Add a message to conversation history in database"""
+    try:
+        supabase.table("conversation_messages").insert({
+            "conversation_id": conv_id,
+            "role": role,
+            "content": content,
+            "sources": sources or []
+        }).execute()
+
+        debug_log(f"💬 Added {role} message to conversation {conv_id}")
+
+    except Exception as e:
+        debug_log(f"❌ Error adding message: {e}")
+
+
+def list_user_conversations(user_id: str, limit: int = 20) -> List[Dict]:
+    """List all conversations for a user, ordered by most recent"""
+    try:
+        response = supabase.table("conversations").select("*").eq("user_id", user_id).order("updated_at", desc=True).limit(limit).execute()
+
+        return response.data if response.data else []
+
+    except Exception as e:
+        debug_log(f"❌ Error listing conversations: {e}")
+        return []
+
+
+def delete_conversation(conv_id: str, user_id: str) -> bool:
+    """Delete a conversation and all its messages"""
+    try:
+        # Verify ownership
+        conv = get_conversation(conv_id, user_id)
+        if not conv:
+            return False
+
+        # Delete conversation (CASCADE will delete messages)
+        supabase.table("conversations").delete().eq("id", conv_id).eq("user_id", user_id).execute()
+
+        debug_log(f"🗑️ Deleted conversation {conv_id}")
+        return True
+
+    except Exception as e:
+        debug_log(f"❌ Error deleting conversation: {e}")
+        return False
 
 
 def generate_conversational_response(
@@ -164,12 +208,3 @@ No relevant context found. Politely let them know you don't have information abo
             return f"I found some information about that. {search_results[0].get('content_summary', 'Check your notes for more details.')}"
         else:
             return "I couldn't find anything about that in your notes. Try rephrasing your question or upload more notes!"
-
-
-def get_conversation_stats() -> Dict:
-    """Get statistics about active conversations"""
-    cleanup_old_conversations()
-    return {
-        'active_conversations': len(conversations),
-        'total_messages': sum(len(c['messages']) for c in conversations.values())
-    }
