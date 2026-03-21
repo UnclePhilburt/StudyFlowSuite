@@ -1,5 +1,14 @@
 # StudyFlow Suite - Project Documentation
 
+## CRITICAL USER PREFERENCES
+
+**NEVER USE EMOJIS - The user absolutely hates emojis. Use text instead.**
+- ❌ DON'T: Use 📤, 📝, ⚙️, ✨, 💬, or any emoji characters
+- ✅ DO: Use plain text like "Upload", "Notes", "Settings", "New Chat"
+- This applies to ALL code: frontend, backend, UI, buttons, messages, logs, everything
+
+---
+
 ## Quick Reference
 
 **Entry Point**: `python -m StudyFlow.frontend.main`
