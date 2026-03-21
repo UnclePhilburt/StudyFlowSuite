@@ -104,6 +104,65 @@ def delete_conversation(conv_id: str, user_id: str) -> bool:
         return False
 
 
+def generate_conversation_title(question: str, answer: str) -> str:
+    """Generate a short, descriptive title for the conversation using AI"""
+    try:
+        import google.generativeai as genai
+
+        gemini_api_key = os.getenv("GEMINI_API_KEY")
+        if not gemini_api_key:
+            debug_log("❌ GEMINI_API_KEY not found, using fallback title")
+            return question[:50]
+
+        genai.configure(api_key=gemini_api_key)
+
+        prompt = f"""Generate a very short, descriptive title (3-5 words max) for this conversation.
+
+Question: {question}
+Answer: {answer}
+
+Title should be concise and capture the main topic. Do not use quotes. Just return the title text.
+
+Examples:
+- "DNA Replication Process"
+- "World War I Causes"
+- "Photosynthesis Explained"
+- "Algebra Equations Help"
+
+Title:"""
+
+        model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
+        response = model.generate_content(
+            prompt,
+            generation_config=genai.GenerationConfig(
+                temperature=0.3,
+                max_output_tokens=20
+            )
+        )
+
+        title = response.text.strip().strip('"').strip("'")
+        debug_log(f"✅ Generated conversation title: {title}")
+        return title
+
+    except Exception as e:
+        debug_log(f"❌ Error generating title: {e}")
+        # Fallback to first 50 chars of question
+        return question[:50]
+
+
+def update_conversation_title(conv_id: str, title: str):
+    """Update the title of a conversation"""
+    try:
+        supabase.table("conversations").update({
+            "title": title
+        }).eq("id", conv_id).execute()
+
+        debug_log(f"📝 Updated conversation {conv_id} title to: {title}")
+
+    except Exception as e:
+        debug_log(f"❌ Error updating conversation title: {e}")
+
+
 def generate_conversational_response(
     question: str,
     search_results: List[Dict],

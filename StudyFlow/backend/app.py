@@ -2953,7 +2953,9 @@ def chat_with_notes():
             get_conversation,
             get_conversation_messages,
             add_message,
-            generate_conversational_response
+            generate_conversational_response,
+            generate_conversation_title,
+            update_conversation_title
         )
 
         data = request.get_json()
@@ -3019,6 +3021,15 @@ def chat_with_notes():
 
         # Add AI response to conversation
         add_message(conv_id, 'assistant', ai_response, sources)
+
+        # Generate title for new conversations (if title is still None)
+        if conversation and not conversation.get('title'):
+            try:
+                title = generate_conversation_title(message, ai_response)
+                update_conversation_title(conv_id, title)
+                debug_log(f"📝 Auto-generated title: {title}")
+            except Exception as title_error:
+                debug_log(f"⚠️ Failed to generate title: {title_error}")
 
         debug_log(f"✅ Generated conversational response ({len(ai_response)} chars)")
 
