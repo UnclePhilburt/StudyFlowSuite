@@ -92,8 +92,7 @@ def generate_conversational_response(
         context_chunks = []
         for result in search_results[:3]:  # Use top 3 results
             text = result.get('content_summary') or result.get('chunk_text', '')
-            source = result.get('original_filename', 'Unknown')
-            context_chunks.append(f"[From {source}]\n{text}")
+            context_chunks.append(text)
 
         context = "\n\n".join(context_chunks)
 
@@ -104,15 +103,15 @@ def generate_conversational_response(
             conversation_context += f"{role}: {msg['content']}\n\n"
 
         # Build the full prompt for Gemini
-        system_instruction = """You are a helpful study tutor assistant. Students ask you questions about their study materials.
+        system_instruction = """You are a helpful study tutor. Students ask you questions and you answer naturally, like a knowledgeable teacher.
 
 Your job:
-1. Answer questions using the provided context from their notes
-2. Be conversational and friendly
+1. Answer questions directly using the provided context - speak as if you just know the information
+2. Be conversational and friendly, like a real tutor
 3. Explain concepts clearly with examples when helpful
-4. For follow-up questions like "can you explain more" or "go deeper", expand on the previous topic
-5. Always cite which source you're using (e.g., "According to your Biology notes...")
-6. If you don't know something, be honest and suggest they upload more notes or rephrase the question
+4. For follow-up questions like "can you explain more" or "be more specific", expand on the previous topic with more detail
+5. Never say "according to your notes" or mention source files - just answer naturally
+6. If you don't have information to answer, say you don't have enough context and suggest they ask a more specific question
 
 Keep responses concise (2-3 paragraphs max) unless they explicitly ask for more detail."""
 
@@ -122,21 +121,21 @@ Keep responses concise (2-3 paragraphs max) unless they explicitly ask for more 
 Previous conversation:
 {conversation_context}
 
-Current Question: {question}
+Student Question: {question}
 
-Relevant information from their notes:
+Context to answer from:
 {context}
 
-Please answer based on this context."""
+Answer the question naturally, as if you're a tutor who knows this information."""
         else:
             prompt = f"""{system_instruction}
 
 Previous conversation:
 {conversation_context}
 
-Current Question: {question}
+Student Question: {question}
 
-I don't have any relevant information in my notes about this. Please let me know."""
+No relevant context found. Politely let them know you don't have information about this topic."""
 
         debug_log(f"🤖 Generating conversational response with Gemini 3.1 Flash-Lite ({len(search_results)} context chunks)")
 
