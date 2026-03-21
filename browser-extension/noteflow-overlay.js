@@ -3,6 +3,9 @@ console.log('StudyFlow NoteFlow loaded');
 
 const BACKEND_URL = 'https://studyflowsuite.onrender.com';
 
+// Conversation history
+let conversationHistory = [];
+
 // Create floating overlay window
 function createFloatingOverlay() {
   // Check if overlay already exists
@@ -85,63 +88,101 @@ function createFloatingOverlay() {
       }
 
       .noteflow-body {
+        display: flex;
+        flex-direction: column;
+        height: calc(100% - 60px);
+        overflow: hidden;
+      }
+
+      .messages-container {
+        flex: 1;
         padding: 20px;
-        max-height: 500px;
         overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
       }
 
-      .search-box {
-        margin-bottom: 16px;
+      .input-container {
+        padding: 16px 20px;
+        border-top: 1px solid #e0e0e0;
+        background: white;
+        display: flex;
+        gap: 8px;
+        align-items: center;
       }
 
-      .search-input-wrapper {
-        position: relative;
-      }
-
-      .search-input {
-        width: 100%;
-        padding: 12px 40px 12px 12px;
+      .chat-input {
+        flex: 1;
+        padding: 12px 16px;
         border: 2px solid #e2e8f0;
-        border-radius: 10px;
+        border-radius: 12px;
         font-size: 14px;
         outline: none;
-        transition: border 0.2s;
+        transition: border-color 0.2s;
       }
 
-      .search-input:focus {
+      .chat-input:focus {
         border-color: #667eea;
       }
 
-      .search-input::placeholder {
+      .chat-input::placeholder {
         color: #94a3b8;
       }
 
-      .search-btn {
-        position: absolute;
-        right: 6px;
-        top: 50%;
-        transform: translateY(-50%);
+      .send-btn {
+        width: 44px;
+        height: 44px;
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        border: none;
         color: white;
-        padding: 8px 12px;
-        border-radius: 6px;
+        border: none;
+        border-radius: 12px;
+        font-size: 18px;
         cursor: pointer;
-        font-size: 12px;
-        font-weight: 600;
+        transition: opacity 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
       }
 
-      .search-btn:hover {
+      .send-btn:hover {
         opacity: 0.9;
       }
 
-      .search-btn:disabled {
+      .send-btn:disabled {
         opacity: 0.5;
         cursor: not-allowed;
       }
 
-      .results-container {
-        min-height: 100px;
+      .message-bubble {
+        max-width: 85%;
+        padding: 12px 16px;
+        border-radius: 16px;
+        font-size: 14px;
+        line-height: 1.5;
+        word-wrap: break-word;
+      }
+
+      .message-user {
+        align-self: flex-end;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-bottom-right-radius: 4px;
+      }
+
+      .message-ai {
+        align-self: flex-start;
+        background: #f3f4f6;
+        color: #1f2937;
+        border-bottom-left-radius: 4px;
+      }
+
+      .message-loading {
+        align-self: flex-start;
+        background: #f3f4f6;
+        color: #6b7280;
+        font-style: italic;
       }
 
       .idle-state {
@@ -280,25 +321,25 @@ function createFloatingOverlay() {
     </div>
 
     <div class="noteflow-body">
-      <div class="search-box">
-        <div class="search-input-wrapper">
-          <input
-            type="text"
-            class="search-input"
-            id="note-search-input"
-            placeholder="Ask a question about your notes..."
-          />
-          <button class="search-btn" id="search-btn">Ask</button>
-        </div>
-      </div>
-
-      <div class="results-container" id="results-container">
+      <div class="messages-container" id="messages-container">
         <div class="idle-state">
           <div class="idle-icon">💭</div>
           <div class="idle-text">
-            Upload your notes on the StudyFlow website, then ask questions here. I'll search your notes and guide you to the answer!
+            Ask me anything about your notes. I'll remember our conversation!
           </div>
         </div>
+      </div>
+
+      <div class="input-container">
+        <input
+          type="text"
+          class="chat-input"
+          id="note-search-input"
+          placeholder="Ask a question..."
+        />
+        <button class="send-btn" id="search-btn">
+          <span>→</span>
+        </button>
       </div>
     </div>
   `;
@@ -388,122 +429,131 @@ function createFloatingOverlay() {
   return overlay;
 }
 
+// Add message to chat
+function addMessage(content, isUser = false) {
+  const messagesContainer = document.getElementById('messages-container');
+
+  // Remove idle state if present
+  const idleState = messagesContainer.querySelector('.idle-state');
+  if (idleState) {
+    idleState.remove();
+  }
+
+  const messageBubble = document.createElement('div');
+  messageBubble.className = `message-bubble ${isUser ? 'message-user' : 'message-ai'}`;
+  messageBubble.textContent = content;
+
+  messagesContainer.appendChild(messageBubble);
+
+  // Scroll to bottom
+  messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+  return messageBubble;
+}
+
+// Add loading message
+function addLoadingMessage() {
+  const messagesContainer = document.getElementById('messages-container');
+
+  const loadingBubble = document.createElement('div');
+  loadingBubble.className = 'message-bubble message-loading';
+  loadingBubble.id = 'loading-message';
+  loadingBubble.textContent = 'Thinking...';
+
+  messagesContainer.appendChild(loadingBubble);
+  messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+  return loadingBubble;
+}
+
+// Remove loading message
+function removeLoadingMessage() {
+  const loadingMessage = document.getElementById('loading-message');
+  if (loadingMessage) {
+    loadingMessage.remove();
+  }
+}
+
 // Handle search
 async function handleSearch() {
   const input = document.getElementById('note-search-input');
   const question = input.value.trim();
-  const resultsContainer = document.getElementById('results-container');
   const searchBtn = document.getElementById('search-btn');
 
   if (!question) {
     return;
   }
 
-  // Show loading state
+  // Add user message
+  addMessage(question, true);
+
+  // Add to conversation history
+  conversationHistory.push({
+    role: 'user',
+    content: question
+  });
+
+  // Clear input
+  input.value = '';
+
+  // Disable send button and show loading
   searchBtn.disabled = true;
-  searchBtn.textContent = '...';
-  resultsContainer.innerHTML = `
-    <div class="loading-state">
-      <div class="loading-spinner"></div>
-      <div class="loading-text">Searching your notes...</div>
-    </div>
-  `;
+  const loadingBubble = addLoadingMessage();
 
   try {
     // Send search request to background worker (bypasses CORS)
     chrome.runtime.sendMessage({
       action: 'searchNotes',
-      question: question
+      question: question,
+      conversationHistory: conversationHistory
     }, (response) => {
+      // Remove loading message
+      removeLoadingMessage();
+      searchBtn.disabled = false;
+
       if (chrome.runtime.lastError) {
         console.error('Message error:', chrome.runtime.lastError);
-        resultsContainer.innerHTML = `
-          <div class="error-state">
-            <div class="error-icon">⚠️</div>
-            <div class="error-text">
-              Error connecting to extension. Please reload the page.
-            </div>
-          </div>
-        `;
-        searchBtn.disabled = false;
-        searchBtn.textContent = 'Ask';
+        const errorMsg = 'Error connecting to extension. Please reload the page.';
+        addMessage(errorMsg, false);
+        conversationHistory.push({ role: 'assistant', content: errorMsg });
         return;
       }
 
       if (!response.success) {
+        let errorMsg = '';
+
         if (response.loginRequired) {
-          resultsContainer.innerHTML = `
-            <div class="error-state">
-              <div class="error-icon">🔒</div>
-              <div class="error-text">
-                Please log in to use NoteFlow
-              </div>
-            </div>
-          `;
+          errorMsg = '🔒 Please log in to use NoteFlow';
         } else if (response.noNotes) {
-          resultsContainer.innerHTML = `
-            <div class="no-notes-warning">
-              <div class="no-notes-icon">📚</div>
-              <div class="no-notes-text">
-                You haven't uploaded any notes yet. Upload your class notes on the StudyFlow website to get started!
-              </div>
-              <button class="upload-btn" id="upload-notes-btn">Upload Notes</button>
-            </div>
-          `;
-          document.getElementById('upload-notes-btn').addEventListener('click', () => {
-            window.open('https://unclephilburt.github.io/studyflowwebsite/upload.html', '_blank');
-          });
+          errorMsg = '📚 You haven\'t uploaded any notes yet. Upload your class notes on the StudyFlow website to get started!';
         } else {
-          resultsContainer.innerHTML = `
-            <div class="error-state">
-              <div class="error-icon">⚠️</div>
-              <div class="error-text">
-                ${response.error || 'Error searching notes. Please try again.'}
-              </div>
-            </div>
-          `;
+          errorMsg = response.error || '⚠️ Error searching notes. Please try again.';
         }
-        searchBtn.disabled = false;
-        searchBtn.textContent = 'Ask';
+
+        addMessage(errorMsg, false);
+        conversationHistory.push({ role: 'assistant', content: errorMsg });
         return;
       }
 
       // Display results
+      let aiResponse = '';
       if (response.results && response.results.length > 0) {
-        const resultsHTML = response.results.map(result => `
-          <div class="result-card">
-            <div class="result-hint">💡 ${result.hint}</div>
-          </div>
-        `).join('');
-
-        resultsContainer.innerHTML = resultsHTML;
+        aiResponse = response.results[0].hint;
       } else {
-        resultsContainer.innerHTML = `
-          <div class="idle-state">
-            <div class="idle-icon">🤷</div>
-            <div class="idle-text">
-              I couldn't find anything about that in your notes. Try rephrasing your question or upload more notes!
-            </div>
-          </div>
-        `;
+        aiResponse = 'I couldn\'t find anything about that in your notes. Try rephrasing your question or upload more notes!';
       }
 
-      searchBtn.disabled = false;
-      searchBtn.textContent = 'Ask';
+      addMessage(aiResponse, false);
+      conversationHistory.push({ role: 'assistant', content: aiResponse });
     });
 
   } catch (error) {
     console.error('Search error:', error);
-    resultsContainer.innerHTML = `
-      <div class="error-state">
-        <div class="error-icon">⚠️</div>
-        <div class="error-text">
-          Error searching notes. Please try again.
-        </div>
-      </div>
-    `;
+    removeLoadingMessage();
+    const errorMsg = '⚠️ Error searching notes. Please try again.';
+    addMessage(errorMsg, false);
+    conversationHistory.push({ role: 'assistant', content: errorMsg });
     searchBtn.disabled = false;
-    searchBtn.textContent = 'Ask';
   }
 }
 

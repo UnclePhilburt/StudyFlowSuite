@@ -6,12 +6,12 @@ const BACKEND_URL = 'https://studyflowsuite.onrender.com';
 // Listen for messages from content script
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'searchNotes') {
-    handleSearchNotes(request.question, sendResponse);
+    handleSearchNotes(request.question, request.conversationHistory, sendResponse);
     return true; // Keep channel open for async response
   }
 });
 
-async function handleSearchNotes(question, sendResponse) {
+async function handleSearchNotes(question, conversationHistory, sendResponse) {
   try {
     // Get auth token from storage
     const result = await chrome.storage.local.get(['authToken', 'jwtToken']);
@@ -33,7 +33,10 @@ async function handleSearchNotes(question, sendResponse) {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`
       },
-      body: JSON.stringify({ question })
+      body: JSON.stringify({
+        question,
+        conversationHistory: conversationHistory || []
+      })
     });
 
     if (!response.ok) {
