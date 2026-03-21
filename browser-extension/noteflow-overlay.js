@@ -3,8 +3,8 @@ console.log('StudyFlow NoteFlow loaded');
 
 const BACKEND_URL = 'https://studyflowsuite.onrender.com';
 
-// Conversation history
-let conversationHistory = [];
+// Conversation ID for memory across messages
+let conversationId = null;
 
 // Create floating overlay window
 function createFloatingOverlay() {
@@ -23,15 +23,20 @@ function createFloatingOverlay() {
     <style>
       #studyflow-noteflow {
         position: fixed !important;
-        top: 100px !important;
-        right: 20px !important;
-        left: auto !important;
-        bottom: auto !important;
+        top: 100px;
+        right: 20px;
+        left: auto;
+        bottom: auto;
         width: 380px;
+        height: 600px;
+        min-width: 320px;
+        max-width: 800px;
+        min-height: 400px;
+        max-height: 90vh;
         background: white;
         border-radius: 16px;
         box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-        z-index: 2147483647;
+        z-index: 2147483647 !important;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         overflow: hidden;
       }
@@ -307,6 +312,48 @@ function createFloatingOverlay() {
         font-size: 13px;
         color: #991b1b;
       }
+
+      .resize-handle {
+        position: absolute;
+        z-index: 10;
+      }
+
+      .resize-handle-right {
+        right: 0;
+        top: 0;
+        width: 8px;
+        height: 100%;
+        cursor: ew-resize;
+      }
+
+      .resize-handle-bottom {
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        height: 8px;
+        cursor: ns-resize;
+      }
+
+      .resize-handle-corner {
+        right: 0;
+        bottom: 0;
+        width: 16px;
+        height: 16px;
+        cursor: nwse-resize;
+        background: rgba(102, 126, 234, 0.1);
+        border-radius: 0 0 16px 0;
+      }
+
+      .resize-handle-corner::after {
+        content: '';
+        position: absolute;
+        right: 4px;
+        bottom: 4px;
+        width: 8px;
+        height: 8px;
+        border-right: 2px solid rgba(102, 126, 234, 0.4);
+        border-bottom: 2px solid rgba(102, 126, 234, 0.4);
+      }
     </style>
 
     <div class="noteflow-header" id="noteflow-drag-handle">
@@ -342,6 +389,10 @@ function createFloatingOverlay() {
         </button>
       </div>
     </div>
+
+    <div class="resize-handle resize-handle-right"></div>
+    <div class="resize-handle resize-handle-bottom"></div>
+    <div class="resize-handle resize-handle-corner"></div>
   `;
 
   document.body.appendChild(overlay);
@@ -362,7 +413,7 @@ function createFloatingOverlay() {
 
     console.log('✅ All elements found, attaching events...');
 
-    // Dragging
+    // Dragging variables
     let isDragging = false;
     let currentX;
     let currentY;
@@ -371,10 +422,32 @@ function createFloatingOverlay() {
     let xOffset = 0;
     let yOffset = 0;
 
+    // Resizing variables
+    let isResizing = false;
+    let resizeDirection = '';
+    let startWidth, startHeight, startX, startY;
+
     dragHandle.addEventListener('mousedown', (e) => {
       console.log('🖱️ Mouse down on drag handle');
-      initialX = e.clientX - xOffset;
-      initialY = e.clientY - yOffset;
+
+      // Get current visual position
+      const rect = overlay.getBoundingClientRect();
+
+      // Always use left/top positioning for dragging
+      if (overlay.style.left === '' || overlay.style.left === 'auto') {
+        // First time dragging - convert from right positioning to left positioning
+        overlay.style.left = rect.left + 'px';
+        overlay.style.top = rect.top + 'px';
+        overlay.style.right = 'auto';
+        overlay.style.bottom = 'auto';
+        overlay.style.transform = 'none';
+      }
+
+      initialX = e.clientX;
+      initialY = e.clientY;
+      xOffset = parseInt(overlay.style.left, 10);
+      yOffset = parseInt(overlay.style.top, 10);
+
       isDragging = true;
       dragHandle.style.cursor = 'grabbing';
     });
@@ -382,13 +455,13 @@ function createFloatingOverlay() {
     document.addEventListener('mousemove', (e) => {
       if (isDragging) {
         e.preventDefault();
-        currentX = e.clientX - initialX;
-        currentY = e.clientY - initialY;
-        xOffset = currentX;
-        yOffset = currentY;
 
-        overlay.style.transform = `translate(${currentX}px, ${currentY}px)`;
-        console.log('📍 Moving:', currentX, currentY);
+        const newX = xOffset + (e.clientX - initialX);
+        const newY = yOffset + (e.clientY - initialY);
+
+        overlay.style.left = newX + 'px';
+        overlay.style.top = newY + 'px';
+        console.log('📍 Moving:', newX, newY);
       }
     });
 
@@ -398,9 +471,97 @@ function createFloatingOverlay() {
         isDragging = false;
         dragHandle.style.cursor = 'grab';
       }
+      if (isResizing) {
+        isResizing = false;
+        resizeDirection = '';
+
+        // Save size to localStorage
+        const width = parseInt(overlay.style.width, 10);
+        const height = parseInt(overlay.style.height, 10);
+        chrome.storage.local.set({
+          noteflowWidth: width,
+          noteflowHeight: height
+        });
+      }
     });
 
     dragHandle.style.cursor = 'grab';
+
+    // Resizing
+    const resizeRight = overlay.querySelector('.resize-handle-right');
+    const resizeBottom = overlay.querySelector('.resize-handle-bottom');
+    const resizeCorner = overlay.querySelector('.resize-handle-corner');
+
+    // Load saved size from localStorage
+    chrome.storage.local.get(['noteflowWidth', 'noteflowHeight'], (result) => {
+      if (result.noteflowWidth) {
+        overlay.style.width = result.noteflowWidth + 'px';
+      }
+      if (result.noteflowHeight) {
+        overlay.style.height = result.noteflowHeight + 'px';
+      }
+    });
+
+    function startResize(e, direction) {
+      isResizing = true;
+      resizeDirection = direction;
+      startX = e.clientX;
+      startY = e.clientY;
+
+      // Get current dimensions and position
+      const rect = overlay.getBoundingClientRect();
+      startWidth = rect.width;
+      startHeight = rect.height;
+
+      // Get current transform values
+      const transform = overlay.style.transform || '';
+
+      // Convert from right/bottom positioning to left/top while preserving visual position
+      overlay.style.left = rect.left + 'px';
+      overlay.style.top = rect.top + 'px';
+      overlay.style.right = 'auto';
+      overlay.style.bottom = 'auto';
+
+      // Clear transform since we've converted position
+      overlay.style.transform = 'none';
+
+      // Reset drag offsets since position is now in left/top
+      xOffset = 0;
+      yOffset = 0;
+
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
+    resizeRight.addEventListener('mousedown', (e) => startResize(e, 'right'));
+    resizeBottom.addEventListener('mousedown', (e) => startResize(e, 'bottom'));
+    resizeCorner.addEventListener('mousedown', (e) => startResize(e, 'corner'));
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isResizing) return;
+
+      e.preventDefault();
+
+      if (resizeDirection === 'right' || resizeDirection === 'corner') {
+        const newWidth = startWidth + (e.clientX - startX);
+        const minWidth = parseInt(getComputedStyle(overlay).minWidth, 10);
+        const maxWidth = parseInt(getComputedStyle(overlay).maxWidth, 10);
+
+        if (newWidth >= minWidth && newWidth <= maxWidth) {
+          overlay.style.width = newWidth + 'px';
+        }
+      }
+
+      if (resizeDirection === 'bottom' || resizeDirection === 'corner') {
+        const newHeight = startHeight + (e.clientY - startY);
+        const minHeight = parseInt(getComputedStyle(overlay).minHeight, 10);
+        const maxHeight = parseInt(getComputedStyle(overlay).maxHeight, 10);
+
+        if (newHeight >= minHeight && newHeight <= maxHeight) {
+          overlay.style.height = newHeight + 'px';
+        }
+      }
+    });
 
     // Minimize button
     minimizeBtn.addEventListener('click', () => {
@@ -487,12 +648,6 @@ async function handleSearch() {
   // Add user message
   addMessage(question, true);
 
-  // Add to conversation history
-  conversationHistory.push({
-    role: 'user',
-    content: question
-  });
-
   // Clear input
   input.value = '';
 
@@ -501,11 +656,11 @@ async function handleSearch() {
   const loadingBubble = addLoadingMessage();
 
   try {
-    // Send search request to background worker (bypasses CORS)
+    // Send conversational chat request to background worker (bypasses CORS)
     chrome.runtime.sendMessage({
       action: 'searchNotes',
       question: question,
-      conversationHistory: conversationHistory
+      conversationId: conversationId // Pass existing conversation ID for follow-ups
     }, (response) => {
       // Remove loading message
       removeLoadingMessage();
@@ -515,7 +670,6 @@ async function handleSearch() {
         console.error('Message error:', chrome.runtime.lastError);
         const errorMsg = 'Error connecting to extension. Please reload the page.';
         addMessage(errorMsg, false);
-        conversationHistory.push({ role: 'assistant', content: errorMsg });
         return;
       }
 
@@ -531,20 +685,24 @@ async function handleSearch() {
         }
 
         addMessage(errorMsg, false);
-        conversationHistory.push({ role: 'assistant', content: errorMsg });
         return;
       }
 
-      // Display results
-      let aiResponse = '';
-      if (response.results && response.results.length > 0) {
-        aiResponse = response.results[0].hint;
-      } else {
-        aiResponse = 'I couldn\'t find anything about that in your notes. Try rephrasing your question or upload more notes!';
+      // Store conversation ID for follow-up questions
+      if (response.conversationId) {
+        conversationId = response.conversationId;
+        console.log('💬 Conversation ID:', conversationId);
       }
 
+      // Display AI conversational response
+      const aiResponse = response.response || 'I couldn\'t find anything about that in your notes. Try rephrasing your question or upload more notes!';
+
       addMessage(aiResponse, false);
-      conversationHistory.push({ role: 'assistant', content: aiResponse });
+
+      // Optionally show sources
+      if (response.sources && response.sources.length > 0) {
+        console.log('📚 Sources:', response.sources);
+      }
     });
 
   } catch (error) {
@@ -552,7 +710,6 @@ async function handleSearch() {
     removeLoadingMessage();
     const errorMsg = '⚠️ Error searching notes. Please try again.';
     addMessage(errorMsg, false);
-    conversationHistory.push({ role: 'assistant', content: errorMsg });
     searchBtn.disabled = false;
   }
 }

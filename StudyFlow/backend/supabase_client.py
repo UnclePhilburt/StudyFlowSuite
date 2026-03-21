@@ -7,24 +7,35 @@ import os
 from supabase import create_client, Client
 from StudyFlow.logging_utils import debug_log
 
+# Load .env file if it exists (for local development)
+try:
+    from dotenv import load_dotenv
+    import pathlib
+    env_path = pathlib.Path(__file__).parent.parent.parent / '.env'
+    if env_path.exists():
+        load_dotenv(env_path)
+        print(f"[+] Loaded .env from {env_path}")
+except ImportError:
+    pass  # python-dotenv not installed, use system env vars
+
 # Initialize Supabase client
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY")
 SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY")
 
 # Debug: Print what we actually got
-print(f"🔍 SUPABASE_URL = {SUPABASE_URL}")
-print(f"🔍 SUPABASE_SERVICE_KEY = {'[PRESENT]' if SUPABASE_SERVICE_KEY else '[MISSING]'}")
-print(f"🔍 All env vars with 'SUPABASE': {[k for k in os.environ.keys() if 'SUPABASE' in k]}")
+print(f"[*] SUPABASE_URL = {SUPABASE_URL}")
+print(f"[*] SUPABASE_SERVICE_KEY = {'[PRESENT]' if SUPABASE_SERVICE_KEY else '[MISSING]'}")
+print(f"[*] All env vars with 'SUPABASE': {[k for k in os.environ.keys() if 'SUPABASE' in k]}")
 
 if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
-    print(f"❌ ERROR: SUPABASE_URL={SUPABASE_URL}, SERVICE_KEY={'[PRESENT]' if SUPABASE_SERVICE_KEY else '[MISSING]'}")
+    print(f"[-] ERROR: SUPABASE_URL={SUPABASE_URL}, SERVICE_KEY={'[PRESENT]' if SUPABASE_SERVICE_KEY else '[MISSING]'}")
     raise RuntimeError("Missing SUPABASE_URL or SUPABASE_SERVICE_KEY environment variables")
 
 # Service role client (for backend operations)
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
-debug_log(f"✅ Supabase client initialized: {SUPABASE_URL}")
+debug_log(f"[+] Supabase client initialized: {SUPABASE_URL}")
 
 
 def get_user_profile(user_id: str) -> dict:
@@ -33,7 +44,7 @@ def get_user_profile(user_id: str) -> dict:
         response = supabase.table("user_profiles").select("*").eq("id", user_id).single().execute()
         return response.data
     except Exception as e:
-        debug_log(f"❌ Error fetching user profile: {e}")
+        debug_log(f"[-] Error fetching user profile: {e}")
         return None
 
 
@@ -48,10 +59,10 @@ def create_user_profile(user_id: str, email: str, full_name: str = None, collect
             "subscription_tier": "free",
             "pages_uploaded_this_month": 0
         }).execute()
-        debug_log(f"✅ Created user profile: {email} (Collective Brain: {collective_brain_opt_in})")
+        debug_log(f"[+] Created user profile: {email} (Collective Brain: {collective_brain_opt_in})")
         return response.data[0]
     except Exception as e:
-        debug_log(f"❌ Error creating user profile: {e}")
+        debug_log(f"[-] Error creating user profile: {e}")
         return None
 
 
@@ -83,7 +94,7 @@ def check_page_limit(user_id: str, pages_to_add: int) -> tuple[bool, str]:
         return True, f"OK ({current_pages + pages_to_add}/{limit} pages used this month)"
 
     except Exception as e:
-        debug_log(f"❌ Error checking page limit: {e}")
+        debug_log(f"[-] Error checking page limit: {e}")
         return False, "Error checking limits"
 
 
@@ -102,11 +113,11 @@ def increment_page_count(user_id: str, pages: int) -> bool:
             "pages_uploaded_this_month": new_count
         }).eq("id", user_id).execute()
 
-        debug_log(f"✅ Incremented page count for user {user_id}: +{pages} pages (total: {new_count})")
+        debug_log(f"[+] Incremented page count for user {user_id}: +{pages} pages (total: {new_count})")
         return True
 
     except Exception as e:
-        debug_log(f"❌ Error incrementing page count: {e}")
+        debug_log(f"[-] Error incrementing page count: {e}")
         return False
 
 
@@ -123,7 +134,7 @@ def upload_file_to_storage(file_content: bytes, file_path: str, content_type: st
             file_options={"content-type": content_type}
         )
 
-        debug_log(f"✅ Uploaded file to storage: {file_path}")
+        debug_log(f"[+] Uploaded file to storage: {file_path}")
 
         # Generate signed URL (valid for 1 year)
         signed_url = supabase.storage.from_("note-files").create_signed_url(
@@ -134,7 +145,7 @@ def upload_file_to_storage(file_content: bytes, file_path: str, content_type: st
         return signed_url['signedURL']
 
     except Exception as e:
-        debug_log(f"❌ Error uploading file to storage: {e}")
+        debug_log(f"[-] Error uploading file to storage: {e}")
         return None
 
 
@@ -163,11 +174,11 @@ def create_note_record(user_id: str, filename: str, file_type: str, file_size: i
             })
 
         response = supabase.table("notes").insert(note_data).execute()
-        debug_log(f"✅ Created note record: {filename}")
+        debug_log(f"[+] Created note record: {filename}")
         return response.data[0]
 
     except Exception as e:
-        debug_log(f"❌ Error creating note record: {e}")
+        debug_log(f"[-] Error creating note record: {e}")
         return None
 
 
@@ -196,7 +207,7 @@ def create_note_chunk(note_id: str, user_id: str, chunk_text: str, chunk_index: 
         return response.data[0]
 
     except Exception as e:
-        debug_log(f"❌ Error creating note chunk: {e}")
+        debug_log(f"[-] Error creating note chunk: {e}")
         return None
 
 
@@ -204,10 +215,10 @@ def mark_note_as_processed(note_id: str) -> bool:
     """Mark a note as fully processed"""
     try:
         supabase.table("notes").update({"processed": True}).eq("id", note_id).execute()
-        debug_log(f"✅ Marked note {note_id} as processed")
+        debug_log(f"[+] Marked note {note_id} as processed")
         return True
     except Exception as e:
-        debug_log(f"❌ Error marking note as processed: {e}")
+        debug_log(f"[-] Error marking note as processed: {e}")
         return False
 
 
@@ -220,10 +231,10 @@ def make_note_public(note_id: str, user_id: str) -> bool:
         # Update all chunks
         supabase.table("note_chunks").update({"is_public": True}).eq("note_id", note_id).execute()
 
-        debug_log(f"✅ Made note {note_id} public")
+        debug_log(f"[+] Made note {note_id} public")
         return True
     except Exception as e:
-        debug_log(f"❌ Error making note public: {e}")
+        debug_log(f"[-] Error making note public: {e}")
         return False
 
 
@@ -245,11 +256,11 @@ def search_notes_vector(query_embedding: list, user_id: str, university: str = N
             "match_count": match_count
         }).execute()
 
-        debug_log(f"✅ Vector search found {len(response.data)} results")
+        debug_log(f"[+] Vector search found {len(response.data)} results")
         return response.data
 
     except Exception as e:
-        debug_log(f"❌ Error searching notes with vector: {e}")
+        debug_log(f"[-] Error searching notes with vector: {e}")
         # Log more details for debugging
         import traceback
         debug_log(f"Full error traceback: {traceback.format_exc()}")
@@ -262,7 +273,7 @@ def get_user_notes(user_id: str) -> list:
         response = supabase.table("notes").select("*").eq("user_id", user_id).order("uploaded_at", desc=True).execute()
         return response.data
     except Exception as e:
-        debug_log(f"❌ Error fetching user notes: {e}")
+        debug_log(f"[-] Error fetching user notes: {e}")
         return []
 
 
@@ -271,8 +282,8 @@ def delete_note(note_id: str, user_id: str) -> bool:
     try:
         # Supabase CASCADE will automatically delete chunks
         supabase.table("notes").delete().eq("id", note_id).eq("user_id", user_id).execute()
-        debug_log(f"✅ Deleted note {note_id}")
+        debug_log(f"[+] Deleted note {note_id}")
         return True
     except Exception as e:
-        debug_log(f"❌ Error deleting note: {e}")
+        debug_log(f"[-] Error deleting note: {e}")
         return False
