@@ -191,16 +191,25 @@ def generate_conversational_response(
 
         genai.configure(api_key=gemini_api_key)
 
-        # Build context from search results and collect contributor usernames
+        # Build context from search results and collect contributor usernames + Wikipedia articles
         context_chunks = []
         contributors = set()  # Use set to avoid duplicates
+        wikipedia_articles = []  # Track Wikipedia articles for attribution
+
         for result in search_results[:3]:  # Use top 3 results
             text = result.get('content_summary') or result.get('chunk_text', '')
             context_chunks.append(text)
 
-            # Collect username if available
-            if result.get('username'):
-                contributors.add(result.get('username'))
+            # Check if this is a Wikipedia source
+            if result.get('university') == 'Wikipedia':
+                # Extract article title from original_filename (stored in result during search)
+                if result.get('original_filename'):
+                    article_title = result['original_filename'].replace('.txt', '')
+                    wikipedia_articles.append(article_title)
+            else:
+                # Collect username if available (for student notes)
+                if result.get('username'):
+                    contributors.add(result.get('username'))
 
         context = "\n\n".join(context_chunks)
 
@@ -260,10 +269,50 @@ No relevant context found. Politely let them know you don't have information abo
 
         answer = response.text
 
-        # Add contributor attribution if we have contributors
-        if contributors:
+        # Build attribution footer with Wikipedia links and student contributors
+        from datetime import datetime
+
+        attribution_parts = []
+
+        # Build the main attribution line
+        if wikipedia_articles and contributors:
+            # Both Wikipedia and student notes
+            wiki_links = []
+            for article in wikipedia_articles[:3]:  # Max 3 Wikipedia articles
+                # URL-encode the article title (replace spaces with underscores)
+                url_title = article.replace(' ', '_')
+                wiki_link = f"[{article}](https://en.wikipedia.org/wiki/{url_title})"
+                wiki_links.append(wiki_link)
+
+            wiki_text = ", ".join(wiki_links)
             contributor_list = ", ".join([f"@{username}" for username in sorted(contributors)])
-            answer += f"\n\n---\n*This summary was synthesized from the Nexus, featuring insights from {contributor_list}.*"
+
+            attribution_parts.append(f"*This summary was synthesized from the Nexus and Wikipedia: {wiki_text}, featuring insights from {contributor_list}.*")
+
+        elif wikipedia_articles:
+            # Wikipedia only
+            wiki_links = []
+            for article in wikipedia_articles[:3]:
+                url_title = article.replace(' ', '_')
+                wiki_link = f"[{article}](https://en.wikipedia.org/wiki/{url_title})"
+                wiki_links.append(wiki_link)
+
+            wiki_text = ", ".join(wiki_links)
+            attribution_parts.append(f"*This summary was synthesized from Wikipedia: {wiki_text}.*")
+
+        elif contributors:
+            # Student notes only
+            contributor_list = ", ".join([f"@{username}" for username in sorted(contributors)])
+            attribution_parts.append(f"*This summary was synthesized from the Nexus, featuring insights from {contributor_list}.*")
+
+        # Add Wikipedia CC BY-SA compliance footer if Wikipedia sources used
+        if wikipedia_articles:
+            today = datetime.now().strftime("%B %d, %Y")
+            attribution_parts.append(f"*Wikipedia content retrieved on {today}. Licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).*")
+
+        # Append attribution to answer
+        if attribution_parts:
+            answer += "\n\n---\n" + "\n\n".join(attribution_parts)
 
         debug_log(f"✅ Generated {len(answer)} character response with Gemini")
 

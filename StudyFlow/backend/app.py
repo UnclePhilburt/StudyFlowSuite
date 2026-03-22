@@ -2999,6 +2999,16 @@ def search_notes():
             note = supabase.table("notes").select("original_filename").eq("id", result['note_id']).single().execute()
             filename = note.data['original_filename'] if note.data else "Unknown"
 
+            # Check if this is a Wikipedia source
+            is_wikipedia = result.get('university') == 'Wikipedia'
+            wikipedia_url = None
+
+            if is_wikipedia and filename.endswith('.txt'):
+                # Extract article title and create Wikipedia URL
+                article_title = filename.replace('.txt', '')
+                url_title = article_title.replace(' ', '_')
+                wikipedia_url = f"https://en.wikipedia.org/wiki/{url_title}"
+
             # Decide which text to show
             text_to_show = result['content_summary'] if result['content_summary'] else result['chunk_text']
 
@@ -3007,11 +3017,21 @@ def search_notes():
             hint = generate_hint_from_text(question, text_to_show)
             print(f"💡 Generated answer: {hint[:100]}...")
 
+            # Build source attribution
+            if is_wikipedia:
+                source_text = f"Wikipedia: {filename.replace('.txt', '')}"
+            elif result['university']:
+                source_text = f"{filename} ({result['university']} - {result['course_code']})"
+            else:
+                source_text = filename
+
             formatted_results.append({
-                "source": f"{filename} ({result['university']} - {result['course_code']})" if result['university'] else filename,
+                "source": source_text,
                 "text": text_to_show[:300] + "..." if len(text_to_show) > 300 else text_to_show,
                 "hint": hint,
                 "from_collective_brain": not result['is_own_note'],
+                "from_wikipedia": is_wikipedia,
+                "wikipedia_url": wikipedia_url,
                 "similarity": round(result['similarity'], 2)
             })
 
