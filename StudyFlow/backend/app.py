@@ -2733,6 +2733,38 @@ def delete_note_endpoint(note_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/notes/<note_id>/rename", methods=["PATCH"])
+@supabase_auth_required
+def rename_note_endpoint(note_id):
+    """
+    Rename a note by ID (only if it belongs to current user).
+    Request body: { "filename": "new_name.pdf" }
+    """
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        data = request.get_json()
+        new_filename = data.get("filename", "").strip()
+
+        if not new_filename:
+            return jsonify({"error": "Filename is required"}), 400
+
+        # Verify ownership and update filename
+        response = supabase.table("notes").update({
+            "filename": new_filename
+        }).eq("id", note_id).eq("user_id", request.user_id).execute()
+
+        if response.data:
+            debug_log(f"Renamed note {note_id} to {new_filename}")
+            return jsonify({"success": True, "filename": new_filename}), 200
+        else:
+            return jsonify({"error": "Note not found or unauthorized"}), 404
+
+    except Exception as e:
+        debug_log(f"❌ Rename note error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/notes/<note_id>/download", methods=["GET"])
 @supabase_auth_required
 def download_note_endpoint(note_id):
