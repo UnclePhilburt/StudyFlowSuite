@@ -2732,7 +2732,8 @@ def list_notes():
                 "is_public": note['is_public'],
                 "university": note.get('university'),
                 "course_code": note.get('course_code'),
-                "professor": note.get('professor')
+                "professor": note.get('professor'),
+                "folder_id": note.get('folder_id')  # Include folder assignment
             })
 
         return jsonify(formatted_notes), 200
@@ -3342,9 +3343,154 @@ def update_collective_brain_setting():
         return jsonify({"error": str(e)}), 500
 
 
+# ============ FOLDER ENDPOINTS ============
+
+@app.route("/api/folders/list", methods=["GET"])
+@supabase_auth_required
+def list_folders():
+    """Get all folders for current user"""
+    try:
+        from StudyFlow.backend.supabase_client import get_user_folders
+
+        folders = get_user_folders(request.user_id)
+        return jsonify(folders), 200
+
+    except Exception as e:
+        debug_log(f"Error listing folders: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/folders/create", methods=["POST"])
+@supabase_auth_required
+def create_folder_endpoint():
+    """
+    Create a new folder.
+    Request body: {
+        "name": "Folder Name",
+        "parent_id": "uuid" (optional),
+        "color": "#7c9885" (optional),
+        "position_data": {"x": 20, "y": 20} (optional)
+    }
+    """
+    try:
+        from StudyFlow.backend.supabase_client import create_folder
+
+        data = request.get_json()
+        name = data.get('name')
+
+        if not name:
+            return jsonify({"error": "Folder name is required"}), 400
+
+        folder = create_folder(
+            user_id=request.user_id,
+            name=name,
+            parent_id=data.get('parent_id'),
+            color=data.get('color', '#7c9885'),
+            position_data=data.get('position_data')
+        )
+
+        if folder:
+            return jsonify(folder), 201
+        else:
+            return jsonify({"error": "Failed to create folder"}), 500
+
+    except Exception as e:
+        debug_log(f"Error creating folder: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/folders/<folder_id>", methods=["PUT"])
+@supabase_auth_required
+def update_folder_endpoint(folder_id):
+    """
+    Update a folder (rename, move, change color, update position).
+    Request body: {
+        "name": "New Name" (optional),
+        "parent_id": "uuid" (optional),
+        "color": "#7c9885" (optional),
+        "position_data": {"x": 100, "y": 200} (optional)
+    }
+    """
+    try:
+        from StudyFlow.backend.supabase_client import update_folder
+
+        data = request.get_json()
+
+        # Build updates dict from provided fields
+        updates = {}
+        if 'name' in data:
+            updates['name'] = data['name']
+        if 'parent_id' in data:
+            updates['parent_id'] = data['parent_id']
+        if 'color' in data:
+            updates['color'] = data['color']
+        if 'position_data' in data:
+            updates['position_data'] = data['position_data']
+
+        if not updates:
+            return jsonify({"error": "No updates provided"}), 400
+
+        folder = update_folder(folder_id, request.user_id, updates)
+
+        if folder:
+            return jsonify(folder), 200
+        else:
+            return jsonify({"error": "Folder not found or unauthorized"}), 404
+
+    except Exception as e:
+        debug_log(f"Error updating folder: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/folders/<folder_id>", methods=["DELETE"])
+@supabase_auth_required
+def delete_folder_endpoint(folder_id):
+    """Delete a folder (CASCADE moves children to parent)"""
+    try:
+        from StudyFlow.backend.supabase_client import delete_folder
+
+        success = delete_folder(folder_id, request.user_id)
+
+        if success:
+            return jsonify({"success": True}), 200
+        else:
+            return jsonify({"error": "Folder not found or unauthorized"}), 404
+
+    except Exception as e:
+        debug_log(f"Error deleting folder: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/notes/<note_id>/folder", methods=["PUT"])
+@supabase_auth_required
+def move_note_to_folder_endpoint(note_id):
+    """
+    Assign a note to a folder (or remove from folder).
+    Request body: {
+        "folder_id": "uuid" (or null to remove from folder)
+    }
+    """
+    try:
+        from StudyFlow.backend.supabase_client import update_note_folder
+
+        data = request.get_json()
+        folder_id = data.get('folder_id')  # Can be None
+
+        success = update_note_folder(note_id, request.user_id, folder_id)
+
+        if success:
+            return jsonify({"success": True}), 200
+        else:
+            return jsonify({"error": "Note not found or unauthorized"}), 404
+
+    except Exception as e:
+        debug_log(f"Error moving note to folder: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     try:
         port = int(os.environ.get("PORT", 5000))
         app.run(host="0.0.0.0", port=port)
     except Exception as e:
-        debug_log(f"🔥 Server startup error: {e}\n{traceback.format_exc()}")
+        debug_log(f"Server startup error: {e}\n{traceback.format_exc()}")

@@ -350,3 +350,80 @@ def mark_upload_as_processed(file_hash: str) -> bool:
     except Exception as e:
         debug_log(f"[-] Error marking upload as processed: {e}")
         return False
+
+
+# ============================================================================
+# FOLDER MANAGEMENT
+# ============================================================================
+
+def get_user_folders(user_id: str) -> list:
+    """Get all folders for a user"""
+    try:
+        response = supabase.table("folders").select("*").eq("user_id", user_id).order("created_at").execute()
+        return response.data
+    except Exception as e:
+        debug_log(f"[-] Error fetching user folders: {e}")
+        return []
+
+
+def create_folder(user_id: str, name: str, parent_id: str = None, color: str = "#7c9885", position_data: dict = None) -> dict:
+    """Create a new folder"""
+    try:
+        folder_data = {
+            "user_id": user_id,
+            "name": name,
+            "parent_id": parent_id,
+            "color": color,
+            "position_data": position_data or {}
+        }
+
+        response = supabase.table("folders").insert(folder_data).execute()
+        debug_log(f"[+] Created folder: {name}")
+        return response.data[0]
+
+    except Exception as e:
+        debug_log(f"[-] Error creating folder: {e}")
+        return None
+
+
+def update_folder(folder_id: str, user_id: str, updates: dict) -> dict:
+    """Update a folder (name, parent_id, color, position_data)"""
+    try:
+        # Add updated_at timestamp
+        updates['updated_at'] = 'NOW()'
+
+        response = supabase.table("folders").update(updates).eq("id", folder_id).eq("user_id", user_id).execute()
+        debug_log(f"[+] Updated folder {folder_id}")
+        return response.data[0] if response.data else None
+
+    except Exception as e:
+        debug_log(f"[-] Error updating folder: {e}")
+        return None
+
+
+def delete_folder(folder_id: str, user_id: str) -> bool:
+    """Delete a folder (CASCADE will move children to parent)"""
+    try:
+        # Supabase CASCADE will automatically handle child folders
+        supabase.table("folders").delete().eq("id", folder_id).eq("user_id", user_id).execute()
+        debug_log(f"[+] Deleted folder {folder_id}")
+        return True
+
+    except Exception as e:
+        debug_log(f"[-] Error deleting folder: {e}")
+        return False
+
+
+def update_note_folder(note_id: str, user_id: str, folder_id: str = None) -> bool:
+    """Assign a note to a folder (or remove from folder if folder_id is None)"""
+    try:
+        supabase.table("notes").update({
+            "folder_id": folder_id
+        }).eq("id", note_id).eq("user_id", user_id).execute()
+
+        debug_log(f"[+] Moved note {note_id} to folder {folder_id}")
+        return True
+
+    except Exception as e:
+        debug_log(f"[-] Error updating note folder: {e}")
+        return False
