@@ -23377,3 +23377,5 @@ Based on the above, which answer option is correct? Return only the number corre
 [18:03:54] 🌐 Starting extension bridge server on http://localhost:5555
 [18:03:54] 📡 Extension can now connect and send quiz data
 [18:03:54] ✅ Extension bridge server started on port 5555
+[02:38:24] [+] Supabase client initialized: https://mxddgbpxjoltaimftpmn.supabase.co
+[02:40:10] [+] Supabase client initialized: https://mxddgbpxjoltaimftpmn.supabase.co

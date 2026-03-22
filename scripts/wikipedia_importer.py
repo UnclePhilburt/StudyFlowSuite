@@ -2,7 +2,7 @@
 Wikipedia Content Importer for StudyFlow
 -----------------------------------------
 Extracts Wikipedia articles and adds them to the StudyFlow database
-as searchable note chunks for the Collective Brain.
+as searchable note chunks for the Nexus.
 
 Legal: Wikipedia content is CC BY-SA licensed - properly attributed.
 """

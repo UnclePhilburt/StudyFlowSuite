@@ -39,17 +39,19 @@ class WikipediaBulkImporter:
     def __init__(self, progress_file='wikipedia_import_progress.json'):
         self.progress_file = progress_file
         self.processed_articles = self.load_progress()
+        self.db_cached_articles = self.load_from_database()
         self.stats = {
             'total_attempted': 0,
             'successful': 0,
             'failed': 0,
             'skipped': 0,
+            'skipped_db': 0,
             'start_time': None,
             'end_time': None
         }
 
     def load_progress(self) -> Set[str]:
-        """Load previously processed articles"""
+        """Load previously processed articles from progress file"""
         if os.path.exists(self.progress_file):
             try:
                 with open(self.progress_file, 'r', encoding='utf-8') as f:
@@ -58,6 +60,32 @@ class WikipediaBulkImporter:
             except Exception as e:
                 print(f"[!] Could not load progress: {e}")
         return set()
+
+    def load_from_database(self) -> Set[str]:
+        """Load already imported Wikipedia articles from database"""
+        try:
+            from StudyFlow.backend.supabase_client import supabase
+
+            print("[*] Checking database for existing Wikipedia articles...")
+
+            # Query notes table for Wikipedia articles
+            # Wikipedia articles have file_type = "text/wikipedia" and original_filename ends with .txt
+            response = supabase.table("notes").select("original_filename").eq("file_type", "text/wikipedia").execute()
+
+            # Extract article titles from filenames (remove .txt extension)
+            existing = set()
+            for note in response.data:
+                filename = note['original_filename']
+                if filename.endswith('.txt'):
+                    title = filename[:-4]  # Remove .txt
+                    existing.add(title)
+
+            print(f"[+] Found {len(existing)} Wikipedia articles already in database")
+            return existing
+
+        except Exception as e:
+            print(f"[!] Could not load from database: {e}")
+            return set()
 
     def save_progress(self):
         """Save progress to resume later"""
@@ -174,7 +202,13 @@ class WikipediaBulkImporter:
         print(f"{'='*70}\n")
 
         for i, title in enumerate(articles, 1):
-            # Skip if already processed
+            # Skip if already in database
+            if title in self.db_cached_articles:
+                self.stats['skipped_db'] += 1
+                print(f"[{i}/{total}] Skipping (already in database): {title}")
+                continue
+
+            # Skip if already processed in this session
             if title in self.processed_articles:
                 self.stats['skipped'] += 1
                 print(f"[{i}/{total}] Skipping (already processed): {title}")
@@ -220,11 +254,13 @@ class WikipediaBulkImporter:
         print(f"\n{'='*70}")
         print("IMPORT SUMMARY")
         print(f"{'='*70}")
-        print(f"Total attempted:  {self.stats['total_attempted']}")
-        print(f"Successful:       {self.stats['successful']}")
-        print(f"Failed:           {self.stats['failed']}")
-        print(f"Skipped:          {self.stats['skipped']}")
-        print(f"Success rate:     {(self.stats['successful']/(self.stats['total_attempted'] or 1))*100:.1f}%")
+        print(f"Total attempted:        {self.stats['total_attempted']}")
+        print(f"Successful:             {self.stats['successful']}")
+        print(f"Failed:                 {self.stats['failed']}")
+        print(f"Skipped (in database):  {self.stats['skipped_db']}")
+        print(f"Skipped (progress file): {self.stats['skipped']}")
+        if self.stats['total_attempted'] > 0:
+            print(f"Success rate:           {(self.stats['successful']/(self.stats['total_attempted']))*100:.1f}%")
         print(f"{'='*70}\n")
 
 

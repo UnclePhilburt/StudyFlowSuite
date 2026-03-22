@@ -49,7 +49,7 @@ def get_user_profile(user_id: str) -> dict:
 
 
 def create_user_profile(user_id: str, email: str, full_name: str = None, collective_brain_opt_in: bool = True) -> dict:
-    """Create a new user profile (Collective Brain enabled by default)"""
+    """Create a new user profile (Nexus enabled by default)"""
     try:
         response = supabase.table("user_profiles").insert({
             "id": user_id,
@@ -59,7 +59,7 @@ def create_user_profile(user_id: str, email: str, full_name: str = None, collect
             "subscription_tier": "free",
             "pages_uploaded_this_month": 0
         }).execute()
-        debug_log(f"[+] Created user profile: {email} (Collective Brain: {collective_brain_opt_in})")
+        debug_log(f"[+] Created user profile: {email} (Nexus: {collective_brain_opt_in})")
         return response.data[0]
     except Exception as e:
         debug_log(f"[-] Error creating user profile: {e}")
@@ -223,7 +223,7 @@ def mark_note_as_processed(note_id: str) -> bool:
 
 
 def make_note_public(note_id: str, user_id: str) -> bool:
-    """Make a note and all its chunks public (for Collective Brain)"""
+    """Make a note and all its chunks public (for Nexus)"""
     try:
         # Update note
         supabase.table("notes").update({"is_public": True}).eq("id", note_id).eq("user_id", user_id).execute()

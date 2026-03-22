@@ -15,7 +15,7 @@ def main():
     print("         StudyFlow Wikipedia Importer - Interactive Mode")
     print("=" * 70)
     print()
-    print("Import Wikipedia articles into your StudyFlow Collective Brain!")
+    print("Import Wikipedia articles into your StudyFlow Nexus!")
     print()
 
     while True:

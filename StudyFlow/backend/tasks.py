@@ -62,19 +62,19 @@ def process_note_async(note_id, user_id, full_text, course_metadata):
     Background task to process uploaded note:
     1. Chunk the text (500 words with 50-word overlap)
     2. Generate embeddings for each chunk
-    3. Anonymize chunks for Collective Brain (if user opted in)
+    3. Anonymize chunks for Nexus (if user opted in)
     4. Store chunks in Supabase
     """
     try:
         print(f"📝 Processing note {note_id} for user {user_id}")
 
-        # Get user profile to check if they opted into Collective Brain
+        # Get user profile to check if they opted into Nexus
         user_profile = get_user_profile(user_id)
         if not user_profile:
             raise ValueError(f"User profile not found for {user_id}")
 
         is_public = user_profile.get("collective_brain_opt_in", False)
-        print(f"🌐 Collective Brain opt-in: {is_public}")
+        print(f"🌐 Nexus opt-in: {is_public}")
 
         # Step 1: Chunk the text
         chunks = chunk_text_smart(full_text, chunk_size=500, overlap=50)
@@ -94,10 +94,10 @@ def process_note_async(note_id, user_id, full_text, course_metadata):
 
         print(f"🔢 Generated {len(embeddings)} embeddings")
 
-        # Step 3: Anonymize chunks if user opted into Collective Brain
+        # Step 3: Anonymize chunks if user opted into Nexus
         anonymized_summaries = []
         if is_public:
-            print("🔒 Anonymizing chunks for Collective Brain...")
+            print("🔒 Anonymizing chunks for Nexus...")
             anonymized_summaries = anonymize_chunks_batch(chunk_texts)
         else:
             anonymized_summaries = [None] * len(chunks)
@@ -130,7 +130,7 @@ def process_note_async(note_id, user_id, full_text, course_metadata):
         # Step 6: Make note public if user opted in
         if is_public:
             make_note_public(note_id, user_id)
-            print(f"🌐 Made note public for Collective Brain")
+            print(f"🌐 Made note public for Nexus")
 
         print(f"✅ Finished processing note {note_id}")
 
@@ -142,7 +142,7 @@ def process_note_async(note_id, user_id, full_text, course_metadata):
 
 def anonymize_chunks_batch(chunk_texts):
     """
-    Use Gemini to anonymize chunks for Collective Brain.
+    Use Gemini to anonymize chunks for Nexus.
     Removes personal info, rewrites in generic terms.
     """
     try:

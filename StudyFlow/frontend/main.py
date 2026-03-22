@@ -19,9 +19,9 @@ def main():
     try:
         from StudyFlow.frontend.extension_bridge import start_server
         start_server(port=5555)
-        debug_log("✅ Extension bridge server started on port 5555")
+        debug_log("Extension bridge server started on port 5555")
     except Exception as e:
-        debug_log(f"⚠️ Could not start extension bridge: {e}")
+        debug_log(f"Could not start extension bridge: {e}")
 
     launch_menu()
 
