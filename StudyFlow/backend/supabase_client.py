@@ -270,7 +270,14 @@ def search_notes_vector(query_embedding: list, user_id: str, university: str = N
 def get_user_notes(user_id: str) -> list:
     """Get all notes for a user"""
     try:
+        debug_log(f"[*] Querying notes for user_id: {user_id}")
         response = supabase.table("notes").select("*").eq("user_id", user_id).order("uploaded_at", desc=True).execute()
+        debug_log(f"[*] Query returned {len(response.data)} notes")
+
+        # Debug: Log first note's user_id to verify filtering
+        if response.data:
+            debug_log(f"[*] First note user_id: {response.data[0].get('user_id')}")
+
         return response.data
     except Exception as e:
         debug_log(f"[-] Error fetching user notes: {e}")

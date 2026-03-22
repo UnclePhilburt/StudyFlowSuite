@@ -2651,6 +2651,7 @@ def upload_note():
             return jsonify({"error": "Failed to upload file to storage"}), 500
 
         # Create note record in Supabase
+        debug_log(f"[*] Creating note for user_id: {request.user_id}")
         note = create_note_record(
             user_id=request.user_id,
             filename=original_filename,
@@ -2665,6 +2666,7 @@ def upload_note():
             return jsonify({"error": "Failed to create note record"}), 500
 
         note_id = note['id']
+        debug_log(f"[*] Created note {note_id} for user {request.user_id}")
 
         # Increment user's page count
         increment_page_count(request.user_id, page_count)
@@ -2712,7 +2714,9 @@ def list_notes():
     try:
         from StudyFlow.backend.supabase_client import get_user_notes
 
+        debug_log(f"[*] Fetching notes for user: {request.user_id}")
         notes = get_user_notes(request.user_id)
+        debug_log(f"[*] Found {len(notes)} notes for user {request.user_id}")
 
         # Format response
         formatted_notes = []
