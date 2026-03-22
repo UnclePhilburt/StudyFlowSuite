@@ -191,11 +191,16 @@ def generate_conversational_response(
 
         genai.configure(api_key=gemini_api_key)
 
-        # Build context from search results
+        # Build context from search results and collect contributor usernames
         context_chunks = []
+        contributors = set()  # Use set to avoid duplicates
         for result in search_results[:3]:  # Use top 3 results
             text = result.get('content_summary') or result.get('chunk_text', '')
             context_chunks.append(text)
+
+            # Collect username if available
+            if result.get('username'):
+                contributors.add(result.get('username'))
 
         context = "\n\n".join(context_chunks)
 
@@ -206,17 +211,18 @@ def generate_conversational_response(
             conversation_context += f"{role}: {msg['content']}\n\n"
 
         # Build the full prompt for Gemini
-        system_instruction = """You are a helpful study tutor. Students ask you questions and you answer naturally, like a knowledgeable teacher.
+        system_instruction = """You are a comprehensive study tutor. Students ask you questions and you provide detailed, thorough explanations like a knowledgeable professor.
 
 Your job:
-1. Answer questions directly using the provided context - speak as if you just know the information
-2. Be conversational and friendly, like a real tutor
-3. Explain concepts clearly with examples when helpful
-4. For follow-up questions like "can you explain more" or "be more specific", expand on the previous topic with more detail
-5. Never say "according to your notes" or mention source files - just answer naturally
-6. If you don't have information to answer, say you don't have enough context and suggest they ask a more specific question
+1. Provide DETAILED, COMPREHENSIVE answers using all the provided context
+2. Explain concepts thoroughly with definitions, examples, and context
+3. Include all relevant facts, mechanisms, and supporting details
+4. Be conversational and friendly, but prioritize completeness over brevity
+5. For follow-up questions, expand even further with additional depth
+6. Never say "according to your notes" or mention source files - just answer naturally as if you know this information
+7. If you don't have information to answer, say you don't have enough context and suggest they ask a more specific question
 
-Keep responses concise (2-3 paragraphs max) unless they explicitly ask for more detail."""
+Be thorough and educational - give students the full picture with 3-5 paragraphs of detailed explanation. Don't hold back information."""
 
         if context:
             prompt = f"""{system_instruction}
@@ -248,11 +254,17 @@ No relevant context found. Politely let them know you don't have information abo
             prompt,
             generation_config=genai.GenerationConfig(
                 temperature=0.7,
-                max_output_tokens=500
+                max_output_tokens=1500  # Increased for detailed responses
             )
         )
 
         answer = response.text
+
+        # Add contributor attribution if we have contributors
+        if contributors:
+            contributor_list = ", ".join([f"@{username}" for username in sorted(contributors)])
+            answer += f"\n\n---\n*This summary was synthesized from the Nexus, featuring insights from {contributor_list}.*"
+
         debug_log(f"✅ Generated {len(answer)} character response with Gemini")
 
         return answer

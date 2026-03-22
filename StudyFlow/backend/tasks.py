@@ -57,7 +57,7 @@ def process_question_async(ocr_json):
 
 
 @celery_app.task(name="StudyFlow.backend.tasks.process_note_async")
-def process_note_async(note_id, user_id, full_text, course_metadata, file_hash=None):
+def process_note_async(note_id, user_id, full_text, course_metadata, file_hash=None, username=None):
     """
     Background task to process uploaded note:
     1. Chunk the text (500 words with 50-word overlap)
@@ -74,7 +74,12 @@ def process_note_async(note_id, user_id, full_text, course_metadata, file_hash=N
             raise ValueError(f"User profile not found for {user_id}")
 
         is_public = user_profile.get("collective_brain_opt_in", False)
-        print(f"Nexus opt-in: {is_public}")
+
+        # Get username from profile if not provided
+        if not username:
+            username = user_profile.get("username")
+
+        print(f"Nexus opt-in: {is_public} (@{username})")
 
         # Step 1: Chunk the text
         chunks = chunk_text_smart(full_text, chunk_size=500, overlap=50)
@@ -111,7 +116,8 @@ def process_note_async(note_id, user_id, full_text, course_metadata, file_hash=N
                 chunk_index=i,
                 embedding=embedding,
                 course_metadata=course_metadata,
-                is_public=is_public
+                is_public=is_public,
+                username=username
             )
 
             # Update with anonymized summary if we have one

@@ -48,18 +48,19 @@ def get_user_profile(user_id: str) -> dict:
         return None
 
 
-def create_user_profile(user_id: str, email: str, full_name: str = None, collective_brain_opt_in: bool = True) -> dict:
+def create_user_profile(user_id: str, email: str, full_name: str = None, username: str = None, collective_brain_opt_in: bool = True) -> dict:
     """Create a new user profile (Nexus enabled by default)"""
     try:
         response = supabase.table("user_profiles").insert({
             "id": user_id,
             "email": email,
             "full_name": full_name,
+            "username": username,
             "collective_brain_opt_in": collective_brain_opt_in,
             "subscription_tier": "free",
             "pages_uploaded_this_month": 0
         }).execute()
-        debug_log(f"[+] Created user profile: {email} (Nexus: {collective_brain_opt_in})")
+        debug_log(f"[+] Created user profile: {email} (@{username}) (Nexus: {collective_brain_opt_in})")
         return response.data[0]
     except Exception as e:
         debug_log(f"[-] Error creating user profile: {e}")
@@ -150,7 +151,7 @@ def upload_file_to_storage(file_content: bytes, file_path: str, content_type: st
 
 
 def create_note_record(user_id: str, filename: str, file_type: str, file_size: int,
-                       file_path: str, page_count: int, course_metadata: dict = None) -> dict:
+                       file_path: str, page_count: int, course_metadata: dict = None, username: str = None) -> dict:
     """Create a note record in the database"""
     try:
         note_data = {
@@ -161,7 +162,8 @@ def create_note_record(user_id: str, filename: str, file_type: str, file_size: i
             "file_path": file_path,
             "page_count": page_count,
             "processed": False,
-            "is_public": False
+            "is_public": False,
+            "username": username
         }
 
         # Add course metadata if provided
@@ -174,7 +176,7 @@ def create_note_record(user_id: str, filename: str, file_type: str, file_size: i
             })
 
         response = supabase.table("notes").insert(note_data).execute()
-        debug_log(f"[+] Created note record: {filename}")
+        debug_log(f"[+] Created note record: {filename} (@{username})")
         return response.data[0]
 
     except Exception as e:
@@ -183,7 +185,7 @@ def create_note_record(user_id: str, filename: str, file_type: str, file_size: i
 
 
 def create_note_chunk(note_id: str, user_id: str, chunk_text: str, chunk_index: int,
-                      embedding: list, course_metadata: dict = None, is_public: bool = False) -> dict:
+                      embedding: list, course_metadata: dict = None, is_public: bool = False, username: str = None) -> dict:
     """Create a note chunk with embedding"""
     try:
         chunk_data = {
@@ -192,7 +194,8 @@ def create_note_chunk(note_id: str, user_id: str, chunk_text: str, chunk_index: 
             "chunk_text": chunk_text,
             "chunk_index": chunk_index,
             "embedding": embedding,
-            "is_public": is_public
+            "is_public": is_public,
+            "username": username
         }
 
         # Add course metadata if provided

@@ -2513,10 +2513,14 @@ def upload_note():
     """
     try:
         from StudyFlow.backend.supabase_client import (
-            check_page_limit, upload_file_to_storage, create_note_record, increment_page_count, log_upload
+            check_page_limit, upload_file_to_storage, create_note_record, increment_page_count, log_upload, get_user_profile
         )
         from StudyFlow.backend.tasks import process_note_async
         import hashlib
+
+        # Get user profile to extract username
+        user_profile = get_user_profile(request.user_id)
+        username = user_profile.get('username') if user_profile else None
 
         # Check if file was uploaded
         if 'file' not in request.files:
@@ -2659,7 +2663,8 @@ def upload_note():
             file_size=file_size,
             file_path=unique_filename,
             page_count=page_count,
-            course_metadata=course_metadata
+            course_metadata=course_metadata,
+            username=username
         )
 
         if not note:
@@ -2672,7 +2677,7 @@ def upload_note():
         increment_page_count(request.user_id, page_count)
 
         # Trigger background processing (chunking, embedding, anonymization)
-        process_note_async.delay(note_id, request.user_id, ocr_text, course_metadata, file_hash)
+        process_note_async.delay(note_id, request.user_id, ocr_text, course_metadata, file_hash, username)
 
         debug_log(f"Note uploaded: {original_filename} ({file_size} bytes, {page_count} pages)")
         debug_log(f"Background processing started for note {note_id}")
@@ -2997,10 +3002,10 @@ def search_notes():
             # Decide which text to show
             text_to_show = result['content_summary'] if result['content_summary'] else result['chunk_text']
 
-            # Generate a hint using the text
-            print(f"🔍 About to generate hint for: {question[:50]}...")
+            # Generate a detailed answer using the text
+            print(f"🔍 About to generate detailed answer for: {question[:50]}...")
             hint = generate_hint_from_text(question, text_to_show)
-            print(f"💡 Generated hint: {hint[:100]}...")
+            print(f"💡 Generated answer: {hint[:100]}...")
 
             formatted_results.append({
                 "source": f"{filename} ({result['university']} - {result['course_code']})" if result['university'] else filename,
@@ -3021,7 +3026,7 @@ def search_notes():
 
 def generate_hint_from_text(question, text):
     """
-    Generate a study hint from the found text using Gemini.
+    Generate a detailed answer from the found text using Gemini.
     """
     try:
         import google.generativeai as genai
@@ -3029,42 +3034,46 @@ def generate_hint_from_text(question, text):
         # Check if API key exists
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
-            debug_log("❌ GEMINI_API_KEY not found in environment! Hint generation disabled.")
+            debug_log("❌ GEMINI_API_KEY not found in environment! Answer generation disabled.")
             return "Review this section carefully to find the answer."
 
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-3-flash-preview')
 
-        prompt = f"""You are a study tutor. A student asked: "{question}"
+        prompt = f"""You are a knowledgeable study tutor. A student asked: "{question}"
 
 I found this relevant excerpt from their notes:
-"{text[:500]}"
+"{text[:1000]}"
 
-Generate a SHORT hint (1-2 sentences) that provides helpful clues from the notes WITHOUT directly giving the full answer.
+Generate a DETAILED, COMPREHENSIVE answer to their question using the information from the notes.
 
-Give them the KEY FACTS or CONCEPTS they need, but make them put it together themselves.
+Your job:
+- Answer the question completely and thoroughly
+- Include all relevant facts, definitions, explanations, and examples
+- Explain concepts clearly with context
+- Be specific and detailed - don't hold back information
+- Make it educational and easy to understand
+- Use 2-4 paragraphs if needed to fully explain the topic
 
-GOOD examples:
-- "The economic tensions between industrial North and agricultural South were major factors, along with disputes over states' rights."
-- "Photosynthesis converts light energy into chemical energy using chlorophyll in plant cells."
+DO NOT say things like:
+- "According to the notes..."
+- "The excerpt mentions..."
+- "Review the section..."
 
-BAD examples (DON'T use these):
-- "Look at the section about..." (We ARE the section!)
-- "Check the definition of..." (Just give the definition!)
-- "Review the notes on..." (They're already here!)
+Just answer the question directly as if you're a tutor who knows this information.
 
-Return ONLY the hint with the actual information, nothing else."""
+Return your detailed answer:"""
 
-        debug_log(f"🤖 Generating hint for question: '{question[:50]}...'")
+        debug_log(f"🤖 Generating detailed answer for question: '{question[:50]}...'")
         response = model.generate_content(prompt)
-        hint = response.text.strip()
+        answer = response.text.strip()
 
-        debug_log(f"✅ Generated hint: '{hint[:80]}...'")
+        debug_log(f"✅ Generated answer: '{answer[:80]}...'")
 
-        return hint if hint else "Review this section carefully to find the answer."
+        return answer if answer else "Review this section carefully to find the answer."
 
     except Exception as e:
-        debug_log(f"❌ Error generating hint: {type(e).__name__}: {str(e)}")
+        debug_log(f"❌ Error generating answer: {type(e).__name__}: {str(e)}")
         return "Review this section to find the answer."
 
 
