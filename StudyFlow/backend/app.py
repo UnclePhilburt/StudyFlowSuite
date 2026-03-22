@@ -2513,9 +2513,10 @@ def upload_note():
     """
     try:
         from StudyFlow.backend.supabase_client import (
-            check_page_limit, upload_file_to_storage, create_note_record, increment_page_count
+            check_page_limit, upload_file_to_storage, create_note_record, increment_page_count, log_upload
         )
         from StudyFlow.backend.tasks import process_note_async
+        import hashlib
 
         # Check if file was uploaded
         if 'file' not in request.files:
@@ -2533,6 +2534,15 @@ def upload_note():
             "semester": request.form.get('semester')
         }
 
+        # Get Nexus sharing preference (Missouri SB 1324 compliance)
+        share_with_nexus = request.form.get('share_with_nexus', 'false').lower() == 'true'
+
+        # Get user's IP address (for security logging)
+        ip_address = request.headers.get('X-Forwarded-For', request.remote_addr)
+        if ip_address and ',' in ip_address:
+            # X-Forwarded-For can have multiple IPs, take the first
+            ip_address = ip_address.split(',')[0].strip()
+
         # Get file info
         original_filename = file.filename
         file.seek(0, os.SEEK_END)
@@ -2546,6 +2556,22 @@ def upload_note():
 
         # Read file content
         file_content = file.read()
+
+        # Calculate SHA-256 hash for tamper verification (Missouri SB 1324 compliance)
+        file_hash = hashlib.sha256(file_content).hexdigest()
+        debug_log(f"[*] File hash (SHA-256): {file_hash}")
+
+        # Log upload to database (7-year retention for Missouri compliance)
+        log_upload(
+            user_id=request.user_id,
+            file_name=original_filename,
+            file_hash=file_hash,
+            file_size=file_size,
+            shared_with_nexus=share_with_nexus,
+            ip_address=ip_address,
+            university=course_metadata.get('university'),
+            course_code=course_metadata.get('course_code')
+        )
 
         # Extract text based on file type
         import google.generativeai as genai
@@ -2644,10 +2670,10 @@ def upload_note():
         increment_page_count(request.user_id, page_count)
 
         # Trigger background processing (chunking, embedding, anonymization)
-        process_note_async.delay(note_id, request.user_id, ocr_text, course_metadata)
+        process_note_async.delay(note_id, request.user_id, ocr_text, course_metadata, file_hash)
 
-        debug_log(f"✅ Note uploaded: {original_filename} ({file_size} bytes, {page_count} pages)")
-        debug_log(f"🚀 Background processing started for note {note_id}")
+        debug_log(f"Note uploaded: {original_filename} ({file_size} bytes, {page_count} pages)")
+        debug_log(f"Background processing started for note {note_id}")
 
         return jsonify({
             "success": True,

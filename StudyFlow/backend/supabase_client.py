@@ -287,3 +287,59 @@ def delete_note(note_id: str, user_id: str) -> bool:
     except Exception as e:
         debug_log(f"[-] Error deleting note: {e}")
         return False
+
+
+def log_upload(user_id: str, file_name: str, file_hash: str, file_size: int,
+               shared_with_nexus: bool, ip_address: str = None,
+               university: str = None, course_code: str = None) -> dict:
+    """
+    Log an upload to the upload_logs table (Missouri SB 1324 compliance - 7-year retention).
+
+    Args:
+        user_id: User ID who uploaded the file
+        file_name: Original filename
+        file_hash: SHA-256 hash of file content (for tamper verification)
+        file_size: File size in bytes
+        shared_with_nexus: Whether user chose to share with Nexus
+        ip_address: User's IP address (for security/blocking)
+        university: Optional university name
+        course_code: Optional course code
+
+    Returns:
+        Upload log record
+    """
+    try:
+        log_data = {
+            "user_id": user_id,
+            "file_name": file_name,
+            "file_hash": file_hash,
+            "file_size": file_size,
+            "shared_with_nexus": shared_with_nexus,
+            "ip_address": ip_address,
+            "ai_processed": False,  # Will be updated after processing
+            "university": university,
+            "course_code": course_code
+        }
+
+        response = supabase.table("upload_logs").insert(log_data).execute()
+        debug_log(f"[+] Logged upload: {file_name} (hash: {file_hash[:16]}..., nexus: {shared_with_nexus})")
+        return response.data[0]
+
+    except Exception as e:
+        debug_log(f"[-] Error logging upload: {e}")
+        # Non-critical error - don't block upload
+        return None
+
+
+def mark_upload_as_processed(file_hash: str) -> bool:
+    """Mark an upload log as AI-processed"""
+    try:
+        supabase.table("upload_logs").update({
+            "ai_processed": True
+        }).eq("file_hash", file_hash).execute()
+
+        debug_log(f"[+] Marked upload as processed: {file_hash[:16]}...")
+        return True
+    except Exception as e:
+        debug_log(f"[-] Error marking upload as processed: {e}")
+        return False

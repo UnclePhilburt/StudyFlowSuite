@@ -57,7 +57,7 @@ def process_question_async(ocr_json):
 
 
 @celery_app.task(name="StudyFlow.backend.tasks.process_note_async")
-def process_note_async(note_id, user_id, full_text, course_metadata):
+def process_note_async(note_id, user_id, full_text, course_metadata, file_hash=None):
     """
     Background task to process uploaded note:
     1. Chunk the text (500 words with 50-word overlap)
@@ -66,7 +66,7 @@ def process_note_async(note_id, user_id, full_text, course_metadata):
     4. Store chunks in Supabase
     """
     try:
-        print(f"📝 Processing note {note_id} for user {user_id}")
+        print(f"Processing note {note_id} for user {user_id}")
 
         # Get user profile to check if they opted into Nexus
         user_profile = get_user_profile(user_id)
@@ -74,7 +74,7 @@ def process_note_async(note_id, user_id, full_text, course_metadata):
             raise ValueError(f"User profile not found for {user_id}")
 
         is_public = user_profile.get("collective_brain_opt_in", False)
-        print(f"🌐 Nexus opt-in: {is_public}")
+        print(f"Nexus opt-in: {is_public}")
 
         # Step 1: Chunk the text
         chunks = chunk_text_smart(full_text, chunk_size=500, overlap=50)
@@ -130,12 +130,17 @@ def process_note_async(note_id, user_id, full_text, course_metadata):
         # Step 6: Make note public if user opted in
         if is_public:
             make_note_public(note_id, user_id)
-            print(f"🌐 Made note public for Nexus")
+            print(f"Made note public for Nexus")
 
-        print(f"✅ Finished processing note {note_id}")
+        # Step 7: Mark upload log as AI-processed (Missouri SB 1324 compliance)
+        if file_hash:
+            from StudyFlow.backend.supabase_client import mark_upload_as_processed
+            mark_upload_as_processed(file_hash)
+
+        print(f"Finished processing note {note_id}")
 
     except Exception as e:
-        print(f"❌ Error processing note {note_id}: {e}")
+        print(f"Error processing note {note_id}: {e}")
         import traceback
         print(traceback.format_exc())
 
