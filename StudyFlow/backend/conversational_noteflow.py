@@ -195,6 +195,7 @@ def generate_conversational_response(
         context_chunks = []
         contributors = set()  # Use set to avoid duplicates
         wikipedia_articles = []  # Track Wikipedia articles for attribution
+        student_note_count = 0  # Count student notes without usernames
 
         for result in search_results[:3]:  # Use top 3 results
             text = result.get('content_summary') or result.get('chunk_text', '')
@@ -210,6 +211,9 @@ def generate_conversational_response(
                 # Collect username if available (for student notes)
                 if result.get('username'):
                     contributors.add(result.get('username'))
+                else:
+                    # Count anonymous student notes
+                    student_note_count += 1
 
         context = "\n\n".join(context_chunks)
 
@@ -274,9 +278,9 @@ No relevant context found. Politely let them know you don't have information abo
 
         attribution_parts = []
 
-        # Build the main attribution line
+        # Build the main attribution line - ALWAYS show sources
         if wikipedia_articles and contributors:
-            # Both Wikipedia and student notes
+            # Both Wikipedia and student notes with usernames
             wiki_links = []
             for article in wikipedia_articles[:3]:  # Max 3 Wikipedia articles
                 # URL-encode the article title (replace spaces with underscores)
@@ -288,6 +292,17 @@ No relevant context found. Politely let them know you don't have information abo
             contributor_list = ", ".join([f"@{username}" for username in sorted(contributors)])
 
             attribution_parts.append(f"*This summary was synthesized from the Nexus and Wikipedia: {wiki_text}, featuring insights from {contributor_list}.*")
+
+        elif wikipedia_articles and student_note_count > 0:
+            # Both Wikipedia and student notes without usernames
+            wiki_links = []
+            for article in wikipedia_articles[:3]:
+                url_title = article.replace(' ', '_')
+                wiki_link = f"[{article}](https://en.wikipedia.org/wiki/{url_title})"
+                wiki_links.append(wiki_link)
+
+            wiki_text = ", ".join(wiki_links)
+            attribution_parts.append(f"*This summary was synthesized from the Nexus and Wikipedia: {wiki_text}.*")
 
         elif wikipedia_articles:
             # Wikipedia only
@@ -301,18 +316,25 @@ No relevant context found. Politely let them know you don't have information abo
             attribution_parts.append(f"*This summary was synthesized from Wikipedia: {wiki_text}.*")
 
         elif contributors:
-            # Student notes only
+            # Student notes with usernames
             contributor_list = ", ".join([f"@{username}" for username in sorted(contributors)])
             attribution_parts.append(f"*This summary was synthesized from the Nexus, featuring insights from {contributor_list}.*")
+
+        elif student_note_count > 0:
+            # Student notes without usernames (anonymous contributions)
+            attribution_parts.append(f"*This summary was synthesized from {student_note_count} {'note' if student_note_count == 1 else 'notes'} in the Nexus.*")
+
+        elif not search_results or len(search_results) == 0:
+            # No sources found - AI generated from general knowledge
+            attribution_parts.append(f"*This response was generated using AI. No specific sources were found in the Nexus. Consider uploading relevant notes!*")
 
         # Add Wikipedia CC BY-SA compliance footer if Wikipedia sources used
         if wikipedia_articles:
             today = datetime.now().strftime("%B %d, %Y")
             attribution_parts.append(f"*Wikipedia content retrieved on {today}. Licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).*")
 
-        # Append attribution to answer
-        if attribution_parts:
-            answer += "\n\n---\n" + "\n\n".join(attribution_parts)
+        # ALWAYS append attribution to answer
+        answer += "\n\n---\n" + "\n\n".join(attribution_parts)
 
         debug_log(f"✅ Generated {len(answer)} character response with Gemini")
 
