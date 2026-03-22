@@ -2712,6 +2712,90 @@ def list_notes():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/notes/usage-stats", methods=["GET"])
+@supabase_auth_required
+def get_notes_usage_stats():
+    """
+    Get usage statistics for user's notes showing how many times they've been used to help answer questions.
+
+    Returns:
+    {
+        "totalUsage": 47,
+        "weeklyUsage": 12,
+        "activeNotes": 5,
+        "noteUsage": {
+            "note_id_1": 23,
+            "note_id_2": 15,
+            ...
+        },
+        "topNotes": [
+            {"filename": "Biology_Chapter_3.pdf", "count": 23},
+            {"filename": "Chemistry_Notes.pdf", "count": 15},
+            ...
+        ]
+    }
+    """
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+        from datetime import datetime, timedelta
+
+        user_id = request.user_id
+
+        # Get user's notes
+        notes_response = supabase.table("notes").select("id, original_filename").eq("user_id", user_id).execute()
+        user_notes = {note['id']: note['original_filename'] for note in notes_response.data}
+
+        # Get usage counts from conversation sources
+        # This queries how many times each note was used in conversations
+        note_usage = {}
+        total_usage = 0
+        weekly_usage = 0
+        week_ago = (datetime.now() - timedelta(days=7)).isoformat()
+
+        for note_id in user_notes.keys():
+            # Count total usage
+            total_count_response = supabase.table("conversation_messages").select("id", count="exact").filter("sources", "cs", f'[{{"note_id":"{note_id}"}}]').execute()
+            count = total_count_response.count if total_count_response.count else 0
+
+            if count > 0:
+                note_usage[note_id] = count
+                total_usage += count
+
+            # Count weekly usage
+            weekly_count_response = supabase.table("conversation_messages").select("id", count="exact").filter("sources", "cs", f'[{{"note_id":"{note_id}"}}]').gte("created_at", week_ago).execute()
+            weekly_count = weekly_count_response.count if weekly_count_response.count else 0
+            weekly_usage += weekly_count
+
+        # Get top notes
+        top_notes = []
+        for note_id, count in sorted(note_usage.items(), key=lambda x: x[1], reverse=True)[:5]:
+            top_notes.append({
+                "filename": user_notes[note_id],
+                "count": count
+            })
+
+        active_notes = len([c for c in note_usage.values() if c > 0])
+
+        return jsonify({
+            "totalUsage": total_usage,
+            "weeklyUsage": weekly_usage,
+            "activeNotes": active_notes,
+            "noteUsage": note_usage,
+            "topNotes": top_notes
+        }), 200
+
+    except Exception as e:
+        debug_log(f"❌ Usage stats error: {e}\n{traceback.format_exc()}")
+        # Return empty stats on error
+        return jsonify({
+            "totalUsage": 0,
+            "weeklyUsage": 0,
+            "activeNotes": 0,
+            "noteUsage": {},
+            "topNotes": []
+        }), 200
+
+
 @app.route("/api/notes/<note_id>", methods=["DELETE"])
 @supabase_auth_required
 def delete_note_endpoint(note_id):
