@@ -3100,14 +3100,13 @@ def get_conversation_history(conversation_id):
     }
     """
     try:
-        from StudyFlow.backend.conversational_noteflow import get_conversation_messages, get_conversation
+        from StudyFlow.backend.conversational_noteflow import get_conversation_messages
 
-        # Verify user owns this conversation
-        conversation = get_conversation(conversation_id, request.user_id)
-        if not conversation:
-            return jsonify({"error": "Conversation not found or access denied"}), 404
-
+        # get_conversation_messages already verifies ownership
         messages = get_conversation_messages(conversation_id, request.user_id)
+
+        if messages is None:
+            return jsonify({"error": "Conversation not found or access denied"}), 404
 
         return jsonify({"messages": messages}), 200
 

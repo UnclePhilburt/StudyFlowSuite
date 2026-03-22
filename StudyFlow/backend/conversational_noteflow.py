@@ -45,7 +45,7 @@ def get_conversation_messages(conv_id: str, user_id: str) -> List[Dict]:
         # Verify user owns this conversation
         conv = get_conversation(conv_id, user_id)
         if not conv:
-            return []
+            return None  # Return None to indicate conversation not found or access denied
 
         # Get messages ordered by creation time
         response = supabase.table("conversation_messages").select("*").eq("conversation_id", conv_id).order("created_at").execute()
@@ -54,7 +54,7 @@ def get_conversation_messages(conv_id: str, user_id: str) -> List[Dict]:
 
     except Exception as e:
         debug_log(f"❌ Error getting conversation messages: {e}")
-        return []
+        return None
 
 
 def add_message(conv_id: str, role: str, content: str, sources: List[Dict] = None):
