@@ -3195,13 +3195,17 @@ def download_note_endpoint(note_id):
     """
     try:
         from StudyFlow.backend.supabase_client import supabase
-        from StudyFlow.backend.pdf_flatten import flatten_pdf, flatten_image, can_flatten
+        from StudyFlow.backend.pdf_flatten import flatten_pdf, flatten_image, can_flatten, convert_to_pdf
         from flask import send_file
         import io
         import uuid
 
-        # Get note metadata to verify ownership and get file path
-        note = supabase.table("notes").select("*").eq("id", note_id).eq("user_id", request.user_id).single().execute()
+        # Get note metadata -- check own notes first, then public notes
+        note = supabase.table("notes").select("*").eq("id", note_id).eq("user_id", request.user_id).maybe_single().execute()
+
+        if not note.data:
+            # Not the user's own note -- check if it's a public note
+            note = supabase.table("notes").select("*").eq("id", note_id).eq("is_public", True).maybe_single().execute()
 
         if not note.data:
             return jsonify({"error": "Note not found or unauthorized"}), 404
@@ -3218,7 +3222,7 @@ def download_note_endpoint(note_id):
         # Get username for watermark
         username = "user"
         try:
-            profile = supabase.table("user_profiles").select("username").eq("id", request.user_id).single().execute()
+            profile = supabase.table("user_profiles").select("username").eq("id", request.user_id).maybe_single().execute()
             if profile.data and profile.data.get("username"):
                 username = profile.data["username"]
         except Exception:
@@ -3245,21 +3249,22 @@ def download_note_endpoint(note_id):
         except Exception as tx_err:
             debug_log(f"[-] Failed to log download transaction: {tx_err}")
 
-        # Flatten and watermark based on file type
+        # Flatten and watermark -- everything becomes a PDF
         flattenable, file_type = can_flatten(original_filename)
-        download_name = original_filename
-        mimetype = 'application/octet-stream'
+        name_base = original_filename.rsplit('.', 1)[0] if '.' in original_filename else original_filename
 
         if flattenable and file_type == 'pdf':
             file_data = flatten_pdf(file_data, username, transaction_code)
-            name_base = original_filename.rsplit('.', 1)[0] if '.' in original_filename else original_filename
-            download_name = f"{name_base}_studyflow.pdf"
-            mimetype = 'application/pdf'
         elif flattenable and file_type == 'image':
             file_data = flatten_image(file_data, username, transaction_code)
-            name_base = original_filename.rsplit('.', 1)[0] if '.' in original_filename else original_filename
-            download_name = f"{name_base}_studyflow.pdf"
-            mimetype = 'application/pdf'
+        else:
+            # Legacy file (txt, docx, etc.) -- convert to PDF first, then flatten
+            pdf_data, _ = convert_to_pdf(file_data, original_filename)
+            if pdf_data:
+                file_data = flatten_pdf(pdf_data, username, transaction_code)
+
+        download_name = f"{name_base}_studyflow.pdf"
+        mimetype = 'application/pdf'
 
         return send_file(
             io.BytesIO(file_data),
@@ -4351,13 +4356,13 @@ def download_note_file(note_id):
     """
     try:
         from StudyFlow.backend.supabase_client import supabase
-        from StudyFlow.backend.pdf_flatten import flatten_pdf, flatten_image, can_flatten
+        from StudyFlow.backend.pdf_flatten import flatten_pdf, flatten_image, can_flatten, convert_to_pdf
         from flask import send_file
         import io
         import uuid
 
         # Verify note exists and is public
-        note = supabase.table("notes").select("id, file_path, original_filename, user_id").eq("id", note_id).eq("is_public", True).single().execute()
+        note = supabase.table("notes").select("id, file_path, original_filename, user_id").eq("id", note_id).eq("is_public", True).maybe_single().execute()
 
         if not note.data:
             return jsonify({"error": "Note not found or not public"}), 404
@@ -4376,7 +4381,7 @@ def download_note_file(note_id):
         try:
             uploader_id = note.data.get('user_id')
             if uploader_id:
-                profile = supabase.table("user_profiles").select("username").eq("id", uploader_id).single().execute()
+                profile = supabase.table("user_profiles").select("username").eq("id", uploader_id).maybe_single().execute()
                 if profile.data and profile.data.get("username"):
                     username = profile.data["username"]
         except Exception:
@@ -4403,21 +4408,22 @@ def download_note_file(note_id):
         except Exception as tx_err:
             debug_log(f"[-] Failed to log download transaction: {tx_err}")
 
-        # Flatten and watermark
+        # Flatten and watermark -- everything becomes a PDF
         flattenable, file_type = can_flatten(original_filename)
-        download_name = original_filename
-        mimetype = 'application/octet-stream'
+        name_base = original_filename.rsplit('.', 1)[0] if '.' in original_filename else original_filename
 
         if flattenable and file_type == 'pdf':
             file_data = flatten_pdf(file_data, username, transaction_code)
-            name_base = original_filename.rsplit('.', 1)[0] if '.' in original_filename else original_filename
-            download_name = f"{name_base}_studyflow.pdf"
-            mimetype = 'application/pdf'
         elif flattenable and file_type == 'image':
             file_data = flatten_image(file_data, username, transaction_code)
-            name_base = original_filename.rsplit('.', 1)[0] if '.' in original_filename else original_filename
-            download_name = f"{name_base}_studyflow.pdf"
-            mimetype = 'application/pdf'
+        else:
+            # Legacy file (txt, docx, etc.) -- convert to PDF first, then flatten
+            pdf_data, _ = convert_to_pdf(file_data, original_filename)
+            if pdf_data:
+                file_data = flatten_pdf(pdf_data, username, transaction_code)
+
+        download_name = f"{name_base}_studyflow.pdf"
+        mimetype = 'application/pdf'
 
         return send_file(
             io.BytesIO(file_data),
