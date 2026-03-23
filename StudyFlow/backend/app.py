@@ -3909,27 +3909,27 @@ def view_note_file(note_id):
         from flask import redirect, send_file
         import os
 
-        # Verify note exists and is public - try multiple field names
-        note = supabase.table("notes").select("id, s3_key, pdf_url, file_url, original_filename").eq("id", note_id).eq("is_public", True).single().execute()
+        # Verify note exists and is public
+        note = supabase.table("notes").select("id, file_path, original_filename").eq("id", note_id).eq("is_public", True).single().execute()
 
         if not note.data:
             return jsonify({"error": "Note not found or not public"}), 404
 
-        debug_log(f"View file for note {note_id}: {note.data.keys()}")
+        debug_log(f"View file for note {note_id}: {note.data}")
 
-        # Try different URL fields in order of preference
+        # Get signed URL from file_path
         file_url = None
-
-        if note.data.get('pdf_url'):
-            file_url = note.data['pdf_url']
-        elif note.data.get('file_url'):
-            file_url = note.data['file_url']
-        elif note.data.get('s3_key'):
-            # Try to construct URL from s3_key
+        if note.data.get('file_path'):
             try:
-                file_url = supabase.storage.from_('notes').get_public_url(note.data['s3_key'])
+                # Generate signed URL (valid for 1 hour)
+                signed_url_response = supabase.storage.from_("note-files").create_signed_url(
+                    path=note.data['file_path'],
+                    expires_in=3600  # 1 hour
+                )
+                file_url = signed_url_response['signedURL']
+                debug_log(f"Generated signed URL for file_path: {note.data['file_path']}")
             except Exception as storage_error:
-                debug_log(f"Storage error with s3_key: {storage_error}")
+                debug_log(f"Storage error with file_path: {storage_error}")
 
         if file_url:
             debug_log(f"Redirecting to file: {file_url}")
