@@ -3351,8 +3351,8 @@ def search_notes():
 
         for result in search_results:
             # Get note filename
-            note = supabase.table("notes").select("original_filename").eq("id", result['note_id']).single().execute()
-            filename = note.data['original_filename'] if note.data else "Unknown"
+            note_result = supabase.table("notes").select("original_filename").eq("id", result['note_id']).execute()
+            filename = note_result.data[0]['original_filename'] if note_result.data else "Unknown"
 
             # Check if this is a Wikipedia source
             is_wikipedia = result.get('university') == 'Wikipedia'
@@ -3525,15 +3525,32 @@ def chat_with_notes():
 
         debug_log(f"🔍 Found {len(search_results) if search_results else 0} relevant chunks")
 
-        # Add search result metadata
+        # Add search result metadata and enrich with missing fields
         sources = []
         if search_results:
             for result in search_results[:3]:  # Top 3 sources
-                note = supabase.table("notes").select("original_filename").eq("id", result['note_id']).single().execute()
-                filename = note.data['original_filename'] if note.data else "Unknown"
+                note_result = supabase.table("notes").select("original_filename, user_id, university, course_code").eq("id", result['note_id']).execute()
+                note_data = note_result.data[0] if note_result.data else {}
+                filename = note_data.get('original_filename', 'Unknown')
+
+                # Enrich result with username if missing from chunk
+                if not result.get('username') and note_data.get('user_id'):
+                    try:
+                        profile_result = supabase.table("user_profiles").select("username").eq("id", note_data['user_id']).execute()
+                        if profile_result.data and profile_result.data[0].get("username"):
+                            result['username'] = profile_result.data[0]['username']
+                    except Exception:
+                        pass
+
+                # Enrich university/course_code from notes table if missing from chunk
+                if not result.get('university') and note_data.get('university'):
+                    result['university'] = note_data['university']
+                if not result.get('course_code') and note_data.get('course_code'):
+                    result['course_code'] = note_data['course_code']
+
                 sources.append({
-                    "note_id": result['note_id'],  # Include note_id for usage tracking
-                    "filename": f"{filename} ({result['university']} - {result['course_code']})" if result['university'] else filename,
+                    "note_id": result['note_id'],
+                    "filename": f"{filename} ({result['university']} - {result['course_code']})" if result.get('university') else filename,
                     "similarity": round(result['similarity'], 2)
                 })
                 # Add original_filename to result for context
