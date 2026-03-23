@@ -3519,6 +3519,480 @@ def move_note_to_folder_endpoint(note_id):
         return jsonify({"error": str(e)}), 500
 
 
+
+
+@app.route("/api/notes/browse", methods=["GET"])
+@supabase_auth_required
+def browse_notes():
+    """
+    Browse public notes in the Nexus (requires .edu verification)
+
+    Query params:
+    - university: Filter by university
+    - course_code: Filter by course
+    - topic_tags: Comma-separated tags
+    - sort: 'recent', 'popular', 'views'
+    - limit: Default 50
+
+    Returns:
+    {
+        "notes": [...]
+    }
+    """
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        user_id = request.user_id
+
+        # Check .edu verification
+        profile = supabase.table("user_profiles").select("edu_email_verified").eq("id", user_id).single().execute()
+
+        if not profile.data or not profile.data.get('edu_email_verified'):
+            return jsonify({"error": "Requires .edu email verification"}), 403
+
+        # Get query parameters
+        university = request.args.get('university')
+        course_code = request.args.get('course_code')
+        topic_tags_str = request.args.get('topic_tags', '')
+        topic_tags = [tag.strip() for tag in topic_tags_str.split(',') if tag.strip()] if topic_tags_str else []
+        sort_by = request.args.get('sort', 'recent')
+        limit = int(request.args.get('limit', 50))
+
+        # Build query
+        query = supabase.table("notes").select(
+            "id, original_filename, university, course_code, username, topic_tags, page_count, created_at"
+        ).eq("is_public", True)
+
+        if university:
+            query = query.eq("university", university)
+        if course_code:
+            query = query.eq("course_code", course_code)
+
+        # Execute query
+        response = query.order("created_at", desc=True).limit(limit).execute()
+        notes = response.data if response.data else []
+
+        # Get view counts and usage counts for each note
+        for note in notes:
+            # Get view count
+            view_count_response = supabase.table("note_views").select("id", count="exact").eq("note_id", note['id']).execute()
+            note['view_count'] = view_count_response.count if view_count_response.count else 0
+
+            # Get usage count (from conversation sources)
+            usage_count_response = supabase.table("conversation_messages").select("id", count="exact").contains("sources", [{"note_id": note['id']}]).execute()
+            note['usage_count'] = usage_count_response.count if usage_count_response.count else 0
+
+            # Rename original_filename to filename for frontend
+            note['filename'] = note.pop('original_filename')
+
+        # Filter by tags if specified
+        if topic_tags:
+            notes = [n for n in notes if n.get('topic_tags') and any(tag in n['topic_tags'] for tag in topic_tags)]
+
+        # Sort
+        if sort_by == 'popular':
+            notes.sort(key=lambda x: x.get('usage_count', 0), reverse=True)
+        elif sort_by == 'views':
+            notes.sort(key=lambda x: x.get('view_count', 0), reverse=True)
+        # 'recent' is already sorted by created_at desc
+
+        debug_log(f"📚 Browse: Found {len(notes)} public notes")
+
+        return jsonify({"notes": notes}), 200
+
+    except Exception as e:
+        debug_log(f"❌ Browse notes error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/notes/topic-tags", methods=["GET"])
+@supabase_auth_required
+def get_topic_tags():
+    """
+    Get all unique topic tags from public notes
+
+    Returns:
+    {
+        "tags": ["Biology", "Chemistry", ...]
+    }
+    """
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        # Get all public notes with topic tags
+        response = supabase.table("notes").select("topic_tags").eq("is_public", True).execute()
+        notes = response.data if response.data else []
+
+        # Extract unique tags
+        all_tags = set()
+        for note in notes:
+            if note.get('topic_tags'):
+                for tag in note['topic_tags']:
+                    all_tags.add(tag)
+
+        # Sort alphabetically
+        tags = sorted(list(all_tags))
+
+        debug_log(f"🏷️ Found {len(tags)} unique topic tags")
+
+        return jsonify({"tags": tags}), 200
+
+    except Exception as e:
+        debug_log(f"❌ Get topic tags error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/dmca/takedown", methods=["POST"])
+def submit_takedown_request():
+    """
+    Submit a DMCA takedown request (no auth required for public access)
+
+    Body:
+    {
+        "requestor_name": "John Doe",
+        "requestor_email": "john@example.com",
+        "requestor_type": "professor",
+        "note_filename": "Biology_Chapter_3.pdf",
+        "complaint_description": "...",
+        "evidence_urls": ["https://..."],
+        "good_faith": true,
+        "accuracy": true
+    }
+
+    Returns:
+    {
+        "success": true,
+        "request_id": "DMCA-20260322-001"
+    }
+    """
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+        from datetime import datetime
+
+        data = request.json
+
+        # Validate required fields
+        required_fields = ['requestor_name', 'requestor_email', 'requestor_type', 'note_filename', 'complaint_description', 'good_faith', 'accuracy']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({"error": f"Missing required field: {field}"}), 400
+
+        if not data['good_faith'] or not data['accuracy']:
+            return jsonify({"error": "You must agree to the good faith and accuracy statements"}), 400
+
+        # Generate unique request ID
+        today = datetime.now().strftime("%Y%m%d")
+
+        # Count today's requests to get next number
+        count_response = supabase.table("dmca_takedown_requests").select("id", count="exact").like("request_id", f"DMCA-{today}-%").execute()
+        next_num = (count_response.count if count_response.count else 0) + 1
+        request_id = f"DMCA-{today}-{next_num:03d}"
+
+        # Insert into database
+        evidence_urls = data.get('evidence_urls', [])
+        if isinstance(evidence_urls, str):
+            evidence_urls = [url.strip() for url in evidence_urls.split('\n') if url.strip()]
+
+        supabase.table("dmca_takedown_requests").insert({
+            "request_id": request_id,
+            "requestor_name": data['requestor_name'],
+            "requestor_email": data['requestor_email'],
+            "requestor_type": data['requestor_type'],
+            "note_filename": data['note_filename'],
+            "complaint_description": data['complaint_description'],
+            "evidence_urls": evidence_urls,
+            "copyright_claim": True,
+            "status": "pending"
+        }).execute()
+
+        debug_log(f"📋 DMCA takedown request submitted: {request_id}")
+
+        # TODO: Send email notification to admin and confirmation to requestor
+
+        return jsonify({
+            "success": True,
+            "request_id": request_id
+        }), 200
+
+    except Exception as e:
+        debug_log(f"❌ DMCA takedown error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/notes/<note_id>/view", methods=["POST"])
+@supabase_auth_required
+def track_note_view(note_id):
+    """
+    Track when a user views a note (for analytics)
+
+    Returns:
+    {
+        "success": true
+    }
+    """
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        user_id = request.user_id
+
+        # Get IP address
+        ip_address = request.headers.get('X-Forwarded-For', request.remote_addr)
+        if ',' in ip_address:
+            ip_address = ip_address.split(',')[0].strip()
+
+        # Insert view record
+        supabase.table("note_views").insert({
+            "user_id": user_id,
+            "note_id": note_id,
+            "ip_address": ip_address
+        }).execute()
+
+        debug_log(f"👁️ Note view tracked: {note_id}")
+
+        return jsonify({"success": True}), 200
+
+    except Exception as e:
+        debug_log(f"❌ Track view error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+
+
+@app.route("/api/notes/browse", methods=["GET"])
+@supabase_auth_required
+def browse_notes():
+    """
+    Browse public notes in the Nexus (requires .edu verification)
+
+    Query params:
+    - university: Filter by university
+    - course_code: Filter by course
+    - topic_tags: Comma-separated tags
+    - sort: 'recent', 'popular', 'views'
+    - limit: Default 50
+
+    Returns:
+    {
+        "notes": [...]
+    }
+    """
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        user_id = request.user_id
+
+        # Check .edu verification
+        profile = supabase.table("user_profiles").select("edu_email_verified").eq("id", user_id).single().execute()
+
+        if not profile.data or not profile.data.get('edu_email_verified'):
+            return jsonify({"error": "Requires .edu email verification"}), 403
+
+        # Get query parameters
+        university = request.args.get('university')
+        course_code = request.args.get('course_code')
+        topic_tags_str = request.args.get('topic_tags', '')
+        topic_tags = [tag.strip() for tag in topic_tags_str.split(',') if tag.strip()] if topic_tags_str else []
+        sort_by = request.args.get('sort', 'recent')
+        limit = int(request.args.get('limit', 50))
+
+        # Build query
+        query = supabase.table("notes").select(
+            "id, original_filename, university, course_code, username, topic_tags, page_count, created_at"
+        ).eq("is_public", True)
+
+        if university:
+            query = query.eq("university", university)
+        if course_code:
+            query = query.eq("course_code", course_code)
+
+        # Execute query
+        response = query.order("created_at", desc=True).limit(limit).execute()
+        notes = response.data if response.data else []
+
+        # Get view counts and usage counts for each note
+        for note in notes:
+            # Get view count
+            view_count_response = supabase.table("note_views").select("id", count="exact").eq("note_id", note['id']).execute()
+            note['view_count'] = view_count_response.count if view_count_response.count else 0
+
+            # Get usage count (from conversation sources)
+            usage_count_response = supabase.table("conversation_messages").select("id", count="exact").contains("sources", [{"note_id": note['id']}]).execute()
+            note['usage_count'] = usage_count_response.count if usage_count_response.count else 0
+
+            # Rename original_filename to filename for frontend
+            note['filename'] = note.pop('original_filename')
+
+        # Filter by tags if specified
+        if topic_tags:
+            notes = [n for n in notes if n.get('topic_tags') and any(tag in n['topic_tags'] for tag in topic_tags)]
+
+        # Sort
+        if sort_by == 'popular':
+            notes.sort(key=lambda x: x.get('usage_count', 0), reverse=True)
+        elif sort_by == 'views':
+            notes.sort(key=lambda x: x.get('view_count', 0), reverse=True)
+        # 'recent' is already sorted by created_at desc
+
+        debug_log(f"📚 Browse: Found {len(notes)} public notes")
+
+        return jsonify({"notes": notes}), 200
+
+    except Exception as e:
+        debug_log(f"❌ Browse notes error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/notes/topic-tags", methods=["GET"])
+@supabase_auth_required
+def get_topic_tags():
+    """
+    Get all unique topic tags from public notes
+
+    Returns:
+    {
+        "tags": ["Biology", "Chemistry", ...]
+    }
+    """
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        # Get all public notes with topic tags
+        response = supabase.table("notes").select("topic_tags").eq("is_public", True).execute()
+        notes = response.data if response.data else []
+
+        # Extract unique tags
+        all_tags = set()
+        for note in notes:
+            if note.get('topic_tags'):
+                for tag in note['topic_tags']:
+                    all_tags.add(tag)
+
+        # Sort alphabetically
+        tags = sorted(list(all_tags))
+
+        debug_log(f"🏷️ Found {len(tags)} unique topic tags")
+
+        return jsonify({"tags": tags}), 200
+
+    except Exception as e:
+        debug_log(f"❌ Get topic tags error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/dmca/takedown", methods=["POST"])
+def submit_takedown_request():
+    """
+    Submit a DMCA takedown request (no auth required for public access)
+
+    Body:
+    {
+        "requestor_name": "John Doe",
+        "requestor_email": "john@example.com",
+        "requestor_type": "professor",
+        "note_filename": "Biology_Chapter_3.pdf",
+        "complaint_description": "...",
+        "evidence_urls": ["https://..."],
+        "good_faith": true,
+        "accuracy": true
+    }
+
+    Returns:
+    {
+        "success": true,
+        "request_id": "DMCA-20260322-001"
+    }
+    """
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+        from datetime import datetime
+
+        data = request.json
+
+        # Validate required fields
+        required_fields = ['requestor_name', 'requestor_email', 'requestor_type', 'note_filename', 'complaint_description', 'good_faith', 'accuracy']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({"error": f"Missing required field: {field}"}), 400
+
+        if not data['good_faith'] or not data['accuracy']:
+            return jsonify({"error": "You must agree to the good faith and accuracy statements"}), 400
+
+        # Generate unique request ID
+        today = datetime.now().strftime("%Y%m%d")
+
+        # Count today's requests to get next number
+        count_response = supabase.table("dmca_takedown_requests").select("id", count="exact").like("request_id", f"DMCA-{today}-%").execute()
+        next_num = (count_response.count if count_response.count else 0) + 1
+        request_id = f"DMCA-{today}-{next_num:03d}"
+
+        # Insert into database
+        evidence_urls = data.get('evidence_urls', [])
+        if isinstance(evidence_urls, str):
+            evidence_urls = [url.strip() for url in evidence_urls.split('\n') if url.strip()]
+
+        supabase.table("dmca_takedown_requests").insert({
+            "request_id": request_id,
+            "requestor_name": data['requestor_name'],
+            "requestor_email": data['requestor_email'],
+            "requestor_type": data['requestor_type'],
+            "note_filename": data['note_filename'],
+            "complaint_description": data['complaint_description'],
+            "evidence_urls": evidence_urls,
+            "copyright_claim": True,
+            "status": "pending"
+        }).execute()
+
+        debug_log(f"📋 DMCA takedown request submitted: {request_id}")
+
+        # TODO: Send email notification to admin and confirmation to requestor
+
+        return jsonify({
+            "success": True,
+            "request_id": request_id
+        }), 200
+
+    except Exception as e:
+        debug_log(f"❌ DMCA takedown error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/notes/<note_id>/view", methods=["POST"])
+@supabase_auth_required
+def track_note_view(note_id):
+    """
+    Track when a user views a note (for analytics)
+
+    Returns:
+    {
+        "success": true
+    }
+    """
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        user_id = request.user_id
+
+        # Get IP address
+        ip_address = request.headers.get('X-Forwarded-For', request.remote_addr)
+        if ',' in ip_address:
+            ip_address = ip_address.split(',')[0].strip()
+
+        # Insert view record
+        supabase.table("note_views").insert({
+            "user_id": user_id,
+            "note_id": note_id,
+            "ip_address": ip_address
+        }).execute()
+
+        debug_log(f"👁️ Note view tracked: {note_id}")
+
+        return jsonify({"success": True}), 200
+
+    except Exception as e:
+        debug_log(f"❌ Track view error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     try:
         port = int(os.environ.get("PORT", 5000))
