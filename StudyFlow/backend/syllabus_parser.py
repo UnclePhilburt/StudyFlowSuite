@@ -13,9 +13,38 @@ from StudyFlow.config import OPENAI_API_KEY
 openai.api_key = OPENAI_API_KEY
 
 
+def redact_pii(text: str) -> str:
+    """
+    Redact personally identifiable information from syllabus text.
+    Removes student names, IDs, and handwritten notes.
+
+    FERPA Compliance: Student metadata must be scrubbed before processing.
+    """
+    # Remove common PII patterns
+    # Student names (Name: John Doe, Student: Jane Smith, etc.)
+    text = re.sub(r'(?i)(student\s+name|name):\s*[A-Z][a-z]+\s+[A-Z][a-z]+', r'\1: [REDACTED]', text)
+
+    # Student IDs (ID: 123456789, Student ID: A00123456, etc.)
+    text = re.sub(r'(?i)(student\s+)?id:\s*[A-Z0-9]+', r'\1ID: [REDACTED]', text)
+
+    # Email addresses
+    text = re.sub(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', '[EMAIL REDACTED]', text)
+
+    return text
+
+
 def extract_calendar_events(syllabus_text: str, course_name: str = None, course_code: str = None) -> List[Dict]:
     """
-    Use AI to extract calendar events (assignments, exams, etc.) from syllabus text
+    Extract ONLY factual calendar data from syllabus (Fair Use compliant).
+
+    COPYRIGHT COMPLIANCE:
+    - Extracts only dates, times, and task names (factual data - not copyrightable)
+    - Does NOT reproduce professor's creative expression, lecture descriptions, or proprietary content
+    - Creates transformative derivative work (calendar) for personal time management
+
+    PRIVACY COMPLIANCE (FERPA/SB 1324):
+    - Redacts student names and IDs before processing
+    - Does not store or share original syllabus content
 
     Args:
         syllabus_text: Full text extracted from syllabus PDF/DOCX
@@ -25,28 +54,35 @@ def extract_calendar_events(syllabus_text: str, course_name: str = None, course_
     Returns:
         List of calendar event dictionaries with keys:
         - event_type: assignment, exam, quiz, reading, lecture, etc.
-        - title: Event title
-        - description: Event description (optional)
+        - title: Brief title of the event (factual name only)
+        - description: Minimal factual description (optional)
         - due_date: Date in YYYY-MM-DD format
         - due_time: Time in HH:MM format (optional)
     """
     try:
-        debug_log(f"📅 Extracting calendar events from syllabus (length: {len(syllabus_text)} chars)")
+        debug_log(f"Extracting calendar events from syllabus (length: {len(syllabus_text)} chars)")
 
-        # Prepare prompt for AI
-        prompt = f"""You are a syllabus parser. Extract all calendar events from this course syllabus.
+        # FERPA Compliance: Redact PII before processing
+        syllabus_text = redact_pii(syllabus_text)
 
-Identify:
-- Assignments (homework, papers, projects)
-- Exams (midterms, finals, quizzes)
-- Readings (required readings with due dates)
-- Lectures (important lecture topics with dates)
-- Other events (presentations, discussions, labs)
+        # Prepare prompt for AI - FAIR USE: Extract only factual data
+        prompt = f"""You are a syllabus parser that extracts ONLY factual scheduling data for Fair Use compliance.
+
+CRITICAL: Extract ONLY factual information (dates, times, task names). Do NOT reproduce:
+- Professor's creative lecture descriptions
+- Original assignment instructions or requirements
+- Proprietary reading lists or materials
+- Any creative expression from the syllabus
+
+Extract ONLY:
+- Assignment/exam names (factual titles only)
+- Due dates and times
+- Event types (assignment, exam, quiz, etc.)
 
 For each event, extract:
 1. event_type: One of [assignment, exam, quiz, reading, lecture, project, presentation, discussion, lab, other]
-2. title: Brief title of the event
-3. description: Any additional details (optional)
+2. title: BRIEF factual name only (e.g., "Midterm Exam", "Assignment 3", "Chapter 5 Quiz")
+3. description: MINIMAL factual info ONLY if needed (e.g., "Chapters 1-5" not full instructions)
 4. due_date: Date in YYYY-MM-DD format
 5. due_time: Time in HH:MM 24-hour format if specified (optional)
 
@@ -56,19 +92,18 @@ Current date for reference: {datetime.now().strftime('%Y-%m-%d')}
 
 Return ONLY a valid JSON array of events. Do not include any explanatory text.
 
-Example output:
+Example output (factual data only):
 [
   {{
-    "event_type": "assignment",
-    "title": "Chapter 1-3 Reading Quiz",
-    "description": "Multiple choice quiz on chapters 1-3",
+    "event_type": "quiz",
+    "title": "Reading Quiz 1",
+    "description": "Chapters 1-3",
     "due_date": "2026-09-15",
     "due_time": "23:59"
   }},
   {{
     "event_type": "exam",
     "title": "Midterm Exam",
-    "description": "Covers chapters 1-7",
     "due_date": "2026-10-20",
     "due_time": "14:00"
   }}

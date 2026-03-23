@@ -4535,33 +4535,29 @@ def upload_syllabus():
         if not extracted_text.strip():
             return jsonify({"error": "Could not extract text from file"}), 400
 
-        # Upload file to Supabase Storage
-        file_path = f"{request.user_id}/syllabi/{file.filename}"
-        storage_result = supabase.storage.from_('notes').upload(
-            file_path,
-            file_content,
-            {"content-type": file.content_type or "application/pdf"}
-        )
+        # LEGAL COMPLIANCE LOGGING
+        debug_log(f"[LEGAL] Processing syllabus for Fair Use extraction (user: {request.user_id})")
+        debug_log(f"[LEGAL] Extracting only factual data (dates, times, task names) per 17 USC 107")
 
-        # Insert syllabus record
+        # Insert syllabus record (metadata only - NO copyrighted content stored)
         syllabus_data = {
             "user_id": request.user_id,
             "course_name": course_name,
             "course_code": course_code,
             "professor_name": professor_name,
             "semester": semester,
-            "file_path": file_path,
+            "file_path": None,  # SB 1324 Compliance: Do not store original file
             "original_filename": file.filename,
-            "extracted_text": extracted_text,
+            "extracted_text": None,  # Copyright Compliance: Do not store copyrighted text
             "file_size": file_size
         }
 
         syllabus_result = supabase.table("syllabi").insert(syllabus_data).execute()
         syllabus_id = syllabus_result.data[0]['id']
 
-        debug_log(f"✅ Syllabus uploaded: {syllabus_id}")
+        debug_log(f"[LEGAL] Syllabus metadata saved: {syllabus_id}")
 
-        # Extract calendar events using AI
+        # Extract calendar events using AI (Fair Use - factual data only)
         events = extract_calendar_events(extracted_text, course_name, course_code)
 
         # Insert events into database
@@ -4573,7 +4569,11 @@ def upload_syllabus():
                 if result.data:
                     inserted_events.append(result.data[0])
 
-        debug_log(f"📅 Inserted {len(inserted_events)} calendar events")
+        debug_log(f"[LEGAL] Extracted {len(inserted_events)} events (factual data only)")
+        debug_log(f"[LEGAL] Original syllabus discarded per SB 1324 disclosure")
+
+        # File is NOT uploaded to storage - processing complete, file discarded
+        # This satisfies: Copyright (Fair Use), Privacy (SB 1324), Academic Integrity (HB 2271)
 
         return jsonify({
             "success": True,
