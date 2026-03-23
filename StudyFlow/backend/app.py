@@ -4695,28 +4695,34 @@ def download_note_file(note_id):
         import io
         import uuid
 
-        # GOOD STANDING CHECK: Block users not in good standing
-        profile_result = supabase.table("user_profiles").select("good_standing, permanent_bad_standing").eq("id", request.user_id).single().execute()
-        profile = profile_result.data
-
-        # Block if permanently banned
-        if profile.get('permanent_bad_standing', False):
-            return jsonify({"error": "Account suspended due to DMCA violations"}), 403
-
-        # Check good standing
-        if not profile.get('good_standing', False):
-            return jsonify({
-                "error": "Good Standing required to download notes",
-                "message": "Upload a verified note or subscribe to regain access",
-                "good_standing_required": True
-            }), 403
-
-        # Verify note exists and is public
-        result = supabase.table("notes").select("id, file_path, original_filename, user_id").eq("id", note_id).eq("is_public", True).execute()
+        # Verify note exists (check both own notes and public notes)
+        result = supabase.table("notes").select("id, file_path, original_filename, user_id").eq("id", note_id).execute()
         note_data = result.data[0] if result.data else None
 
         if not note_data:
-            return jsonify({"error": "Note not found or not public"}), 404
+            return jsonify({"error": "Note not found"}), 404
+
+        # Check if note belongs to current user or is public
+        is_own_note = note_data.get('user_id') == request.user_id
+
+        # GOOD STANDING CHECK: Only required for downloading OTHER people's notes
+        if not is_own_note:
+            profile_result = supabase.table("user_profiles").select("good_standing, permanent_bad_standing").eq("id", request.user_id).single().execute()
+            profile = profile_result.data
+
+            # Block if permanently banned
+            if profile.get('permanent_bad_standing', False):
+                return jsonify({"error": "Account suspended due to DMCA violations"}), 403
+
+            # Check good standing
+            if not profile.get('good_standing', False):
+                return jsonify({
+                    "error": "Good Standing required to download notes",
+                    "message": "Upload a verified note or subscribe to regain access",
+                    "good_standing_required": True
+                }), 403
+
+        print(f"[DOWNLOAD] User {request.user_id} downloading {'own' if is_own_note else 'public'} note {note_id}", flush=True)
 
         file_path = note_data.get('file_path')
         original_filename = note_data.get('original_filename', 'note')
