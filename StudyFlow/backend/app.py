@@ -3557,9 +3557,9 @@ def browse_notes():
         sort_by = request.args.get('sort', 'recent')
         limit = int(request.args.get('limit', 50))
 
-        # Build query
+        # Build query (removed username - use user_id instead)
         query = supabase.table("notes").select(
-            "id, original_filename, university, course_code, username, topic_tags, page_count, created_at"
+            "id, original_filename, university, course_code, user_id, topic_tags, page_count, created_at"
         ).eq("is_public", True)
 
         if university:
@@ -3571,8 +3571,18 @@ def browse_notes():
         response = query.order("created_at", desc=True).limit(limit).execute()
         notes = response.data if response.data else []
 
-        # Get view counts and usage counts for each note
+        # Get view counts, usage counts, and usernames for each note
         for note in notes:
+            # Get username from user_profiles
+            try:
+                user_profile = supabase.table("user_profiles").select("username").eq("id", note['user_id']).single().execute()
+                note['username'] = user_profile.data['username'] if user_profile.data else 'Anonymous'
+            except:
+                note['username'] = 'Anonymous'
+
+            # Remove user_id from response
+            note.pop('user_id', None)
+
             # Get view count
             try:
                 view_count_response = supabase.table("note_views").select("id", count="exact").eq("note_id", note['id']).execute()
