@@ -2796,7 +2796,7 @@ def upload_note():
         # Extract text based on file type
         import google.generativeai as genai
         genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-        model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        model = genai.GenerativeModel('gemini-1.5-flash')
 
         if file_ext in ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'tiff', 'webp']:
             # Image file
@@ -2923,7 +2923,7 @@ def upload_note():
                 # Quick AI verification with Gemini
                 import google.generativeai as genai
                 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-                model = genai.GenerativeModel('gemini-2.0-flash-exp')
+                model = genai.GenerativeModel('gemini-1.5-flash')
 
                 prompt = f"""Analyze this document to determine if it's legitimate study material.
 
@@ -5195,7 +5195,7 @@ def verify_upload():
 
         # AI verification with Gemini
         genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-        model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        model = genai.GenerativeModel('gemini-1.5-flash')
 
         prompt = f"""Analyze this document to determine if it's legitimate study material.
 
