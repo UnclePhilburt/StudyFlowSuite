@@ -2555,8 +2555,9 @@ def upload_note():
 
         # Determine file type
         file_ext = original_filename.rsplit('.', 1)[1].lower() if '.' in original_filename else ''
-        if file_ext not in ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx', 'txt']:
-            return jsonify({"error": "Unsupported file type. Allowed: PDF, JPG, PNG, DOC, DOCX, TXT"}), 400
+        allowed_extensions = ['pdf', 'jpg', 'jpeg', 'png', 'gif', 'bmp', 'tiff', 'webp', 'txt', 'doc', 'docx']
+        if file_ext not in allowed_extensions:
+            return jsonify({"error": "Unsupported file type. Allowed: PDF, images, TXT, DOC/DOCX"}), 400
 
         # Read file content
         file_content = file.read()
@@ -2582,7 +2583,7 @@ def upload_note():
         genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
         model = genai.GenerativeModel('gemini-2.0-flash-exp')
 
-        if file_ext in ['jpg', 'jpeg', 'png']:
+        if file_ext in ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'tiff', 'webp']:
             # Image file
             import PIL.Image
             import io
@@ -2625,8 +2626,20 @@ def upload_note():
             ocr_text = file_content.decode('utf-8', errors='ignore')
             page_count = 1
 
+        elif file_ext in ['doc', 'docx']:
+            # Word documents -- extract text with python-docx
+            try:
+                import io
+                from docx import Document
+                doc = Document(io.BytesIO(file_content))
+                ocr_text = '\n'.join(p.text for p in doc.paragraphs)
+                if not ocr_text.strip():
+                    ocr_text = f"[{file_ext.upper()} document - no text extracted]"
+            except Exception:
+                ocr_text = f"[{file_ext.upper()} document]"
+            page_count = 1
+
         else:
-            # Word docs
             ocr_text = f"[{file_ext.upper()} document]"
             page_count = 1
 
@@ -2635,20 +2648,24 @@ def upload_note():
         if not allowed:
             return jsonify({"error": message, "limit_exceeded": True}), 403
 
-        # Upload file to Supabase Storage
+        # Convert all files to PDF at upload time
+        # Text extraction already happened above on the original format
+        from StudyFlow.backend.pdf_flatten import convert_to_pdf
+        pdf_data, pdf_filename = convert_to_pdf(file_content, original_filename)
+        if pdf_data is None:
+            return jsonify({"error": f"Failed to convert {file_ext.upper()} to PDF"}), 500
+
+        # Use converted PDF for storage
+        file_content = pdf_data
+        original_filename = pdf_filename
+        file_ext = 'pdf'
+        file_size = len(file_content)
+        debug_log(f"[*] Converted to PDF: {pdf_filename} ({file_size} bytes)")
+
+        # Upload PDF to Supabase Storage
         import uuid
         unique_filename = f"{request.user_id}/{uuid.uuid4()}_{original_filename}"
-
-        content_type_map = {
-            'pdf': 'application/pdf',
-            'jpg': 'image/jpeg',
-            'jpeg': 'image/jpeg',
-            'png': 'image/png',
-            'txt': 'text/plain',
-            'doc': 'application/msword',
-            'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-        }
-        content_type = content_type_map.get(file_ext, 'application/octet-stream')
+        content_type = 'application/pdf'
 
         file_url = upload_file_to_storage(file_content, unique_filename, content_type)
         if not file_url:

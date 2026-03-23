@@ -221,3 +221,143 @@ def can_flatten(filename):
     if ext in ('png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'webp'):
         return True, 'image'
     return False, None
+
+
+# ============ UPLOAD-TIME PDF CONVERSION ============
+
+def image_to_pdf(file_data):
+    """Convert an image file to a plain PDF (no watermark -- that happens at download)."""
+    if fitz is None:
+        debug_log("[-] PyMuPDF not available, cannot convert image to PDF")
+        return None
+
+    try:
+        img = Image.open(io.BytesIO(file_data))
+        if img.mode not in ('RGB', 'RGBA'):
+            img = img.convert('RGB')
+        if img.mode == 'RGBA':
+            img = img.convert('RGB')
+
+        out_doc = fitz.open()
+        img_bytes = io.BytesIO()
+        img.save(img_bytes, format='JPEG', quality=90)
+        img_bytes.seek(0)
+
+        page = out_doc.new_page(width=img.width * 72 / DPI, height=img.height * 72 / DPI)
+        page.insert_image(page.rect, stream=img_bytes.read())
+
+        output = io.BytesIO()
+        out_doc.save(output)
+        out_doc.close()
+
+        result = output.getvalue()
+        debug_log(f"[+] Image -> PDF: {len(file_data)} -> {len(result)} bytes")
+        return result
+
+    except Exception as e:
+        debug_log(f"[-] Image to PDF conversion error: {e}")
+        return None
+
+
+def text_to_pdf(text_content):
+    """Convert plain text to a multi-page PDF document."""
+    if fitz is None:
+        debug_log("[-] PyMuPDF not available, cannot convert text to PDF")
+        return None
+
+    try:
+        out_doc = fitz.open()
+        page_width, page_height = 612, 792  # 8.5 x 11 inches in points
+        margin = 50
+        font_size = 11
+        line_height = font_size * 1.4
+
+        lines = text_content.split('\n')
+        y = margin
+        page = out_doc.new_page(width=page_width, height=page_height)
+
+        for line in lines:
+            # Wrap long lines
+            while len(line) > 90:
+                page.insert_text(
+                    fitz.Point(margin, y + font_size),
+                    line[:90],
+                    fontsize=font_size,
+                    fontname="helv"
+                )
+                line = line[90:]
+                y += line_height
+                if y + line_height > page_height - margin:
+                    page = out_doc.new_page(width=page_width, height=page_height)
+                    y = margin
+
+            if y + line_height > page_height - margin:
+                page = out_doc.new_page(width=page_width, height=page_height)
+                y = margin
+
+            page.insert_text(
+                fitz.Point(margin, y + font_size),
+                line,
+                fontsize=font_size,
+                fontname="helv"
+            )
+            y += line_height
+
+        output = io.BytesIO()
+        out_doc.save(output)
+        out_doc.close()
+
+        result = output.getvalue()
+        debug_log(f"[+] Text -> PDF: {len(text_content)} chars -> {len(result)} bytes")
+        return result
+
+    except Exception as e:
+        debug_log(f"[-] Text to PDF conversion error: {e}")
+        return None
+
+
+def convert_to_pdf(file_data, filename):
+    """
+    Convert any supported file to PDF at upload time.
+
+    Returns:
+        (pdf_bytes, new_filename) on success
+        (None, None) on failure
+    """
+    if not filename:
+        return None, None
+
+    ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+    base_name = filename.rsplit('.', 1)[0] if '.' in filename else filename
+    new_filename = f"{base_name}.pdf"
+
+    # Already a PDF
+    if ext == 'pdf':
+        return file_data, filename
+
+    # Image files
+    if ext in ('png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'webp'):
+        pdf_data = image_to_pdf(file_data)
+        return (pdf_data, new_filename) if pdf_data else (None, None)
+
+    # Plain text
+    if ext == 'txt':
+        text = file_data.decode('utf-8', errors='ignore')
+        pdf_data = text_to_pdf(text)
+        return (pdf_data, new_filename) if pdf_data else (None, None)
+
+    # Word documents
+    if ext in ('doc', 'docx'):
+        try:
+            from docx import Document
+            doc = Document(io.BytesIO(file_data))
+            text = '\n'.join(p.text for p in doc.paragraphs)
+            pdf_data = text_to_pdf(text)
+            return (pdf_data, new_filename) if pdf_data else (None, None)
+        except Exception as e:
+            debug_log(f"[-] DOCX to PDF conversion error: {e}")
+            return None, None
+
+    # Unsupported format
+    debug_log(f"[-] Cannot convert .{ext} to PDF")
+    return None, None
