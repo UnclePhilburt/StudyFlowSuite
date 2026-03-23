@@ -2886,6 +2886,38 @@ def rename_note_endpoint(note_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/notes/<note_id>/visibility", methods=["POST"])
+@supabase_auth_required
+def toggle_note_visibility(note_id):
+    """
+    Toggle note public/private visibility (only if it belongs to current user).
+    Request body: { "is_public": true/false }
+    """
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        data = request.get_json()
+        is_public = data.get("is_public")
+
+        if is_public is None:
+            return jsonify({"error": "is_public field is required"}), 400
+
+        # Verify ownership and update visibility
+        response = supabase.table("notes").update({
+            "is_public": is_public
+        }).eq("id", note_id).eq("user_id", request.user_id).execute()
+
+        if response.data:
+            debug_log(f"Updated note {note_id} visibility to {'public' if is_public else 'private'}")
+            return jsonify({"success": True, "is_public": is_public}), 200
+        else:
+            return jsonify({"error": "Note not found or unauthorized"}), 404
+
+    except Exception as e:
+        debug_log(f"❌ Toggle visibility error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/notes/<note_id>/download", methods=["GET"])
 @supabase_auth_required
 def download_note_endpoint(note_id):
