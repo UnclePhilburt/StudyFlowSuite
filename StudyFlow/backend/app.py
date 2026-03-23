@@ -3287,7 +3287,7 @@ def chat_with_notes():
     }
     """
     try:
-        from StudyFlow.backend.supabase_client import search_notes_vector, get_user_profile, supabase
+        from StudyFlow.backend.supabase_client import search_notes_vector, get_user_profile, supabase, log_ai_response
         from StudyFlow.backend.embedding_client import generate_embedding
         from StudyFlow.backend.conversational_noteflow import (
             create_conversation,
@@ -3355,25 +3355,58 @@ def chat_with_notes():
         conversation_history = get_conversation_messages(conv_id, request.user_id)
 
         # Generate conversational AI response
-        ai_response = generate_conversational_response(
+        ai_result = generate_conversational_response(
             question=message,
             search_results=search_results or [],
             conversation_history=conversation_history
         )
 
+        ai_response = ai_result["response"]
+        model_used = ai_result["model_used"]
+        response_time_ms = ai_result["response_time_ms"]
+
         # Add AI response to conversation
         add_message(conv_id, 'assistant', ai_response, sources)
+
+        # SB 1324 Provenance Logging - log every AI response for 7-year retention
+        try:
+            source_log_entries = []
+            for s in sources:
+                source_log_entries.append({
+                    "note_id": s.get("note_id"),
+                    "filename": s.get("filename"),
+                    "similarity": s.get("similarity"),
+                    "contributor_username": s.get("username"),
+                    "source_type": "nexus_note"
+                })
+
+            client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+            if client_ip and ',' in client_ip:
+                client_ip = client_ip.split(',')[0].strip()
+
+            log_ai_response(
+                user_id=request.user_id,
+                conversation_id=conv_id,
+                prompt_text=message,
+                response_text=ai_response,
+                sources_used=source_log_entries,
+                model_used=model_used,
+                response_time_ms=response_time_ms,
+                ip_address=client_ip
+            )
+        except Exception as log_error:
+            debug_log(f"[-] Provenance logging failed (non-blocking): {log_error}")
 
         # Generate title for new conversations (if title is still None)
         if conversation and not conversation.get('title'):
             try:
                 title = generate_conversation_title(message, ai_response)
                 update_conversation_title(conv_id, title)
-                debug_log(f"📝 Auto-generated title: {title}")
+                debug_log(f"[+] Auto-generated title: {title}")
             except Exception as title_error:
-                debug_log(f"⚠️ Failed to generate title: {title_error}")
+                debug_log(f"[!] Failed to generate title: {title_error}")
 
-        debug_log(f"✅ Generated conversational response ({len(ai_response)} chars)")
+        debug_log(f"[+] Generated conversational response ({len(ai_response)} chars, {response_time_ms}ms)")
 
         return jsonify({
             "conversation_id": conv_id,

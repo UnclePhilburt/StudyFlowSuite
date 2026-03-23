@@ -417,6 +417,56 @@ def delete_folder(folder_id: str, user_id: str) -> bool:
         return False
 
 
+def log_ai_response(user_id: str, conversation_id: str, prompt_text: str,
+                    response_text: str, sources_used: list, model_used: str,
+                    response_time_ms: int = None, provenance_signature: str = None,
+                    ip_address: str = None) -> dict:
+    """
+    Log an AI response to ai_response_logs table (Missouri SB 1324 compliance - 7-year retention).
+
+    Args:
+        user_id: User who triggered the AI response
+        conversation_id: Conversation context
+        prompt_text: The student's question/prompt
+        response_text: The full AI response (used for hash + length, not stored in full)
+        sources_used: List of source dicts [{note_id, filename, similarity, username, source_type}]
+        model_used: AI model identifier
+        response_time_ms: How long generation took in milliseconds
+        provenance_signature: Zero-width encoded signature embedded in response
+        ip_address: User's IP address
+
+    Returns:
+        Log record or None on error
+    """
+    import hashlib
+
+    try:
+        response_hash = hashlib.sha256(response_text.encode('utf-8')).hexdigest()
+
+        log_data = {
+            "user_id": user_id,
+            "conversation_id": conversation_id,
+            "prompt_text": prompt_text,
+            "prompt_length": len(prompt_text),
+            "response_length": len(response_text),
+            "response_hash": response_hash,
+            "sources_used": sources_used or [],
+            "model_used": model_used,
+            "response_time_ms": response_time_ms,
+            "provenance_signature": provenance_signature,
+            "ip_address": ip_address
+        }
+
+        response = supabase.table("ai_response_logs").insert(log_data).execute()
+        debug_log(f"[+] Logged AI response: conv={conversation_id}, hash={response_hash[:16]}..., {len(response_text)} chars")
+        return response.data[0] if response.data else None
+
+    except Exception as e:
+        debug_log(f"[-] Error logging AI response: {e}")
+        # Non-critical - don't block the chat response
+        return None
+
+
 def update_note_folder(note_id: str, user_id: str, folder_id: str = None) -> bool:
     """Assign a note to a folder (or remove from folder if folder_id is None)"""
     try:

@@ -167,7 +167,7 @@ def generate_conversational_response(
     question: str,
     search_results: List[Dict],
     conversation_history: List[Dict]
-) -> str:
+) -> Dict:
     """
     Generate a conversational AI response using retrieved context
 
@@ -177,11 +177,12 @@ def generate_conversational_response(
         conversation_history: Previous messages in conversation
 
     Returns:
-        AI-generated conversational response
+        Dict with keys: response (str), model_used (str), response_time_ms (int)
     """
     try:
         import google.generativeai as genai
         import os
+        import time
 
         # Configure Gemini
         gemini_api_key = os.getenv("GEMINI_API_KEY")
@@ -259,10 +260,13 @@ Student Question: {question}
 
 No relevant context found. Politely let them know you don't have information about this topic."""
 
-        debug_log(f"🤖 Generating conversational response with Gemini 3.1 Flash-Lite ({len(search_results)} context chunks)")
+        debug_log(f"[*] Generating conversational response with Gemini 3.1 Flash-Lite ({len(search_results)} context chunks)")
 
         # Call Gemini 3.1 Flash-Lite (cheapest + fastest)
-        model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
+        model_name = 'gemini-3.1-flash-lite-preview'
+        model = genai.GenerativeModel(model_name)
+
+        start_time = time.time()
         response = model.generate_content(
             prompt,
             generation_config=genai.GenerationConfig(
@@ -270,6 +274,7 @@ No relevant context found. Politely let them know you don't have information abo
                 max_output_tokens=1500  # Increased for detailed responses
             )
         )
+        response_time_ms = int((time.time() - start_time) * 1000)
 
         answer = response.text
 
@@ -336,17 +341,27 @@ No relevant context found. Politely let them know you don't have information abo
         # ALWAYS append attribution to answer
         answer += "\n\n---\n" + "\n\n".join(attribution_parts)
 
-        debug_log(f"✅ Generated {len(answer)} character response with Gemini")
+        debug_log(f"[+] Generated {len(answer)} character response with Gemini in {response_time_ms}ms")
 
-        return answer
+        return {
+            "response": answer,
+            "model_used": model_name,
+            "response_time_ms": response_time_ms
+        }
 
     except Exception as e:
-        debug_log(f"❌ Error generating conversational response: {e}")
+        debug_log(f"[-] Error generating conversational response: {e}")
         import traceback
         debug_log(traceback.format_exc())
 
         # Fallback to simple response
         if search_results:
-            return f"I found some information about that. {search_results[0].get('content_summary', 'Check your notes for more details.')}"
+            fallback = f"I found some information about that. {search_results[0].get('content_summary', 'Check your notes for more details.')}"
         else:
-            return "I couldn't find anything about that in your notes. Try rephrasing your question or upload more notes!"
+            fallback = "I couldn't find anything about that in your notes. Try rephrasing your question or upload more notes!"
+
+        return {
+            "response": fallback,
+            "model_used": "fallback",
+            "response_time_ms": 0
+        }
