@@ -3785,6 +3785,7 @@ def get_note_metadata(note_id):
         "note": {
             "id": "...",
             "filename": "...",
+            "file_type": "pdf|image|document|text|other",
             "university": "...",
             "course_code": "...",
             "username": "...",
@@ -3794,6 +3795,7 @@ def get_note_metadata(note_id):
     """
     try:
         from StudyFlow.backend.supabase_client import supabase
+        import os
 
         # Get note details
         note = supabase.table("notes").select(
@@ -3802,6 +3804,21 @@ def get_note_metadata(note_id):
 
         if not note.data:
             return jsonify({"error": "Note not found or not public"}), 404
+
+        # Detect file type from extension
+        filename = note.data['original_filename']
+        ext = os.path.splitext(filename)[1].lower()
+
+        if ext in ['.pdf']:
+            file_type = 'pdf'
+        elif ext in ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']:
+            file_type = 'image'
+        elif ext in ['.doc', '.docx', '.odt']:
+            file_type = 'document'
+        elif ext in ['.txt', '.md', '.markdown']:
+            file_type = 'text'
+        else:
+            file_type = 'other'
 
         # Get username
         try:
@@ -3813,7 +3830,9 @@ def get_note_metadata(note_id):
         # Build response
         note_data = {
             "id": note.data['id'],
-            "filename": note.data['original_filename'],
+            "filename": filename,
+            "file_type": file_type,
+            "extension": ext,
             "university": note.data.get('university'),
             "course_code": note.data.get('course_code'),
             "username": username,
@@ -3827,15 +3846,16 @@ def get_note_metadata(note_id):
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/api/notes/<note_id>/view-pdf", methods=["GET"])
-def view_note_pdf(note_id):
+@app.route("/api/notes/<note_id>/view-file", methods=["GET"])
+def view_note_file(note_id):
     """
-    Get the PDF file for viewing (read-only, with watermark overlay in browser)
+    Get the file for viewing (PDF, image, document, etc.)
     No auth required since notes are already public - iframes can't send headers
     """
     try:
         from StudyFlow.backend.supabase_client import supabase
-        from flask import redirect
+        from flask import redirect, send_file
+        import os
 
         # Verify note exists and is public - try multiple field names
         note = supabase.table("notes").select("id, s3_key, pdf_url, file_url, original_filename").eq("id", note_id).eq("is_public", True).single().execute()
@@ -3843,33 +3863,74 @@ def view_note_pdf(note_id):
         if not note.data:
             return jsonify({"error": "Note not found or not public"}), 404
 
-        debug_log(f"View PDF for note {note_id}: {note.data.keys()}")
+        debug_log(f"View file for note {note_id}: {note.data.keys()}")
 
         # Try different URL fields in order of preference
-        pdf_url = None
+        file_url = None
 
         if note.data.get('pdf_url'):
-            pdf_url = note.data['pdf_url']
+            file_url = note.data['pdf_url']
         elif note.data.get('file_url'):
-            pdf_url = note.data['file_url']
+            file_url = note.data['file_url']
         elif note.data.get('s3_key'):
             # Try to construct URL from s3_key
             try:
-                pdf_url = supabase.storage.from_('notes').get_public_url(note.data['s3_key'])
+                file_url = supabase.storage.from_('notes').get_public_url(note.data['s3_key'])
             except Exception as storage_error:
                 debug_log(f"Storage error with s3_key: {storage_error}")
 
-        if pdf_url:
-            debug_log(f"Redirecting to PDF: {pdf_url}")
-            return redirect(pdf_url)
+        if file_url:
+            debug_log(f"Redirecting to file: {file_url}")
+            return redirect(file_url)
         else:
-            debug_log(f"No PDF URL found for note {note_id}. Available fields: {note.data.keys()}")
-            return jsonify({"error": "PDF file URL not found", "available_fields": list(note.data.keys())}), 404
+            debug_log(f"No file URL found for note {note_id}. Available fields: {note.data.keys()}")
+            return jsonify({"error": "File URL not found", "available_fields": list(note.data.keys())}), 404
 
     except Exception as e:
         error_trace = traceback.format_exc()
-        debug_log(f"❌ View PDF error: {e}\n{error_trace}")
+        debug_log(f"❌ View file error: {e}\n{error_trace}")
         return jsonify({"error": str(e), "traceback": error_trace}), 500
+
+
+@app.route("/api/notes/<note_id>/download", methods=["GET"])
+def download_note_file(note_id):
+    """
+    Download a note file directly (for non-viewable formats)
+    No auth required since notes are already public
+    """
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+        from flask import redirect
+
+        # Verify note exists and is public
+        note = supabase.table("notes").select("id, s3_key, pdf_url, file_url, original_filename").eq("id", note_id).eq("is_public", True).single().execute()
+
+        if not note.data:
+            return jsonify({"error": "Note not found or not public"}), 404
+
+        # Try different URL fields
+        file_url = None
+        if note.data.get('pdf_url'):
+            file_url = note.data['pdf_url']
+        elif note.data.get('file_url'):
+            file_url = note.data['file_url']
+        elif note.data.get('s3_key'):
+            try:
+                file_url = supabase.storage.from_('notes').get_public_url(note.data['s3_key'])
+            except:
+                pass
+
+        if file_url:
+            # Add download headers
+            response = redirect(file_url)
+            response.headers['Content-Disposition'] = f'attachment; filename="{note.data["original_filename"]}"'
+            return response
+        else:
+            return jsonify({"error": "File URL not found"}), 404
+
+    except Exception as e:
+        debug_log(f"❌ Download file error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == "__main__":
