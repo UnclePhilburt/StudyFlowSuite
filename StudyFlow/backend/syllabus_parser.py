@@ -60,10 +60,12 @@ def extract_calendar_events(syllabus_text: str, course_name: str = None, course_
         - due_time: Time in HH:MM format (optional)
     """
     try:
-        debug_log(f"Extracting calendar events from syllabus (length: {len(syllabus_text)} chars)")
+        debug_log(f"[EXTRACT] Extracting calendar events from syllabus (length: {len(syllabus_text)} chars)")
+        debug_log(f"[EXTRACT] First 500 chars of syllabus:\n{syllabus_text[:500]}")
 
         # FERPA Compliance: Redact PII before processing
         syllabus_text = redact_pii(syllabus_text)
+        debug_log(f"[EXTRACT] After PII redaction: {len(syllabus_text)} chars")
 
         # Prepare prompt for AI - FAIR USE: Extract only factual data
         current_year = datetime.now().year
@@ -142,19 +144,20 @@ SYLLABUS TEXT:
 {syllabus_text[:15000]}
 """
 
-        # Call OpenAI API
+        # Call OpenAI API - use GPT-4o for better extraction accuracy
+        debug_log(f"[AI] Calling GPT-4o for calendar extraction...")
         response = openai.ChatCompletion.create(
-            model="gpt-4o-mini",
+            model="gpt-4o",
             messages=[
-                {"role": "system", "content": "You are a precise syllabus parser that extracts calendar events in JSON format."},
+                {"role": "system", "content": "You are a precise syllabus parser that extracts calendar events in JSON format. Extract EVERY due date, exam, quiz, and assignment you can find."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.1,
-            max_tokens=3000
+            max_tokens=4000
         )
 
         ai_response = response.choices[0].message.content.strip()
-        debug_log(f"🤖 AI response (first 200 chars): {ai_response[:200]}")
+        debug_log(f"[AI RESPONSE] Full response:\n{ai_response}")
 
         # Parse JSON response
         # Remove markdown code blocks if present
@@ -163,6 +166,7 @@ SYLLABUS TEXT:
             ai_response = re.sub(r'\s*```$', '', ai_response)
 
         events = json.loads(ai_response)
+        debug_log(f"[AI PARSED] Parsed {len(events)} events from JSON")
 
         # Add course info to each event
         for event in events:
