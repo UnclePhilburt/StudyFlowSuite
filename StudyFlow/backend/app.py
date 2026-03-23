@@ -3612,8 +3612,14 @@ def browse_notes():
         return jsonify({"notes": notes}), 200
 
     except Exception as e:
-        debug_log(f"❌ Browse notes error: {e}\n{traceback.format_exc()}")
-        return jsonify({"error": str(e)}), 500
+        error_trace = traceback.format_exc()
+        debug_log(f"❌ Browse notes error: {e}\n{error_trace}")
+        # Return detailed error for debugging
+        return jsonify({
+            "error": str(e),
+            "traceback": error_trace,
+            "type": type(e).__name__
+        }), 500
 
 
 @app.route("/api/notes/topic-tags", methods=["GET"])
