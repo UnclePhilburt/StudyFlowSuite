@@ -3075,6 +3075,9 @@ def verify_age():
         legal_name = data.get('legal_name', '').strip()
         zip_code = data.get('zip_code', '').strip()
         birthdate = data.get('birthdate', '').strip()
+        address = data.get('address', '').strip()
+        city = data.get('city', '').strip()
+        state = data.get('state', '').strip()
 
         if not legal_name or not zip_code or not birthdate:
             return jsonify({"error": "legal_name, zip_code, and birthdate are required"}), 400
@@ -3083,8 +3086,12 @@ def verify_age():
         if not zip_code.replace('-', '').isdigit() or len(zip_code.replace('-', '')) not in (5, 9):
             return jsonify({"error": "Invalid zip code format"}), 400
 
-        # Call age verification service
-        result = verify_age_transactional(legal_name, zip_code, birthdate)
+        # Call Veratad AgeMatch5.0 verification
+        result = verify_age_transactional(
+            legal_name, zip_code, birthdate,
+            address=address, city=city, state=state,
+            reference=request.user_id
+        )
 
         if result["verified"]:
             # Update profile with verification status
