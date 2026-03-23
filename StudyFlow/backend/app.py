@@ -2918,6 +2918,138 @@ def toggle_note_visibility(note_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/user/send-edu-verification", methods=["POST"])
+@supabase_auth_required
+def send_edu_verification():
+    """
+    Send verification email to .edu email address.
+    Request body: { "edu_email": "user@university.edu" }
+    """
+    try:
+        import uuid
+        from StudyFlow.backend.supabase_client import supabase
+
+        data = request.get_json()
+        edu_email = data.get("edu_email", "").strip().lower()
+
+        if not edu_email:
+            return jsonify({"error": "edu_email is required"}), 400
+
+        if not edu_email.endswith('.edu'):
+            return jsonify({"error": "Email must be a .edu address"}), 400
+
+        # Generate verification token
+        verification_token = str(uuid.uuid4())
+
+        # Store pending verification in user_profiles
+        response = supabase.table("user_profiles").update({
+            "pending_edu_email": edu_email,
+            "edu_verification_token": verification_token
+        }).eq("id", request.user_id).execute()
+
+        if not response.data:
+            return jsonify({"error": "Failed to update profile"}), 500
+
+        # Send verification email
+        verification_url = f"https://unclephilburt.github.io/studyflowsuitewebsite/verify-edu.html?token={verification_token}"
+
+        message = Mail(
+            from_email=Email("info@studyflowsuite.com", "StudyFlow Suite"),
+            to_emails=edu_email,
+            subject="Verify your university email - StudyFlow Suite"
+        )
+
+        message.dynamic_template_data = {
+            'verification_url': verification_url,
+            'email': edu_email
+        }
+
+        html_content = f"""
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <h2 style="color: #7c9885;">Verify Your University Email</h2>
+            <p>Click the button below to verify your .edu email address and unlock access to the StudyFlow Nexus note library.</p>
+            <div style="margin: 30px 0; text-align: center;">
+                <a href="{verification_url}"
+                   style="background: linear-gradient(135deg, #7c9885 0%, #6b8575 100%);
+                          color: white;
+                          padding: 14px 32px;
+                          text-decoration: none;
+                          border-radius: 12px;
+                          display: inline-block;
+                          font-weight: 600;">
+                    Verify Email Address
+                </a>
+            </div>
+            <p style="color: #5d5d5d; font-size: 14px;">Or copy and paste this link into your browser:</p>
+            <p style="color: #7c9885; word-break: break-all; font-size: 12px;">{verification_url}</p>
+            <p style="color: #999; font-size: 12px; margin-top: 30px;">If you didn't request this verification, you can safely ignore this email.</p>
+        </div>
+        """
+
+        message.content = html_content
+        message.mail_settings = MailSettings(sandbox_mode=SandBoxMode(enable=False))
+
+        sg = SendGridAPIClient(os.getenv("SENDGRID_API_KEY"))
+        response = sg.send(message)
+
+        debug_log(f"Verification email sent to {edu_email}")
+        return jsonify({"success": True, "message": "Verification email sent"}), 200
+
+    except Exception as e:
+        debug_log(f"❌ Send .edu verification error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/user/verify-edu-email", methods=["POST"])
+def verify_edu_email():
+    """
+    Verify .edu email using token from verification link.
+    Request body: { "token": "uuid-token" }
+    """
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        data = request.get_json()
+        token = data.get("token")
+
+        if not token:
+            return jsonify({"error": "token is required"}), 400
+
+        # Find user with matching token
+        response = supabase.table("user_profiles").select("*").eq("edu_verification_token", token).execute()
+
+        if not response.data or len(response.data) == 0:
+            return jsonify({"error": "Invalid or expired verification token"}), 404
+
+        user_profile = response.data[0]
+        pending_email = user_profile.get("pending_edu_email")
+
+        if not pending_email:
+            return jsonify({"error": "No pending verification found"}), 404
+
+        # Update user profile to mark as verified
+        update_response = supabase.table("user_profiles").update({
+            "edu_email_verified": True,
+            "edu_email": pending_email,
+            "pending_edu_email": None,
+            "edu_verification_token": None
+        }).eq("id", user_profile["id"]).execute()
+
+        if update_response.data:
+            debug_log(f"✅ User {user_profile['id']} verified .edu email: {pending_email}")
+            return jsonify({
+                "success": True,
+                "message": "Email verified successfully",
+                "edu_email": pending_email
+            }), 200
+        else:
+            return jsonify({"error": "Failed to update verification status"}), 500
+
+    except Exception as e:
+        debug_log(f"❌ Verify .edu email error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/notes/<note_id>/download", methods=["GET"])
 @supabase_auth_required
 def download_note_endpoint(note_id):
@@ -3576,11 +3708,11 @@ def browse_notes():
 
         user_id = request.user_id
 
-        # Check .edu email requirement
-        user_profile = supabase.table("user_profiles").select("email").eq("id", user_id).single().execute()
+        # Check .edu email verification requirement
+        user_profile = supabase.table("user_profiles").select("edu_email_verified").eq("id", user_id).single().execute()
         if user_profile.data:
-            user_email = user_profile.data.get('email', '').lower()
-            if not user_email.endswith('.edu'):
+            edu_verified = user_profile.data.get('edu_email_verified', False)
+            if not edu_verified:
                 return jsonify({"error": "Browse requires a verified .edu email address"}), 403
         else:
             return jsonify({"error": "User profile not found"}), 404
