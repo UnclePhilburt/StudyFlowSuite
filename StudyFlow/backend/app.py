@@ -1,3 +1,5 @@
+"""StudyFlow Suite Backend - Flask API Server"""
+
 from flask import Flask, request, jsonify, send_from_directory, render_template_string
 from PIL import Image
 from io import BytesIO
