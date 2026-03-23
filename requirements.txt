@@ -24,6 +24,7 @@ sendgrid
 bcrypt
 pyjwt
 PyPDF2
+pymupdf
 python-docx
 supabase>=2.0.0
 pgvector

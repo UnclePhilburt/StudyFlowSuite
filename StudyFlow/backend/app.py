@@ -3173,9 +3173,15 @@ def verification_status():
 def download_note_endpoint(note_id):
     """
     Download a note file by ID (only if it belongs to current user).
+    PDFs and images are flattened (rasterized) with watermarks.
+    Every download is logged as a transaction.
     """
     try:
         from StudyFlow.backend.supabase_client import supabase
+        from StudyFlow.backend.pdf_flatten import flatten_pdf, flatten_image, can_flatten
+        from flask import send_file
+        import io
+        import uuid
 
         # Get note metadata to verify ownership and get file path
         note = supabase.table("notes").select("*").eq("id", note_id).eq("user_id", request.user_id).single().execute()
@@ -3189,22 +3195,64 @@ def download_note_endpoint(note_id):
         if not file_path:
             return jsonify({"error": "File not found in storage"}), 404
 
+        # Generate transaction code
+        transaction_code = "DL-" + uuid.uuid4().hex[:8]
+
+        # Get username for watermark
+        username = "user"
+        try:
+            profile = supabase.table("user_profiles").select("username").eq("id", request.user_id).single().execute()
+            if profile.data and profile.data.get("username"):
+                username = profile.data["username"]
+        except Exception:
+            pass
+
         # Download file from Supabase Storage
         file_data = supabase.storage.from_('note-files').download(file_path)
 
-        # Return file as download
-        from flask import send_file
-        import io
+        # Log download transaction
+        ip_address = request.headers.get('X-Forwarded-For', request.remote_addr)
+        if ip_address and ',' in ip_address:
+            ip_address = ip_address.split(',')[0].strip()
+
+        try:
+            supabase.table("download_transactions").insert({
+                "user_id": request.user_id,
+                "note_id": note_id,
+                "original_filename": original_filename,
+                "transaction_code": transaction_code,
+                "ip_address": ip_address,
+                "user_agent": request.headers.get('User-Agent', '')
+            }).execute()
+            debug_log(f"[+] Download transaction logged: {transaction_code}")
+        except Exception as tx_err:
+            debug_log(f"[-] Failed to log download transaction: {tx_err}")
+
+        # Flatten and watermark based on file type
+        flattenable, file_type = can_flatten(original_filename)
+        download_name = original_filename
+        mimetype = 'application/octet-stream'
+
+        if flattenable and file_type == 'pdf':
+            file_data = flatten_pdf(file_data, username, transaction_code)
+            name_base = original_filename.rsplit('.', 1)[0] if '.' in original_filename else original_filename
+            download_name = f"{name_base}_studyflow.pdf"
+            mimetype = 'application/pdf'
+        elif flattenable and file_type == 'image':
+            file_data = flatten_image(file_data, username, transaction_code)
+            name_base = original_filename.rsplit('.', 1)[0] if '.' in original_filename else original_filename
+            download_name = f"{name_base}_studyflow.pdf"
+            mimetype = 'application/pdf'
 
         return send_file(
             io.BytesIO(file_data),
-            mimetype='application/octet-stream',
+            mimetype=mimetype,
             as_attachment=True,
-            download_name=original_filename
+            download_name=download_name
         )
 
     except Exception as e:
-        debug_log(f"❌ Download note error: {e}\n{traceback.format_exc()}")
+        debug_log(f"[-] Download note error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -4281,41 +4329,88 @@ def view_note_file(note_id):
 @app.route("/api/notes/<note_id>/download", methods=["GET"])
 def download_note_file(note_id):
     """
-    Download a note file directly (for non-viewable formats)
-    No auth required since notes are already public
+    Download a public note file with flattening and watermark.
+    No auth required since notes are already public.
     """
     try:
         from StudyFlow.backend.supabase_client import supabase
-        from flask import redirect
+        from StudyFlow.backend.pdf_flatten import flatten_pdf, flatten_image, can_flatten
+        from flask import send_file
+        import io
+        import uuid
 
         # Verify note exists and is public
-        note = supabase.table("notes").select("id, s3_key, pdf_url, file_url, original_filename").eq("id", note_id).eq("is_public", True).single().execute()
+        note = supabase.table("notes").select("id, file_path, original_filename, user_id").eq("id", note_id).eq("is_public", True).single().execute()
 
         if not note.data:
             return jsonify({"error": "Note not found or not public"}), 404
 
-        # Try different URL fields
-        file_url = None
-        if note.data.get('pdf_url'):
-            file_url = note.data['pdf_url']
-        elif note.data.get('file_url'):
-            file_url = note.data['file_url']
-        elif note.data.get('s3_key'):
-            try:
-                file_url = supabase.storage.from_('notes').get_public_url(note.data['s3_key'])
-            except:
-                pass
+        file_path = note.data.get('file_path')
+        original_filename = note.data.get('original_filename', 'note')
 
-        if file_url:
-            # Add download headers
-            response = redirect(file_url)
-            response.headers['Content-Disposition'] = f'attachment; filename="{note.data["original_filename"]}"'
-            return response
-        else:
-            return jsonify({"error": "File URL not found"}), 404
+        if not file_path:
+            return jsonify({"error": "File not found in storage"}), 404
+
+        # Generate transaction code
+        transaction_code = "DL-" + uuid.uuid4().hex[:8]
+
+        # Get uploader's username for watermark
+        username = "Public"
+        try:
+            uploader_id = note.data.get('user_id')
+            if uploader_id:
+                profile = supabase.table("user_profiles").select("username").eq("id", uploader_id).single().execute()
+                if profile.data and profile.data.get("username"):
+                    username = profile.data["username"]
+        except Exception:
+            pass
+
+        # Download file from Supabase Storage
+        file_data = supabase.storage.from_('note-files').download(file_path)
+
+        # Log download transaction
+        ip_address = request.headers.get('X-Forwarded-For', request.remote_addr)
+        if ip_address and ',' in ip_address:
+            ip_address = ip_address.split(',')[0].strip()
+
+        try:
+            supabase.table("download_transactions").insert({
+                "user_id": None,
+                "note_id": note_id,
+                "original_filename": original_filename,
+                "transaction_code": transaction_code,
+                "ip_address": ip_address,
+                "user_agent": request.headers.get('User-Agent', '')
+            }).execute()
+            debug_log(f"[+] Public download transaction logged: {transaction_code}")
+        except Exception as tx_err:
+            debug_log(f"[-] Failed to log download transaction: {tx_err}")
+
+        # Flatten and watermark
+        flattenable, file_type = can_flatten(original_filename)
+        download_name = original_filename
+        mimetype = 'application/octet-stream'
+
+        if flattenable and file_type == 'pdf':
+            file_data = flatten_pdf(file_data, username, transaction_code)
+            name_base = original_filename.rsplit('.', 1)[0] if '.' in original_filename else original_filename
+            download_name = f"{name_base}_studyflow.pdf"
+            mimetype = 'application/pdf'
+        elif flattenable and file_type == 'image':
+            file_data = flatten_image(file_data, username, transaction_code)
+            name_base = original_filename.rsplit('.', 1)[0] if '.' in original_filename else original_filename
+            download_name = f"{name_base}_studyflow.pdf"
+            mimetype = 'application/pdf'
+
+        return send_file(
+            io.BytesIO(file_data),
+            mimetype=mimetype,
+            as_attachment=True,
+            download_name=download_name
+        )
 
     except Exception as e:
-        debug_log(f"❌ Download file error: {e}\n{traceback.format_exc()}")
+        debug_log(f"[-] Download file error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
 
