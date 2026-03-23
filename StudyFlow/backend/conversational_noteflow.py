@@ -29,13 +29,13 @@ def create_conversation(user_id: str) -> str:
 
 
 def get_conversation(conv_id: str, user_id: str) -> Optional[Dict]:
-    """Get a conversation by ID (verifies ownership)"""
+    """Get a conversation by ID (verifies ownership, excludes soft-deleted)"""
     try:
-        response = supabase.table("conversations").select("*").eq("id", conv_id).eq("user_id", user_id).single().execute()
-        return response.data if response.data else None
+        response = supabase.table("conversations").select("*").eq("id", conv_id).eq("user_id", user_id).is_("deleted_at", "null").execute()
+        return response.data[0] if response.data else None
 
     except Exception as e:
-        debug_log(f"❌ Error getting conversation: {e}")
+        debug_log(f"[-] Error getting conversation: {e}")
         return None
 
 
@@ -74,33 +74,36 @@ def add_message(conv_id: str, role: str, content: str, sources: List[Dict] = Non
 
 
 def list_user_conversations(user_id: str, limit: int = 20) -> List[Dict]:
-    """List all conversations for a user, ordered by most recent"""
+    """List all conversations for a user, ordered by most recent (excludes soft-deleted)"""
     try:
-        response = supabase.table("conversations").select("*").eq("user_id", user_id).order("updated_at", desc=True).limit(limit).execute()
+        response = supabase.table("conversations").select("*").eq("user_id", user_id).is_("deleted_at", "null").order("updated_at", desc=True).limit(limit).execute()
 
         return response.data if response.data else []
 
     except Exception as e:
-        debug_log(f"❌ Error listing conversations: {e}")
+        debug_log(f"[-] Error listing conversations: {e}")
         return []
 
 
 def delete_conversation(conv_id: str, user_id: str) -> bool:
-    """Delete a conversation and all its messages"""
+    """Soft-delete a conversation (7-year retention for Missouri SB 1324 compliance)"""
     try:
         # Verify ownership
         conv = get_conversation(conv_id, user_id)
         if not conv:
             return False
 
-        # Delete conversation (CASCADE will delete messages)
-        supabase.table("conversations").delete().eq("id", conv_id).eq("user_id", user_id).execute()
+        # Soft delete -- mark as deleted but keep data for compliance
+        from datetime import datetime
+        supabase.table("conversations").update({
+            "deleted_at": datetime.utcnow().isoformat()
+        }).eq("id", conv_id).eq("user_id", user_id).execute()
 
-        debug_log(f"🗑️ Deleted conversation {conv_id}")
+        debug_log(f"[*] Soft-deleted conversation {conv_id} (retained for compliance)")
         return True
 
     except Exception as e:
-        debug_log(f"❌ Error deleting conversation: {e}")
+        debug_log(f"[-] Error deleting conversation: {e}")
         return False
 
 
