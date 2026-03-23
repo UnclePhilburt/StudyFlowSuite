@@ -3773,6 +3773,90 @@ def track_note_view(note_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/notes/<note_id>/metadata", methods=["GET"])
+@supabase_auth_required
+def get_note_metadata(note_id):
+    """
+    Get note metadata for viewing
+
+    Returns:
+    {
+        "note": {
+            "id": "...",
+            "filename": "...",
+            "university": "...",
+            "course_code": "...",
+            "username": "...",
+            "page_count": 12
+        }
+    }
+    """
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        # Get note details
+        note = supabase.table("notes").select(
+            "id, original_filename, university, course_code, user_id, page_count"
+        ).eq("id", note_id).eq("is_public", True).single().execute()
+
+        if not note.data:
+            return jsonify({"error": "Note not found or not public"}), 404
+
+        # Get username
+        try:
+            user_profile = supabase.table("user_profiles").select("username").eq("id", note.data['user_id']).single().execute()
+            username = user_profile.data['username'] if user_profile.data else 'Anonymous'
+        except:
+            username = 'Anonymous'
+
+        # Build response
+        note_data = {
+            "id": note.data['id'],
+            "filename": note.data['original_filename'],
+            "university": note.data.get('university'),
+            "course_code": note.data.get('course_code'),
+            "username": username,
+            "page_count": note.data.get('page_count', 0)
+        }
+
+        return jsonify({"note": note_data}), 200
+
+    except Exception as e:
+        debug_log(f"❌ Get note metadata error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/notes/<note_id>/view-pdf", methods=["GET"])
+@supabase_auth_required
+def view_note_pdf(note_id):
+    """
+    Get the PDF file for viewing (read-only, with watermark overlay in browser)
+    """
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        # Verify note exists and is public
+        note = supabase.table("notes").select("id, s3_key, original_filename").eq("id", note_id).eq("is_public", True).single().execute()
+
+        if not note.data:
+            return jsonify({"error": "Note not found or not public"}), 404
+
+        # Get the PDF from Supabase storage
+        # Note: This assumes PDFs are stored in Supabase Storage under 'notes' bucket
+        try:
+            pdf_url = supabase.storage.from_('notes').get_public_url(note.data['s3_key'])
+            # Redirect to the PDF URL
+            from flask import redirect
+            return redirect(pdf_url)
+        except Exception as storage_error:
+            debug_log(f"Storage error: {storage_error}")
+            return jsonify({"error": "PDF file not found in storage"}), 404
+
+    except Exception as e:
+        debug_log(f"❌ View PDF error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     try:
         port = int(os.environ.get("PORT", 5000))
