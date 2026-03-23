@@ -23,7 +23,7 @@ from StudyFlow.logging_utils import debug_log
 from StudyFlow.backend.submit_button_storage import register_submit_button_upload
 from StudyFlow.backend.tasks import process_question_async, celery_app
 from StudyFlow.backend import tasks  # 🧠 registers the Celery task
-from StudyFlow.backend.supabase_auth import supabase_auth_required  # Supabase Auth decorator
+from StudyFlow.backend.supabase_auth import supabase_auth_required, account_not_frozen  # Supabase Auth decorators
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail, Email, MailSettings, SandBoxMode
 
@@ -3046,8 +3046,119 @@ def verify_edu_email():
             return jsonify({"error": "Failed to update verification status"}), 500
 
     except Exception as e:
-        debug_log(f"❌ Verify .edu email error: {e}\n{traceback.format_exc()}")
+        debug_log(f"[-] Verify .edu email error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/user/verify-age", methods=["POST"])
+@supabase_auth_required
+def verify_age():
+    """
+    Verify user's age using transactional data (Missouri SB 1455 / GUARD Act).
+
+    Request body: {
+        "legal_name": "Cody Williams",
+        "zip_code": "65802",
+        "birthdate": "1998-03-15"
+    }
+
+    Returns verification result and unfreezes account if successful.
+    """
+    try:
+        from StudyFlow.backend.age_verification import verify_age_transactional
+        from StudyFlow.backend.supabase_client import update_age_verification
+
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "Missing request body"}), 400
+
+        legal_name = data.get('legal_name', '').strip()
+        zip_code = data.get('zip_code', '').strip()
+        birthdate = data.get('birthdate', '').strip()
+
+        if not legal_name or not zip_code or not birthdate:
+            return jsonify({"error": "legal_name, zip_code, and birthdate are required"}), 400
+
+        # Validate zip code format
+        if not zip_code.replace('-', '').isdigit() or len(zip_code.replace('-', '')) not in (5, 9):
+            return jsonify({"error": "Invalid zip code format"}), 400
+
+        # Call age verification service
+        result = verify_age_transactional(legal_name, zip_code, birthdate)
+
+        if result["verified"]:
+            # Update profile with verification status
+            update_age_verification(
+                user_id=request.user_id,
+                verified=True,
+                method=result["method"],
+                legal_name=legal_name,
+                zip_code=zip_code,
+                birthdate=birthdate
+            )
+
+            debug_log(f"[+] Age verified for {request.user_id}: {legal_name}, age={result['age']}")
+
+            return jsonify({
+                "verified": True,
+                "message": "Age verification successful. Your account is now fully active.",
+                "method": result["method"],
+                "age": result["age"]
+            }), 200
+        else:
+            debug_log(f"[-] Age verification failed for {request.user_id}: {result['reason']}")
+
+            return jsonify({
+                "verified": False,
+                "message": result["reason"],
+                "method": result["method"]
+            }), 200
+
+    except Exception as e:
+        debug_log(f"[-] Age verification error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": "Age verification failed"}), 500
+
+
+@app.route("/api/user/verification-status", methods=["GET"])
+@supabase_auth_required
+def verification_status():
+    """
+    Get user's age verification and account freeze status.
+    Returns current verification state for frontend display.
+    """
+    try:
+        from StudyFlow.backend.supabase_client import get_verification_status
+
+        status = get_verification_status(request.user_id)
+
+        if not status:
+            return jsonify({
+                "age_verified": False,
+                "account_frozen": False,
+                "needs_verification": True
+            }), 200
+
+        # Check if re-verification is needed (12-month cycle)
+        needs_reverification = False
+        if status.get('last_verified_at'):
+            from datetime import datetime, timezone
+            last_verified = datetime.fromisoformat(status['last_verified_at'].replace('Z', '+00:00'))
+            months_since = (datetime.now(timezone.utc) - last_verified).days / 30
+            needs_reverification = months_since >= 12
+
+        return jsonify({
+            "age_verified": status.get("age_verified", False),
+            "age_verified_at": status.get("age_verified_at"),
+            "age_verification_method": status.get("age_verification_method"),
+            "last_verified_at": status.get("last_verified_at"),
+            "account_frozen": status.get("account_frozen", False),
+            "frozen_reason": status.get("frozen_reason"),
+            "needs_reverification": needs_reverification
+        }), 200
+
+    except Exception as e:
+        debug_log(f"[-] Verification status error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": "Failed to get verification status"}), 500
 
 
 @app.route("/api/notes/<note_id>/download", methods=["GET"])
@@ -3264,6 +3375,7 @@ Return your detailed answer:"""
 
 @app.route("/api/notes/chat", methods=["POST"])
 @supabase_auth_required
+@account_not_frozen
 def chat_with_notes():
     """
     Conversational AI chat with memory - students can have back-and-forth discussions

@@ -44,13 +44,47 @@ def supabase_auth_required(f):
             request.user_id = user.user.id
             request.user_email = user.user.email
 
-            debug_log(f"✅ Authenticated user: {request.user_email} ({request.user_id})")
+            debug_log(f"[+] Authenticated user: {request.user_email} ({request.user_id})")
 
             return f(*args, **kwargs)
 
         except Exception as e:
-            debug_log(f"❌ Auth error: {e}")
+            debug_log(f"[-] Auth error: {e}")
             return jsonify({"error": "Authentication failed", "details": str(e)}), 401
+
+    return decorated_function
+
+
+def account_not_frozen(f):
+    """
+    Decorator to block frozen accounts from AI features (Missouri SB 1455 / GUARD Act).
+
+    Must be used AFTER @supabase_auth_required so request.user_id is set.
+    Returns 403 with verification instructions if account is frozen.
+    """
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        try:
+            from StudyFlow.backend.supabase_client import get_verification_status
+
+            status = get_verification_status(request.user_id)
+
+            if status and status.get('account_frozen'):
+                reason = status.get('frozen_reason', 'age_verification_required')
+                debug_log(f"[!] Blocked frozen account: {request.user_id} (reason: {reason})")
+                return jsonify({
+                    "error": "Account frozen - age verification required",
+                    "frozen": True,
+                    "reason": reason,
+                    "verify_url": "https://unclephilburt.github.io/studyflowwebsite/verify-age.html"
+                }), 403
+
+        except Exception as e:
+            debug_log(f"[-] Error checking freeze status: {e}")
+            # Don't block on error -- fail open for now
+            pass
+
+        return f(*args, **kwargs)
 
     return decorated_function
 

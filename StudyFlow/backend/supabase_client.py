@@ -480,3 +480,94 @@ def update_note_folder(note_id: str, user_id: str, folder_id: str = None) -> boo
     except Exception as e:
         debug_log(f"[-] Error updating note folder: {e}")
         return False
+
+
+# ============================================================================
+# AGE VERIFICATION (Missouri SB 1455 / GUARD Act)
+# ============================================================================
+
+def update_age_verification(user_id: str, verified: bool, method: str,
+                            legal_name: str = None, zip_code: str = None,
+                            birthdate: str = None) -> bool:
+    """Update user's age verification status"""
+    try:
+        from datetime import datetime, timezone
+
+        update_data = {
+            "age_verified": verified,
+            "age_verification_method": method
+        }
+
+        if verified:
+            now = datetime.now(timezone.utc).isoformat()
+            update_data["age_verified_at"] = now
+            update_data["last_verified_at"] = now
+            update_data["account_frozen"] = False
+            update_data["frozen_at"] = None
+            update_data["frozen_reason"] = None
+
+        if legal_name:
+            update_data["legal_name"] = legal_name
+        if zip_code:
+            update_data["zip_code"] = zip_code
+        if birthdate:
+            update_data["birthdate"] = birthdate
+
+        supabase.table("user_profiles").update(update_data).eq("id", user_id).execute()
+        debug_log(f"[+] Age verification updated for {user_id}: verified={verified}, method={method}")
+        return True
+
+    except Exception as e:
+        debug_log(f"[-] Error updating age verification: {e}")
+        return False
+
+
+def freeze_account(user_id: str, reason: str) -> bool:
+    """Freeze a user account (GUARD Act compliance)"""
+    try:
+        from datetime import datetime, timezone
+
+        supabase.table("user_profiles").update({
+            "account_frozen": True,
+            "frozen_at": datetime.now(timezone.utc).isoformat(),
+            "frozen_reason": reason
+        }).eq("id", user_id).execute()
+
+        debug_log(f"[+] Account frozen: {user_id} (reason: {reason})")
+        return True
+
+    except Exception as e:
+        debug_log(f"[-] Error freezing account: {e}")
+        return False
+
+
+def unfreeze_account(user_id: str) -> bool:
+    """Unfreeze a user account after successful verification"""
+    try:
+        supabase.table("user_profiles").update({
+            "account_frozen": False,
+            "frozen_at": None,
+            "frozen_reason": None
+        }).eq("id", user_id).execute()
+
+        debug_log(f"[+] Account unfrozen: {user_id}")
+        return True
+
+    except Exception as e:
+        debug_log(f"[-] Error unfreezing account: {e}")
+        return False
+
+
+def get_verification_status(user_id: str) -> dict:
+    """Get user's age verification and account freeze status"""
+    try:
+        response = supabase.table("user_profiles").select(
+            "age_verified, age_verified_at, age_verification_method, "
+            "last_verified_at, account_frozen, frozen_at, frozen_reason"
+        ).eq("id", user_id).single().execute()
+
+        return response.data if response.data else None
+
+    except Exception as e:
+        debug_log(f"[-] Error getting verification status: {e}")
+        return None
