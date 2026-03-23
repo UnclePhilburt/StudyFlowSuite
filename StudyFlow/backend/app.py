@@ -3828,34 +3828,48 @@ def get_note_metadata(note_id):
 
 
 @app.route("/api/notes/<note_id>/view-pdf", methods=["GET"])
-@supabase_auth_required
 def view_note_pdf(note_id):
     """
     Get the PDF file for viewing (read-only, with watermark overlay in browser)
+    No auth required since notes are already public - iframes can't send headers
     """
     try:
         from StudyFlow.backend.supabase_client import supabase
+        from flask import redirect
 
-        # Verify note exists and is public
-        note = supabase.table("notes").select("id, s3_key, original_filename").eq("id", note_id).eq("is_public", True).single().execute()
+        # Verify note exists and is public - try multiple field names
+        note = supabase.table("notes").select("id, s3_key, pdf_url, file_url, original_filename").eq("id", note_id).eq("is_public", True).single().execute()
 
         if not note.data:
             return jsonify({"error": "Note not found or not public"}), 404
 
-        # Get the PDF from Supabase storage
-        # Note: This assumes PDFs are stored in Supabase Storage under 'notes' bucket
-        try:
-            pdf_url = supabase.storage.from_('notes').get_public_url(note.data['s3_key'])
-            # Redirect to the PDF URL
-            from flask import redirect
+        debug_log(f"View PDF for note {note_id}: {note.data.keys()}")
+
+        # Try different URL fields in order of preference
+        pdf_url = None
+
+        if note.data.get('pdf_url'):
+            pdf_url = note.data['pdf_url']
+        elif note.data.get('file_url'):
+            pdf_url = note.data['file_url']
+        elif note.data.get('s3_key'):
+            # Try to construct URL from s3_key
+            try:
+                pdf_url = supabase.storage.from_('notes').get_public_url(note.data['s3_key'])
+            except Exception as storage_error:
+                debug_log(f"Storage error with s3_key: {storage_error}")
+
+        if pdf_url:
+            debug_log(f"Redirecting to PDF: {pdf_url}")
             return redirect(pdf_url)
-        except Exception as storage_error:
-            debug_log(f"Storage error: {storage_error}")
-            return jsonify({"error": "PDF file not found in storage"}), 404
+        else:
+            debug_log(f"No PDF URL found for note {note_id}. Available fields: {note.data.keys()}")
+            return jsonify({"error": "PDF file URL not found", "available_fields": list(note.data.keys())}), 404
 
     except Exception as e:
-        debug_log(f"❌ View PDF error: {e}\n{traceback.format_exc()}")
-        return jsonify({"error": str(e)}), 500
+        error_trace = traceback.format_exc()
+        debug_log(f"❌ View PDF error: {e}\n{error_trace}")
+        return jsonify({"error": str(e), "traceback": error_trace}), 500
 
 
 if __name__ == "__main__":
