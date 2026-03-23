@@ -2699,12 +2699,94 @@ def upload_note():
         debug_log(f"Note uploaded: {original_filename} ({file_size} bytes, {page_count} pages)")
         debug_log(f"Background processing started for note {note_id}")
 
+        # GOOD STANDING: Verify upload with AI (Missouri HB 2271 compliance)
+        verification_result = None
+        try:
+            if len(ocr_text.strip()) >= 50:
+                print(f"[GOOD STANDING] Verifying upload for note {note_id}...", flush=True)
+
+                # Quick AI verification with Gemini
+                import google.generativeai as genai
+                genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+                model = genai.GenerativeModel('gemini-2.0-flash-exp')
+
+                prompt = f"""Analyze this document to determine if it's legitimate study material.
+
+DOCUMENT TEXT (first 2000 chars):
+{ocr_text[:2000]}
+
+Respond with ONLY a JSON object:
+{{
+    "is_study_material": true/false,
+    "confidence": 0.0-1.0,
+    "reason": "brief explanation",
+    "category": "notes" | "textbook" | "slides" | "homework" | "spam" | "blank" | "other"
+}}
+
+Study material includes: class notes, textbook chapters, lecture slides, study guides, homework, assignments, etc.
+NOT study material: grocery lists, personal emails, blank pages, random text, advertisements."""
+
+                response = model.generate_content(prompt)
+                ai_text = response.text.strip()
+
+                # Parse JSON response
+                import json
+                import re
+                if ai_text.startswith("```"):
+                    ai_text = re.sub(r'^```json?\s*', '', ai_text)
+                    ai_text = re.sub(r'\s*```$', '', ai_text)
+
+                result = json.loads(ai_text)
+                is_verified = result.get('is_study_material', False)
+                confidence = result.get('confidence', 0.5)
+                category = result.get('category', 'other')
+
+                # Determine rejection reason
+                rejection_reason = None
+                if not is_verified:
+                    if category == 'spam':
+                        rejection_reason = 'spam'
+                    elif category == 'blank':
+                        rejection_reason = 'blank'
+                    else:
+                        rejection_reason = 'invalid_format'
+
+                # Log verification
+                from StudyFlow.backend.supabase_client import supabase
+                supabase.table("upload_verifications").insert({
+                    "user_id": request.user_id,
+                    "note_id": note_id,
+                    "verification_status": "verified" if is_verified else "rejected",
+                    "rejection_reason": rejection_reason,
+                    "ai_confidence": confidence
+                }).execute()
+
+                # If verified, update user's Good Standing status
+                if is_verified:
+                    from datetime import datetime
+                    supabase.table("user_profiles").update({
+                        "good_standing": True,
+                        "last_verified_upload_date": datetime.utcnow().isoformat()
+                    }).eq("id", request.user_id).execute()
+
+                    print(f"[GOOD STANDING] User {request.user_id} verified upload, status updated", flush=True)
+                    verification_result = {"verified": True, "confidence": confidence}
+                else:
+                    print(f"[GOOD STANDING] Upload rejected as {category}: {result.get('reason')}", flush=True)
+                    verification_result = {"verified": False, "reason": rejection_reason}
+            else:
+                print(f"[GOOD STANDING] Skipping verification (text too short)", flush=True)
+        except Exception as verify_error:
+            print(f"[GOOD STANDING] Verification failed: {verify_error}", flush=True)
+            # Don't fail the upload if verification fails
+
         return jsonify({
             "success": True,
             "note_id": note_id,
             "filename": original_filename,
             "pages": page_count,
             "processing": True,
+            "verification": verification_result,
             "message": "Note uploaded! Processing in background..."
         }), 200
 
@@ -4769,6 +4851,431 @@ def get_syllabi():
 
     except Exception as e:
         debug_log(f"❌ Get syllabi error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ============ GOOD STANDING SYSTEM ENDPOINTS ============
+
+@app.route("/api/good-standing/status", methods=["GET"])
+@supabase_auth_required
+def get_good_standing_status():
+    """
+    Check if user is in Good Standing (Missouri HB 2271 / DMCA compliance)
+
+    Returns:
+    {
+        "good_standing": true/false,
+        "reason": "active_subscription" | "recent_upload" | "no_recent_uploads" | "dmca_strikes",
+        "days_until_expiry": 15,  # Days until they lose good standing
+        "last_verified_upload": "2026-03-20T10:30:00Z",
+        "dmca_strikes": 0,
+        "permanent_bad_standing": false
+    }
+    """
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+        from datetime import datetime, timedelta
+
+        # Get user profile
+        profile_result = supabase.table("user_profiles").select("*").eq("id", request.user_id).single().execute()
+        if not profile_result.data:
+            return jsonify({"error": "User profile not found"}), 404
+
+        profile = profile_result.data
+
+        # Check if permanently banned (3+ strikes)
+        if profile.get('permanent_bad_standing', False):
+            return jsonify({
+                "good_standing": False,
+                "reason": "dmca_strikes",
+                "dmca_strikes": profile.get('dmca_strikes', 0),
+                "permanent_bad_standing": True,
+                "message": "Account permanently ineligible for Good Standing due to DMCA violations"
+            }), 200
+
+        # Check for active subscription (always good standing)
+        # TODO: Add subscription check when Stripe integration is added
+        # For now, assume no active subscription
+
+        # Check last verified upload (30-day window)
+        last_upload = profile.get('last_verified_upload_date')
+        if last_upload:
+            last_upload_dt = datetime.fromisoformat(last_upload.replace('Z', '+00:00'))
+            days_since = (datetime.now(last_upload_dt.tzinfo) - last_upload_dt).days
+            days_until_expiry = max(0, 30 - days_since)
+
+            if days_since < 30:
+                return jsonify({
+                    "good_standing": True,
+                    "reason": "recent_upload",
+                    "days_until_expiry": days_until_expiry,
+                    "last_verified_upload": last_upload,
+                    "dmca_strikes": profile.get('dmca_strikes', 0),
+                    "permanent_bad_standing": False
+                }), 200
+
+        # No recent uploads = bad standing
+        return jsonify({
+            "good_standing": False,
+            "reason": "no_recent_uploads",
+            "days_until_expiry": 0,
+            "last_verified_upload": last_upload,
+            "dmca_strikes": profile.get('dmca_strikes', 0),
+            "permanent_bad_standing": False,
+            "message": "Upload a verified note to regain Good Standing"
+        }), 200
+
+    except Exception as e:
+        debug_log(f"Get good standing status error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/good-standing/verify-upload", methods=["POST"])
+@supabase_auth_required
+def verify_upload():
+    """
+    Verify if uploaded content is legitimate study material (not spam/blank)
+
+    Request body:
+    {
+        "note_id": "uuid",
+        "extracted_text": "text content from note"
+    }
+
+    Returns:
+    {
+        "verified": true/false,
+        "confidence": 0.95,
+        "rejection_reason": null | "spam" | "blank" | "invalid_format"
+    }
+    """
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+        import google.generativeai as genai
+
+        data = request.get_json()
+        note_id = data.get('note_id')
+        extracted_text = data.get('extracted_text', '')
+
+        if not note_id:
+            return jsonify({"error": "note_id required"}), 400
+
+        # Quick validation: Minimum length check
+        if len(extracted_text.strip()) < 50:
+            # Log rejection
+            supabase.table("upload_verifications").insert({
+                "user_id": request.user_id,
+                "note_id": note_id,
+                "verification_status": "rejected",
+                "rejection_reason": "blank",
+                "ai_confidence": 0.0
+            }).execute()
+
+            return jsonify({
+                "verified": False,
+                "confidence": 0.0,
+                "rejection_reason": "blank",
+                "message": "Document appears to be blank or too short"
+            }), 200
+
+        # AI verification with Gemini
+        genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+        model = genai.GenerativeModel('gemini-2.0-flash-exp')
+
+        prompt = f"""Analyze this document to determine if it's legitimate study material.
+
+DOCUMENT TEXT (first 2000 chars):
+{extracted_text[:2000]}
+
+Respond with ONLY a JSON object:
+{{
+    "is_study_material": true/false,
+    "confidence": 0.0-1.0,
+    "reason": "brief explanation",
+    "category": "notes" | "textbook" | "slides" | "homework" | "spam" | "blank" | "other"
+}}
+
+Study material includes: class notes, textbook chapters, lecture slides, study guides, homework, assignments, etc.
+NOT study material: grocery lists, personal emails, blank pages, random text, advertisements."""
+
+        response = model.generate_content(prompt)
+        ai_text = response.text.strip()
+
+        # Parse JSON response
+        import json
+        import re
+        if ai_text.startswith("```"):
+            ai_text = re.sub(r'^```json?\s*', '', ai_text)
+            ai_text = re.sub(r'\s*```$', '', ai_text)
+
+        result = json.loads(ai_text)
+
+        is_verified = result.get('is_study_material', False)
+        confidence = result.get('confidence', 0.5)
+        category = result.get('category', 'other')
+
+        # Determine rejection reason
+        rejection_reason = None
+        if not is_verified:
+            if category == 'spam':
+                rejection_reason = 'spam'
+            elif category == 'blank':
+                rejection_reason = 'blank'
+            else:
+                rejection_reason = 'invalid_format'
+
+        # Log verification
+        supabase.table("upload_verifications").insert({
+            "user_id": request.user_id,
+            "note_id": note_id,
+            "verification_status": "verified" if is_verified else "rejected",
+            "rejection_reason": rejection_reason,
+            "ai_confidence": confidence
+        }).execute()
+
+        # If verified, update user's Good Standing status
+        if is_verified:
+            from datetime import datetime
+            supabase.table("user_profiles").update({
+                "good_standing": True,
+                "last_verified_upload_date": datetime.utcnow().isoformat()
+            }).eq("id", request.user_id).execute()
+
+            print(f"[GOOD STANDING] User {request.user_id} verified upload, status updated", flush=True)
+
+        return jsonify({
+            "verified": is_verified,
+            "confidence": confidence,
+            "rejection_reason": rejection_reason,
+            "message": f"Document {('verified' if is_verified else 'rejected')} as {category}"
+        }), 200
+
+    except Exception as e:
+        debug_log(f"Verify upload error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/notes/download/<note_id>", methods=["POST"])
+@supabase_auth_required
+def download_note_with_certification(note_id):
+    """
+    Download a note with Missouri HB 2271 certification
+
+    Request body:
+    {
+        "certified": true  # User certifies they're using for academic research/tutorial only
+    }
+
+    Returns:
+    {
+        "download_url": "https://...",
+        "filename": "Biology_Chapter_3.pdf"
+    }
+    """
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        data = request.get_json()
+        certified = data.get('certified', False)
+
+        if not certified:
+            return jsonify({"error": "Academic integrity certification required"}), 400
+
+        # Check if user is in Good Standing OR has active subscription
+        profile_result = supabase.table("user_profiles").select("good_standing, permanent_bad_standing").eq("id", request.user_id).single().execute()
+        profile = profile_result.data
+
+        # Block if permanently banned
+        if profile.get('permanent_bad_standing', False):
+            return jsonify({"error": "Account suspended due to DMCA violations"}), 403
+
+        # Check good standing
+        if not profile.get('good_standing', False):
+            return jsonify({
+                "error": "Good Standing required to download notes",
+                "message": "Upload a verified note or subscribe to regain access",
+                "good_standing_required": True
+            }), 403
+
+        # Get note details
+        note_result = supabase.table("notes").select("*").eq("id", note_id).single().execute()
+        if not note_result.data:
+            return jsonify({"error": "Note not found"}), 404
+
+        note = note_result.data
+
+        # Check if note is public or owned by user
+        if not note.get('is_public', False) and note.get('user_id') != request.user_id:
+            return jsonify({"error": "Unauthorized access to private note"}), 403
+
+        # Record certification (HB 2271 compliance)
+        ip_address = request.headers.get('X-Forwarded-For', request.remote_addr)
+        if ip_address and ',' in ip_address:
+            ip_address = ip_address.split(',')[0].strip()
+
+        supabase.table("download_certifications").insert({
+            "user_id": request.user_id,
+            "note_id": note_id,
+            "ip_address": ip_address,
+            "user_agent": request.headers.get('User-Agent')
+        }).execute()
+
+        # Generate signed URL for download
+        file_path = note.get('file_path')
+        if not file_path:
+            return jsonify({"error": "Note file not found"}), 404
+
+        download_url = supabase.storage.from_('notes').create_signed_url(file_path, 3600)  # 1 hour expiry
+
+        return jsonify({
+            "download_url": download_url,
+            "filename": note.get('original_filename', 'note.pdf')
+        }), 200
+
+    except Exception as e:
+        debug_log(f"Download note error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/dmca/report", methods=["POST"])
+def submit_dmca_report():
+    """
+    Submit a DMCA takedown notice (does not require authentication)
+
+    Request body:
+    {
+        "note_id": "uuid",
+        "reporter_email": "professor@university.edu",
+        "reporter_name": "Dr. John Doe",
+        "reason": "This contains my copyrighted lecture slides from Fall 2025"
+    }
+
+    Returns:
+    {
+        "success": true,
+        "message": "DMCA report submitted. Note will be reviewed within 24 hours."
+    }
+    """
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        data = request.get_json()
+        note_id = data.get('note_id')
+        reporter_email = data.get('reporter_email')
+        reporter_name = data.get('reporter_name')
+        reason = data.get('reason')
+
+        if not all([note_id, reporter_email, reason]):
+            return jsonify({"error": "note_id, reporter_email, and reason required"}), 400
+
+        # Get note to find uploader
+        note_result = supabase.table("notes").select("user_id").eq("id", note_id).single().execute()
+        if not note_result.data:
+            return jsonify({"error": "Note not found"}), 404
+
+        uploader_id = note_result.data['user_id']
+
+        # Insert DMCA report
+        supabase.table("dmca_takedowns").insert({
+            "note_id": note_id,
+            "uploader_id": uploader_id,
+            "reporter_email": reporter_email,
+            "reporter_name": reporter_name,
+            "takedown_reason": reason
+        }).execute()
+
+        print(f"[DMCA] Takedown report submitted for note {note_id} by {reporter_email}", flush=True)
+
+        return jsonify({
+            "success": True,
+            "message": "DMCA report submitted. The note will be reviewed and removed if valid. You will receive an email confirmation within 24 hours."
+        }), 200
+
+    except Exception as e:
+        debug_log(f"Submit DMCA report error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/dmca/process/<takedown_id>", methods=["POST"])
+def process_dmca_takedown(takedown_id):
+    """
+    ADMIN ONLY: Process a DMCA takedown (apply strike, remove note)
+
+    Request body:
+    {
+        "admin_key": "secret_key",
+        "action": "approve" | "reject"
+    }
+    """
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+        from datetime import datetime
+
+        data = request.get_json()
+        admin_key = data.get('admin_key')
+        action = data.get('action')
+
+        # Simple admin key check (replace with proper auth)
+        if admin_key != os.getenv("ADMIN_KEY", "change_me_in_production"):
+            return jsonify({"error": "Unauthorized"}), 403
+
+        if action not in ['approve', 'reject']:
+            return jsonify({"error": "Invalid action"}), 400
+
+        # Get takedown record
+        takedown_result = supabase.table("dmca_takedowns").select("*").eq("id", takedown_id).single().execute()
+        if not takedown_result.data:
+            return jsonify({"error": "Takedown not found"}), 404
+
+        takedown = takedown_result.data
+        note_id = takedown['note_id']
+        uploader_id = takedown['uploader_id']
+
+        if action == 'approve':
+            # Mark note as private (soft delete)
+            supabase.table("notes").update({"is_public": False}).eq("id", note_id).execute()
+
+            # Apply strike to uploader
+            profile_result = supabase.table("user_profiles").select("dmca_strikes").eq("id", uploader_id).single().execute()
+            current_strikes = profile_result.data.get('dmca_strikes', 0) if profile_result.data else 0
+            new_strikes = current_strikes + 1
+
+            update_data = {"dmca_strikes": new_strikes}
+
+            # Three strikes = permanent bad standing
+            if new_strikes >= 3:
+                update_data["permanent_bad_standing"] = True
+                update_data["good_standing"] = False
+
+            supabase.table("user_profiles").update(update_data).eq("id", uploader_id).execute()
+
+            # Mark takedown as processed
+            supabase.table("dmca_takedowns").update({
+                "processed_at": datetime.utcnow().isoformat(),
+                "strike_applied": True
+            }).eq("id", takedown_id).execute()
+
+            print(f"[DMCA] Strike applied to user {uploader_id} ({new_strikes}/3)", flush=True)
+
+            return jsonify({
+                "success": True,
+                "message": f"Note removed, strike applied ({new_strikes}/3)",
+                "permanent_ban": new_strikes >= 3
+            }), 200
+
+        else:  # reject
+            supabase.table("dmca_takedowns").update({
+                "processed_at": datetime.utcnow().isoformat(),
+                "strike_applied": False
+            }).eq("id", takedown_id).execute()
+
+            return jsonify({
+                "success": True,
+                "message": "DMCA report rejected, no action taken"
+            }), 200
+
+    except Exception as e:
+        debug_log(f"Process DMCA takedown error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
 
