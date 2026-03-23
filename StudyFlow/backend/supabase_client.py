@@ -162,7 +162,7 @@ def create_note_record(user_id: str, filename: str, file_type: str, file_size: i
             "file_path": file_path,
             "page_count": page_count,
             "processed": False,
-            "is_public": False,
+            "is_public": True,  # Default to public for note sharing
             "username": username
         }
 
