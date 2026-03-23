@@ -4114,6 +4114,52 @@ def track_note_view(note_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/consent-log", methods=["POST"])
+@supabase_auth_required
+def log_consent():
+    """
+    Log a click-wrap consent receipt (Missouri HB 2271, SB 1324, DMCA compliance).
+    Stores user_id, file_id, legal_version, timestamp, and IP for AG audit trail.
+    """
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "Missing request body"}), 400
+
+        file_id = data.get('file_id', '')
+        legal_version = data.get('legal_version', '')
+        action = data.get('action', 'download_consent')
+
+        if not file_id or not legal_version:
+            return jsonify({"error": "file_id and legal_version are required"}), 400
+
+        # Get IP address
+        ip_address = request.headers.get('X-Forwarded-For', request.remote_addr)
+        if ip_address and ',' in ip_address:
+            ip_address = ip_address.split(',')[0].strip()
+
+        user_agent = request.headers.get('User-Agent', '')
+
+        supabase.table("consent_logs").insert({
+            "user_id": request.user_id,
+            "file_id": str(file_id),
+            "legal_version": legal_version,
+            "action": action,
+            "ip_address": ip_address,
+            "user_agent": user_agent
+        }).execute()
+
+        debug_log(f"[+] Consent logged: user={request.user_id}, file={file_id}, version={legal_version}")
+
+        return jsonify({"status": "logged"}), 200
+
+    except Exception as e:
+        debug_log(f"[-] Consent log error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/notes/<note_id>/metadata", methods=["GET"])
 @supabase_auth_required
 def get_note_metadata(note_id):
