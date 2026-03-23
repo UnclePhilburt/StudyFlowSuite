@@ -57,7 +57,11 @@ app = Flask(__name__)
 # Enable CORS for website
 from flask_cors import CORS
 CORS(app,
-     resources={r"/api/*": {"origins": "*"}},
+     resources={r"/api/*": {"origins": [
+         "https://unclephilburt.github.io",
+         "http://localhost:*",
+         "http://127.0.0.1:*"
+     ]}},
      allow_headers=["Content-Type", "Authorization"],
      methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
      supports_credentials=True,
