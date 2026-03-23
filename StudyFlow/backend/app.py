@@ -3559,7 +3559,7 @@ def browse_notes():
 
         # Build query (removed username - use user_id instead)
         query = supabase.table("notes").select(
-            "id, original_filename, university, course_code, user_id, topic_tags, page_count, created_at"
+            "id, original_filename, university, course_code, user_id, topic_tags, page_count, uploaded_at"
         ).eq("is_public", True)
 
         if university:
@@ -3568,7 +3568,7 @@ def browse_notes():
             query = query.eq("course_code", course_code)
 
         # Execute query
-        response = query.order("created_at", desc=True).limit(limit).execute()
+        response = query.order("uploaded_at", desc=True).limit(limit).execute()
         notes = response.data if response.data else []
 
         # Get view counts, usage counts, and usernames for each note
