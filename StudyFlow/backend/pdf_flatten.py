@@ -49,14 +49,13 @@ def _add_watermark(img, username, transaction_code):
     font_size = max(24, width // 30)
     font = _get_font(font_size)
 
-    # Calculate diagonal spacing
-    diagonal = math.sqrt(width ** 2 + height ** 2)
-    angle = -math.degrees(math.atan2(height, width))
+    # Diagonal watermarks -- sparse grid so text is readable, not a solid blob
+    angle = -30  # fixed angle for clean diagonals
+    y_spacing = font_size * 12  # large vertical gap between rows
+    x_spacing = font_size * 20  # large horizontal gap between columns
 
-    # Draw repeated diagonal watermarks
-    spacing = font_size * 6
-    for y_offset in range(-height, height * 2, spacing):
-        for x_offset in range(-width, width * 2, spacing):
+    for y_offset in range(0, height * 2, y_spacing):
+        for x_offset in range(-width, width * 2, x_spacing):
             draw.text(
                 (x_offset, y_offset),
                 watermark_text,
