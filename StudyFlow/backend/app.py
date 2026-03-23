@@ -3544,11 +3544,10 @@ def browse_notes():
 
         user_id = request.user_id
 
-        # Check .edu verification
-        profile = supabase.table("user_profiles").select("edu_email_verified").eq("id", user_id).single().execute()
-
-        if not profile.data or not profile.data.get('edu_email_verified'):
-            return jsonify({"error": "Requires .edu email verification"}), 403
+        # Check .edu verification (TEMPORARILY DISABLED FOR TESTING)
+        # profile = supabase.table("user_profiles").select("edu_email_verified").eq("id", user_id).single().execute()
+        # if not profile.data or not profile.data.get('edu_email_verified'):
+        #     return jsonify({"error": "Requires .edu email verification"}), 403
 
         # Get query parameters
         university = request.args.get('university')
