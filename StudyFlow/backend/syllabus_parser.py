@@ -2,15 +2,13 @@
 Syllabus Parser - Extract calendar events from course syllabi using AI
 """
 
-import openai
+from openai import OpenAI
 import json
 import re
+import os
 from datetime import datetime
 from typing import List, Dict, Optional
 from StudyFlow.logging_utils import debug_log
-from StudyFlow.config import OPENAI_API_KEY
-
-openai.api_key = OPENAI_API_KEY
 
 
 def redact_pii(text: str) -> str:
@@ -148,7 +146,8 @@ SYLLABUS TEXT:
 
         # Call OpenAI API - use GPT-4o for better extraction accuracy
         print(f"\n[AI] Calling GPT-4o for calendar extraction...", flush=True)
-        response = openai.ChatCompletion.create(
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
                 {"role": "system", "content": "You are a precise syllabus parser that extracts calendar events in JSON format. Extract EVERY due date, exam, quiz, and assignment you can find."},
