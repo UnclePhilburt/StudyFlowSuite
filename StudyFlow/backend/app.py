@@ -4509,17 +4509,51 @@ def upload_syllabus():
         file_content = file.read()
         file_size = len(file_content)
 
-        # Extract text from PDF
+        # Extract text from file with robust fallback handling
         extracted_text = ""
+
         if file_ext == '.pdf':
+            # Try PyPDF2 first (for text-based PDFs)
             try:
                 pdf_reader = PyPDF2.PdfReader(io.BytesIO(file_content))
                 for page in pdf_reader.pages:
-                    extracted_text += page.extract_text() + "\n"
-                debug_log(f"📄 Extracted {len(extracted_text)} chars from PDF")
+                    page_text = page.extract_text()
+                    if page_text:
+                        extracted_text += page_text + "\n"
+
+                debug_log(f"[PDF] PyPDF2 extracted {len(extracted_text)} chars")
+
+                # If we got very little text, the PDF might be image-based
+                if len(extracted_text.strip()) < 100:
+                    debug_log("[PDF] Text extraction yielded little content, trying OCR fallback...")
+                    try:
+                        from pdf2image import convert_from_bytes
+                        import pytesseract
+                        from PIL import Image
+
+                        # Convert PDF to images
+                        images = convert_from_bytes(file_content, dpi=200)
+
+                        # OCR each page
+                        ocr_text = ""
+                        for i, image in enumerate(images):
+                            page_text = pytesseract.image_to_string(image)
+                            ocr_text += page_text + "\n"
+                            debug_log(f"[OCR] Page {i+1}: {len(page_text)} chars")
+
+                        if len(ocr_text.strip()) > len(extracted_text.strip()):
+                            extracted_text = ocr_text
+                            debug_log(f"[OCR] Used OCR text instead ({len(extracted_text)} chars)")
+                    except ImportError:
+                        debug_log("[OCR] pdf2image/pytesseract not available, using PyPDF2 text")
+                    except Exception as ocr_err:
+                        debug_log(f"[OCR] Fallback failed: {ocr_err}, using PyPDF2 text")
+
             except Exception as e:
-                debug_log(f"❌ PDF extraction error: {e}")
-                return jsonify({"error": f"Failed to extract text from PDF: {str(e)}"}), 500
+                debug_log(f"[PDF] Extraction error: {e}")
+                return jsonify({
+                    "error": f"Failed to process PDF file. The file may be corrupted or password-protected. Error: {str(e)}"
+                }), 500
 
         elif file_ext in ['.docx', '.doc']:
             try:
@@ -4527,13 +4561,28 @@ def upload_syllabus():
                 doc = docx.Document(io.BytesIO(file_content))
                 for paragraph in doc.paragraphs:
                     extracted_text += paragraph.text + "\n"
-                debug_log(f"📄 Extracted {len(extracted_text)} chars from DOCX")
+                # Also extract from tables
+                for table in doc.tables:
+                    for row in table.rows:
+                        for cell in row.cells:
+                            extracted_text += cell.text + "\n"
+                debug_log(f"[DOCX] Extracted {len(extracted_text)} chars")
             except Exception as e:
-                debug_log(f"❌ DOCX extraction error: {e}")
-                return jsonify({"error": f"Failed to extract text from DOCX: {str(e)}"}), 500
+                debug_log(f"[DOCX] Extraction error: {e}")
+                return jsonify({
+                    "error": f"Failed to process DOCX file. The file may be corrupted. Error: {str(e)}"
+                }), 500
 
+        # Validate we got meaningful text
         if not extracted_text.strip():
-            return jsonify({"error": "Could not extract text from file"}), 400
+            return jsonify({
+                "error": "Could not extract any text from the file. Please ensure the PDF contains text (not just images) or try uploading a DOCX file instead."
+            }), 400
+
+        if len(extracted_text.strip()) < 50:
+            return jsonify({
+                "error": f"Extracted text is too short ({len(extracted_text)} characters). The file may not contain a valid syllabus."
+            }), 400
 
         # LEGAL COMPLIANCE LOGGING
         debug_log(f"[LEGAL] Processing syllabus for Fair Use extraction (user: {request.user_id})")

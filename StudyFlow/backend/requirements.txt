@@ -8,6 +8,7 @@ cohere
 python-dotenv
 Pillow
 pytesseract
+pdf2image
 opencv-python-headless
 scikit-image
 rapidfuzz
