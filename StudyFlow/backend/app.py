@@ -3506,6 +3506,23 @@ def download_note_endpoint(note_id):
             result = supabase.table("notes").select("*").eq("id", note_id).eq("is_public", True).execute()
             note_data = result.data[0] if result.data else None
 
+            # GOOD STANDING CHECK: Required for downloading public notes (not your own)
+            if note_data:
+                profile_result = supabase.table("user_profiles").select("good_standing, permanent_bad_standing").eq("id", request.user_id).single().execute()
+                profile = profile_result.data
+
+                # Block if permanently banned
+                if profile.get('permanent_bad_standing', False):
+                    return jsonify({"error": "Account suspended due to DMCA violations"}), 403
+
+                # Check good standing
+                if not profile.get('good_standing', False):
+                    return jsonify({
+                        "error": "Good Standing required to download notes",
+                        "message": "Upload a verified note or subscribe to regain access",
+                        "good_standing_required": True
+                    }), 403
+
         if not note_data:
             return jsonify({"error": "Note not found or unauthorized"}), 404
 
@@ -4665,10 +4682,11 @@ def view_note_file(note_id):
 
 
 @app.route("/api/notes/<note_id>/download", methods=["GET"])
+@supabase_auth_required
 def download_note_file(note_id):
     """
     Download a public note file with flattening and watermark.
-    No auth required since notes are already public.
+    REQUIRES GOOD STANDING: Missouri HB 2271 compliance
     """
     try:
         from StudyFlow.backend.supabase_client import supabase
@@ -4676,6 +4694,22 @@ def download_note_file(note_id):
         from flask import send_file
         import io
         import uuid
+
+        # GOOD STANDING CHECK: Block users not in good standing
+        profile_result = supabase.table("user_profiles").select("good_standing, permanent_bad_standing").eq("id", request.user_id).single().execute()
+        profile = profile_result.data
+
+        # Block if permanently banned
+        if profile.get('permanent_bad_standing', False):
+            return jsonify({"error": "Account suspended due to DMCA violations"}), 403
+
+        # Check good standing
+        if not profile.get('good_standing', False):
+            return jsonify({
+                "error": "Good Standing required to download notes",
+                "message": "Upload a verified note or subscribe to regain access",
+                "good_standing_required": True
+            }), 403
 
         # Verify note exists and is public
         result = supabase.table("notes").select("id, file_path, original_filename, user_id").eq("id", note_id).eq("is_public", True).execute()
@@ -4714,16 +4748,28 @@ def download_note_file(note_id):
 
         try:
             supabase.table("download_transactions").insert({
-                "user_id": None,
+                "user_id": request.user_id,
                 "note_id": note_id,
                 "original_filename": original_filename,
                 "transaction_code": transaction_code,
                 "ip_address": ip_address,
                 "user_agent": request.headers.get('User-Agent', '')
             }).execute()
-            debug_log(f"[+] Public download transaction logged: {transaction_code}")
+            debug_log(f"[+] Download transaction logged: {transaction_code}")
         except Exception as tx_err:
             debug_log(f"[-] Failed to log download transaction: {tx_err}")
+
+        # Log HB 2271 certification (Missouri legal compliance)
+        try:
+            supabase.table("download_certifications").insert({
+                "user_id": request.user_id,
+                "note_id": note_id,
+                "ip_address": ip_address,
+                "user_agent": request.headers.get('User-Agent')
+            }).execute()
+            print(f"[HB 2271] Download certification logged for user {request.user_id}", flush=True)
+        except Exception as cert_err:
+            debug_log(f"[-] Failed to log download certification: {cert_err}")
 
         # Flatten and watermark -- everything becomes a PDF
         flattenable, file_type = can_flatten(original_filename)
