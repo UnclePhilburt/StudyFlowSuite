@@ -3572,17 +3572,37 @@ def browse_notes():
         response = query.order("uploaded_at", desc=True).limit(limit).execute()
         notes = response.data if response.data else []
 
-        # Get view counts, usage counts, and usernames for each note
+        # Filter notes by user's Nexus setting and get usernames
+        filtered_notes = []
         for note in notes:
-            # Get username from user_profiles
+            # Get username AND check if user has Nexus enabled
             try:
-                user_profile = supabase.table("user_profiles").select("username").eq("id", note['user_id']).single().execute()
-                note['username'] = user_profile.data['username'] if user_profile.data else 'Anonymous'
+                user_profile = supabase.table("user_profiles").select("username, is_public").eq("id", note['user_id']).single().execute()
+
+                if user_profile.data:
+                    # Check if user has Nexus enabled (is_public defaults to True if not set)
+                    user_is_public = user_profile.data.get('is_public', True)
+
+                    # Only include note if user has Nexus enabled
+                    if user_is_public:
+                        note['username'] = user_profile.data.get('username') or 'Anonymous'
+                        filtered_notes.append(note)
+                    else:
+                        # User has Nexus disabled, skip this note
+                        debug_log(f"Skipping note {note['id']} - user has Nexus disabled")
+                        continue
+                else:
+                    # No profile found, skip
+                    continue
             except:
-                note['username'] = 'Anonymous'
+                # Error fetching profile, skip to be safe
+                continue
 
             # Remove user_id from response
             note.pop('user_id', None)
+
+        # Replace notes with filtered list
+        notes = filtered_notes
 
             # Get view count
             try:
