@@ -71,12 +71,30 @@ def extract_calendar_events(syllabus_text: str, course_name: str = None, course_
         current_year = datetime.now().year
         current_month = datetime.now().month
 
-        # Determine likely semester based on current date
-        if current_month >= 8:  # Aug or later - likely Fall semester
+        # Try to detect year from syllabus text first
+        detected_year = None
+        year_patterns = [
+            r'Fall\s+(\d{4})', r'Spring\s+(\d{4})', r'Summer\s+(\d{4})',
+            r'Semester:\s*(\d{4})', r'Academic\s+Year:\s*(\d{4})',
+            r'(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s+(\d{4})'
+        ]
+        for pattern in year_patterns:
+            match = re.search(pattern, syllabus_text[:2000], re.IGNORECASE)
+            if match:
+                detected_year = int(match.group(1))
+                print(f"[YEAR] Detected year from syllabus: {detected_year}", flush=True)
+                break
+
+        # Determine likely semester years based on detected year or current date
+        if detected_year:
+            # Use detected year for both semesters
+            fall_year = detected_year
+            spring_year = detected_year if current_month >= 8 else detected_year
+        elif current_month >= 8:  # Aug or later - likely Fall semester
             fall_year = current_year
             spring_year = current_year + 1
-        else:  # Before Aug - likely Spring semester
-            fall_year = current_year - 1
+        else:  # Before Aug - likely Spring or future Fall semester
+            fall_year = current_year  # Could be future Fall
             spring_year = current_year
 
         prompt = f"""You are a syllabus parser that extracts ONLY factual scheduling data for Fair Use compliance.
@@ -91,31 +109,38 @@ IMPORTANT DATE PARSING RULES:
 - Look for dates in ANY format: "Sept 15", "9/15", "September 15th", "Week 3 - Sep 15"
 - Look for times in ANY format: "11:59pm", "11:59 PM", "2:00", "14:00"
 - If no time is given, leave due_time as null
+- Extract EVERY date you find - be thorough!
 
-WHAT TO EXTRACT:
-- Assignments (homework, papers, projects, labs)
-- Exams (midterms, finals, tests)
-- Quizzes (reading quizzes, chapter quizzes)
-- Presentations (individual or group)
-- Due dates for any graded work
-- Important academic deadlines
+WHAT TO EXTRACT (BE COMPREHENSIVE):
+- ALL Assignments: homework, papers, essays, research papers, lab reports, problem sets
+- ALL Exams: midterms, finals, tests, unit exams
+- ALL Quizzes: reading quizzes, chapter quizzes, weekly quizzes, pop quizzes
+- ALL Projects: group projects, individual projects, presentations
+- ALL Papers: drafts, final papers, topic proposals
+- Reading assignments with due dates
+- Discussion posts with due dates
+- Lab work with due dates
+- Any graded work with a specific date
 
-WHERE TO LOOK:
-- Course schedule sections
-- Weekly breakdowns
-- Assignment lists
+WHERE TO LOOK (SCAN EVERYTHING):
+- Course schedule sections (week-by-week breakdowns)
+- Assignment lists and calendars
 - Exam schedules
-- Grading breakdown sections
+- Grading breakdown sections (often lists all graded items)
 - Important dates sections
+- Weekly topic outlines (often include due dates)
+- Appendices and supplementary schedules
 
 For each event, extract:
 1. event_type: One of [assignment, exam, quiz, reading, lecture, project, presentation, discussion, lab, other]
-2. title: BRIEF factual name (e.g., "Midterm 1", "Essay 2", "Quiz 3")
-3. description: MINIMAL factual info only (e.g., "Chapters 1-5")
-4. due_date: Date in YYYY-MM-DD format (REQUIRED)
-5. due_time: Time in HH:MM 24-hour format (optional)
+2. title: BRIEF factual name (e.g., "Midterm 1", "Essay 2", "Quiz 3", "Chapter 5 Reading")
+3. description: MINIMAL factual info only (e.g., "Chapters 1-5", "Topic proposal due")
+4. due_date: Date in YYYY-MM-DD format (REQUIRED - skip events without dates)
+5. due_time: Time in HH:MM 24-hour format (optional, null if not specified)
 
-Return ONLY a valid JSON array. Extract EVERY due date you can find!
+IMPORTANT: Be THOROUGH and COMPREHENSIVE. A typical syllabus has 15-30+ graded items. Extract EVERY single due date, exam, quiz, assignment, and deadline you can find in the syllabus. Do not stop after finding just a few items.
+
+Return ONLY a valid JSON array with ALL events you found.
 
 Example output:
 [
@@ -150,11 +175,11 @@ SYLLABUS TEXT:
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "You are a precise syllabus parser that extracts calendar events in JSON format. Extract EVERY due date, exam, quiz, and assignment you can find."},
+                {"role": "system", "content": "You are a precise syllabus parser that extracts calendar events in JSON format. Be THOROUGH - extract EVERY single due date, exam, quiz, assignment, paper, project, and deadline you can find. A typical syllabus has 15-30+ events."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.1,
-            max_tokens=4000
+            max_tokens=8000  # Increased to allow more events
         )
 
         ai_response = response.choices[0].message.content.strip()
