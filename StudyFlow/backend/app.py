@@ -4279,6 +4279,7 @@ def browse_notes():
         topic_tags = [tag.strip() for tag in topic_tags_str.split(',') if tag.strip()] if topic_tags_str else []
         sort_by = request.args.get('sort', 'recent')
         limit = int(request.args.get('limit', 50))
+        offset = int(request.args.get('offset', 0))
 
         # Build query (removed username - use user_id instead)
         # Exclude Wikipedia notes (user_id is NULL)
@@ -4291,8 +4292,8 @@ def browse_notes():
         if course_code:
             query = query.eq("course_code", course_code)
 
-        # Execute query
-        response = query.order("uploaded_at", desc=True).limit(limit).execute()
+        # Execute query with pagination
+        response = query.order("uploaded_at", desc=True).range(offset, offset + limit - 1).execute()
         notes = response.data if response.data else []
 
         # Filter notes by user's Nexus setting and get usernames
