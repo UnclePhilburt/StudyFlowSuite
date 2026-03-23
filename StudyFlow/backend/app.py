@@ -70,6 +70,221 @@ CORS(app,
      expose_headers=["Content-Type", "Authorization"]
 )
 
+# ============ DMCA EMAIL NOTIFICATIONS ============
+
+def send_dmca_report_notification_to_admin(takedown_id: str, note_filename: str, reporter_email: str, reason: str) -> bool:
+    """Notify admin when new DMCA report is submitted"""
+    admin_email = os.getenv("ADMIN_EMAIL", "info@studyflowsuite.com")
+
+    html_content = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #dc2626;">New DMCA Takedown Report</h2>
+        <p>A copyright infringement report has been submitted and requires your review.</p>
+
+        <div style="background: #f3f4f6; padding: 16px; border-radius: 8px; margin: 20px 0;">
+            <p><strong>Note File:</strong> {note_filename}</p>
+            <p><strong>Reporter:</strong> {reporter_email}</p>
+            <p><strong>Reason:</strong></p>
+            <p style="margin-left: 16px; font-style: italic;">{reason}</p>
+        </div>
+
+        <p><strong>Next Steps:</strong></p>
+        <ol>
+            <li>Review the report in Supabase dashboard</li>
+            <li>Verify the claim is legitimate</li>
+            <li>Process with admin endpoint:</li>
+        </ol>
+
+        <pre style="background: #1f2937; color: #10b981; padding: 12px; border-radius: 4px; font-size: 12px; overflow-x: auto;">
+POST https://studyflowsuite.onrender.com/api/dmca/process/{takedown_id}
+{{
+  "admin_key": "YOUR_ADMIN_KEY",
+  "action": "approve"  // or "reject"
+}}
+        </pre>
+
+        <p style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 12px;">
+            Legal Requirement: DMCA Safe Harbor requires responding to takedown requests within a reasonable timeframe (typically 24-48 hours).
+        </p>
+    </div>
+    """
+
+    plain_text = f"""
+New DMCA Takedown Report
+
+Note File: {note_filename}
+Reporter: {reporter_email}
+Reason: {reason}
+
+Review this report in your Supabase dashboard and process using the admin endpoint.
+
+Legal Requirement: DMCA Safe Harbor requires responding within 24-48 hours.
+    """
+
+    try:
+        sg = SendGridAPIClient(os.getenv("SENDGRID_API_KEY"))
+        message = Mail(
+            from_email=Email("info@studyflowsuite.com", "StudyFlow DMCA System"),
+            to_emails=admin_email,
+            subject=f"[DMCA] New Takedown Report - {note_filename}",
+            plain_text_content=plain_text,
+            html_content=html_content
+        )
+        message.mail_settings = MailSettings(sandbox_mode=SandBoxMode(enable=False))
+
+        response = sg.send(message)
+        app.logger.info(f"✅ DMCA admin notification sent ({response.status_code})")
+        return True
+    except Exception as e:
+        app.logger.error(f"❌ Failed to send DMCA admin notification: {e}")
+        return False
+
+
+def send_dmca_strike_notification_to_user(user_email: str, user_name: str, strike_count: int, note_filename: str, is_permanent_ban: bool) -> bool:
+    """Notify user when they receive a DMCA strike"""
+
+    if is_permanent_ban:
+        subject = "Account Suspended - 3 DMCA Strikes"
+        html_content = f"""
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <h2 style="color: #dc2626;">Account Suspended</h2>
+            <p>Hello {user_name},</p>
+
+            <p>Your StudyFlow account has been <strong>permanently suspended</strong> from Good Standing privileges due to repeated copyright violations.</p>
+
+            <div style="background: #fee2e2; border-left: 4px solid #dc2626; padding: 16px; margin: 20px 0;">
+                <p style="margin: 0;"><strong>Strike Count: 3/3 (PERMANENT BAN)</strong></p>
+                <p style="margin: 8px 0 0 0;">Most recent violation: {note_filename}</p>
+            </div>
+
+            <p><strong>What this means:</strong></p>
+            <ul>
+                <li>You can NO LONGER download notes from StudyFlow</li>
+                <li>This suspension is PERMANENT and cannot be appealed</li>
+                <li>Uploading new notes will NOT restore your access</li>
+            </ul>
+
+            <p><strong>Why this happened:</strong></p>
+            <p>You uploaded copyrighted material (lecture slides, textbooks, etc.) owned by professors or publishers. This violates copyright law and our Terms of Service.</p>
+
+            <p style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 12px;">
+                StudyFlow maintains a Three-Strikes Policy in compliance with DMCA Safe Harbor requirements. Repeat copyright infringers are permanently banned from the platform.
+            </p>
+        </div>
+        """
+    else:
+        subject = f"DMCA Strike {strike_count}/3 - Warning"
+        html_content = f"""
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <h2 style="color: #f59e0b;">Copyright Strike Warning</h2>
+            <p>Hello {user_name},</p>
+
+            <p>You have received a copyright strike for uploading infringing content to StudyFlow.</p>
+
+            <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px; margin: 20px 0;">
+                <p style="margin: 0;"><strong>Strike Count: {strike_count}/3</strong></p>
+                <p style="margin: 8px 0 0 0;">File removed: {note_filename}</p>
+            </div>
+
+            <p><strong>What happened:</strong></p>
+            <p>A copyright owner (likely a professor or publisher) reported that your uploaded file contained their copyrighted material.</p>
+
+            <p><strong>What this means:</strong></p>
+            <ul>
+                <li>Your file has been removed from public access</li>
+                <li>{'One more strike and you will be PERMANENTLY BANNED' if strike_count == 2 else 'You have 2 strikes remaining before permanent ban'}</li>
+                <li>You currently maintain Good Standing (if you have recent uploads)</li>
+            </ul>
+
+            <p><strong>How to avoid future strikes:</strong></p>
+            <ul>
+                <li>Only upload YOUR OWN notes that you personally wrote</li>
+                <li>Do NOT upload professor's lecture slides or PowerPoints</li>
+                <li>Do NOT upload textbook pages or publisher materials</li>
+                <li>Do NOT upload copyrighted exam/quiz materials</li>
+            </ul>
+
+            <p style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 12px;">
+                <strong>Three-Strikes Policy:</strong> Strike 1 = Warning. Strike 2 = Final Warning. Strike 3 = Permanent ban from downloading any notes.
+            </p>
+        </div>
+        """
+
+    try:
+        sg = SendGridAPIClient(os.getenv("SENDGRID_API_KEY"))
+        message = Mail(
+            from_email=Email("info@studyflowsuite.com", "StudyFlow Legal"),
+            to_emails=user_email,
+            subject=subject,
+            html_content=html_content
+        )
+        message.mail_settings = MailSettings(sandbox_mode=SandBoxMode(enable=False))
+
+        response = sg.send(message)
+        app.logger.info(f"✅ DMCA strike notification sent to user ({response.status_code})")
+        return True
+    except Exception as e:
+        app.logger.error(f"❌ Failed to send DMCA strike notification: {e}")
+        return False
+
+
+def send_dmca_report_confirmation_to_reporter(reporter_email: str, reporter_name: str, note_filename: str, action: str) -> bool:
+    """Notify reporter when their DMCA report is processed"""
+
+    if action == "approve":
+        subject = "DMCA Report Processed - Content Removed"
+        status_html = """
+        <div style="background: #d1fae5; border-left: 4px solid #10b981; padding: 16px; margin: 20px 0;">
+            <p style="margin: 0;"><strong>Status: APPROVED</strong></p>
+            <p style="margin: 8px 0 0 0;">The infringing content has been removed and the uploader has received a copyright strike.</p>
+        </div>
+        """
+    else:
+        subject = "DMCA Report Processed - No Action Taken"
+        status_html = """
+        <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px; margin: 20px 0;">
+            <p style="margin: 0;"><strong>Status: REJECTED</strong></p>
+            <p style="margin: 8px 0 0 0;">After review, we determined the content does not constitute copyright infringement.</p>
+        </div>
+        """
+
+    html_content = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <h2 style="color: #1f2937;">DMCA Report Update</h2>
+        <p>Hello {reporter_name or 'there'},</p>
+
+        <p>Your copyright infringement report has been processed by our team.</p>
+
+        {status_html}
+
+        <p><strong>Reported File:</strong> {note_filename}</p>
+
+        <p>Thank you for helping us maintain a legal and respectful learning community.</p>
+
+        <p style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 12px;">
+            If you have questions or wish to submit additional reports, please contact us at info@studyflowsuite.com
+        </p>
+    </div>
+    """
+
+    try:
+        sg = SendGridAPIClient(os.getenv("SENDGRID_API_KEY"))
+        message = Mail(
+            from_email=Email("info@studyflowsuite.com", "StudyFlow Legal"),
+            to_emails=reporter_email,
+            subject=subject,
+            html_content=html_content
+        )
+        message.mail_settings = MailSettings(sandbox_mode=SandBoxMode(enable=False))
+
+        response = sg.send(message)
+        app.logger.info(f"✅ DMCA confirmation sent to reporter ({response.status_code})")
+        return True
+    except Exception as e:
+        app.logger.error(f"❌ Failed to send DMCA confirmation: {e}")
+        return False
+
+
 def send_access_key_email(to_email: str, stripe_id: str) -> bool:
     # Build your message bodies
     html_content = (
@@ -5168,15 +5383,16 @@ def submit_dmca_report():
         if not all([note_id, reporter_email, reason]):
             return jsonify({"error": "note_id, reporter_email, and reason required"}), 400
 
-        # Get note to find uploader
-        note_result = supabase.table("notes").select("user_id").eq("id", note_id).single().execute()
+        # Get note to find uploader and filename
+        note_result = supabase.table("notes").select("user_id, original_filename").eq("id", note_id).single().execute()
         if not note_result.data:
             return jsonify({"error": "Note not found"}), 404
 
         uploader_id = note_result.data['user_id']
+        note_filename = note_result.data.get('original_filename', 'Unknown file')
 
         # Insert DMCA report
-        supabase.table("dmca_takedowns").insert({
+        takedown_result = supabase.table("dmca_takedowns").insert({
             "note_id": note_id,
             "uploader_id": uploader_id,
             "reporter_email": reporter_email,
@@ -5184,7 +5400,18 @@ def submit_dmca_report():
             "takedown_reason": reason
         }).execute()
 
+        takedown_id = takedown_result.data[0]['id'] if takedown_result.data else None
+
         print(f"[DMCA] Takedown report submitted for note {note_id} by {reporter_email}", flush=True)
+
+        # Send email notification to admin
+        if takedown_id:
+            send_dmca_report_notification_to_admin(
+                takedown_id=takedown_id,
+                note_filename=note_filename,
+                reporter_email=reporter_email,
+                reason=reason
+            )
 
         return jsonify({
             "success": True,
@@ -5230,20 +5457,34 @@ def process_dmca_takedown(takedown_id):
         takedown = takedown_result.data
         note_id = takedown['note_id']
         uploader_id = takedown['uploader_id']
+        reporter_email = takedown.get('reporter_email')
+        reporter_name = takedown.get('reporter_name')
+
+        # Get note filename
+        note_result = supabase.table("notes").select("original_filename").eq("id", note_id).single().execute()
+        note_filename = note_result.data.get('original_filename', 'Unknown file') if note_result.data else 'Unknown file'
+
+        # Get uploader's email and username
+        uploader_result = supabase.table("user_profiles").select("email, username, dmca_strikes").eq("id", uploader_id).single().execute()
+        if not uploader_result.data:
+            return jsonify({"error": "Uploader profile not found"}), 404
+
+        uploader_email = uploader_result.data.get('email')
+        uploader_name = uploader_result.data.get('username', 'User')
+        current_strikes = uploader_result.data.get('dmca_strikes', 0)
 
         if action == 'approve':
             # Mark note as private (soft delete)
             supabase.table("notes").update({"is_public": False}).eq("id", note_id).execute()
 
             # Apply strike to uploader
-            profile_result = supabase.table("user_profiles").select("dmca_strikes").eq("id", uploader_id).single().execute()
-            current_strikes = profile_result.data.get('dmca_strikes', 0) if profile_result.data else 0
             new_strikes = current_strikes + 1
 
             update_data = {"dmca_strikes": new_strikes}
 
             # Three strikes = permanent bad standing
-            if new_strikes >= 3:
+            is_permanent_ban = new_strikes >= 3
+            if is_permanent_ban:
                 update_data["permanent_bad_standing"] = True
                 update_data["good_standing"] = False
 
@@ -5257,10 +5498,29 @@ def process_dmca_takedown(takedown_id):
 
             print(f"[DMCA] Strike applied to user {uploader_id} ({new_strikes}/3)", flush=True)
 
+            # Send email to user about strike
+            if uploader_email:
+                send_dmca_strike_notification_to_user(
+                    user_email=uploader_email,
+                    user_name=uploader_name,
+                    strike_count=new_strikes,
+                    note_filename=note_filename,
+                    is_permanent_ban=is_permanent_ban
+                )
+
+            # Send confirmation to reporter
+            if reporter_email:
+                send_dmca_report_confirmation_to_reporter(
+                    reporter_email=reporter_email,
+                    reporter_name=reporter_name,
+                    note_filename=note_filename,
+                    action='approve'
+                )
+
             return jsonify({
                 "success": True,
                 "message": f"Note removed, strike applied ({new_strikes}/3)",
-                "permanent_ban": new_strikes >= 3
+                "permanent_ban": is_permanent_ban
             }), 200
 
         else:  # reject
@@ -5268,6 +5528,15 @@ def process_dmca_takedown(takedown_id):
                 "processed_at": datetime.utcnow().isoformat(),
                 "strike_applied": False
             }).eq("id", takedown_id).execute()
+
+            # Send rejection confirmation to reporter
+            if reporter_email:
+                send_dmca_report_confirmation_to_reporter(
+                    reporter_email=reporter_email,
+                    reporter_name=reporter_name,
+                    note_filename=note_filename,
+                    action='reject'
+                )
 
             return jsonify({
                 "success": True,
