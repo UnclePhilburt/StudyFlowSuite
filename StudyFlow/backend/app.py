@@ -3630,12 +3630,6 @@ def browse_notes():
                 # Error fetching profile, skip to be safe
                 continue
 
-            # Remove user_id from response
-            note.pop('user_id', None)
-
-        # Replace notes with filtered list
-        notes = filtered_notes
-
             # Get view count
             try:
                 view_count_response = supabase.table("note_views").select("id", count="exact").eq("note_id", note['id']).execute()
@@ -3648,6 +3642,12 @@ def browse_notes():
 
             # Rename original_filename to filename for frontend
             note['filename'] = note.pop('original_filename')
+
+            # Remove user_id from response
+            note.pop('user_id', None)
+
+        # Replace notes with filtered list
+        notes = filtered_notes
 
         # Filter by tags if specified
         if topic_tags:
