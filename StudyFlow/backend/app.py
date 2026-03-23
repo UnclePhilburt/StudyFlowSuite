@@ -4557,8 +4557,8 @@ def upload_syllabus():
         debug_log(f"[VALIDATION] Extracted text length: {len(extracted_text.strip())} chars")
 
         # LEGAL COMPLIANCE LOGGING
-        print(f"\n[LEGAL] Processing syllabus for Fair Use extraction (user: {request.user_id})")
-        print(f"[LEGAL] Extracting only factual data (dates, times, task names) per 17 USC 107")
+        print(f"\n[LEGAL] Processing syllabus for Fair Use extraction (user: {request.user_id})", flush=True)
+        print(f"[LEGAL] Extracting only factual data (dates, times, task names) per 17 USC 107", flush=True)
 
         # Insert syllabus record (metadata only - NO copyrighted content stored)
         syllabus_data = {
@@ -4576,28 +4576,28 @@ def upload_syllabus():
         syllabus_result = supabase.table("syllabi").insert(syllabus_data).execute()
         syllabus_id = syllabus_result.data[0]['id']
 
-        print(f"[LEGAL] Syllabus metadata saved: {syllabus_id}")
+        print(f"[LEGAL] Syllabus metadata saved: {syllabus_id}", flush=True)
 
         # Extract calendar events using AI (Fair Use - factual data only)
-        print(f"\n[UPLOAD] Calling extract_calendar_events()...")
+        print(f"\n[UPLOAD] Calling extract_calendar_events()...", flush=True)
         events = extract_calendar_events(extracted_text, course_name, course_code)
-        print(f"[UPLOAD] extract_calendar_events() returned {len(events)} events")
+        print(f"[UPLOAD] extract_calendar_events() returned {len(events)} events", flush=True)
 
         # Insert events into database
         inserted_events = []
         for event in events:
-            print(f"[UPLOAD] Validating event: {event.get('title', 'NO TITLE')}")
+            print(f"[UPLOAD] Validating event: {event.get('title', 'NO TITLE')}", flush=True)
             if validate_event(event):
                 event_data = format_event_for_db(event, request.user_id, syllabus_id)
                 result = supabase.table("calendar_events").insert(event_data).execute()
                 if result.data:
                     inserted_events.append(result.data[0])
-                    print(f"[UPLOAD] Inserted event: {event.get('title')}")
+                    print(f"[UPLOAD] Inserted event: {event.get('title')}", flush=True)
             else:
-                print(f"[UPLOAD] Event validation FAILED for: {event}")
+                print(f"[UPLOAD] Event validation FAILED for: {event}", flush=True)
 
-        print(f"\n[LEGAL] Extracted {len(inserted_events)} events (factual data only)")
-        print(f"[LEGAL] Original syllabus discarded per SB 1324 disclosure")
+        print(f"\n[LEGAL] Extracted {len(inserted_events)} events (factual data only)", flush=True)
+        print(f"[LEGAL] Original syllabus discarded per SB 1324 disclosure", flush=True)
 
         # File is NOT uploaded to storage - processing complete, file discarded
         # This satisfies: Copyright (Fair Use), Privacy (SB 1324), Academic Integrity (HB 2271)

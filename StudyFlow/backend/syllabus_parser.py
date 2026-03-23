@@ -60,14 +60,14 @@ def extract_calendar_events(syllabus_text: str, course_name: str = None, course_
         - due_time: Time in HH:MM format (optional)
     """
     try:
-        print(f"\n========== SYLLABUS EXTRACTION START ==========")
-        print(f"[EXTRACT] Syllabus length: {len(syllabus_text)} chars")
-        print(f"[EXTRACT] First 500 chars:\n{syllabus_text[:500]}")
-        print(f"========================================\n")
+        print(f"\n========== SYLLABUS EXTRACTION START ==========", flush=True)
+        print(f"[EXTRACT] Syllabus length: {len(syllabus_text)} chars", flush=True)
+        print(f"[EXTRACT] First 500 chars:\n{syllabus_text[:500]}", flush=True)
+        print(f"========================================\n", flush=True)
 
         # FERPA Compliance: Redact PII before processing
         syllabus_text = redact_pii(syllabus_text)
-        print(f"[EXTRACT] After PII redaction: {len(syllabus_text)} chars")
+        print(f"[EXTRACT] After PII redaction: {len(syllabus_text)} chars", flush=True)
 
         # Prepare prompt for AI - FAIR USE: Extract only factual data
         current_year = datetime.now().year
@@ -147,7 +147,7 @@ SYLLABUS TEXT:
 """
 
         # Call OpenAI API - use GPT-4o for better extraction accuracy
-        print(f"\n[AI] Calling GPT-4o for calendar extraction...")
+        print(f"\n[AI] Calling GPT-4o for calendar extraction...", flush=True)
         response = openai.ChatCompletion.create(
             model="gpt-4o",
             messages=[
@@ -159,9 +159,9 @@ SYLLABUS TEXT:
         )
 
         ai_response = response.choices[0].message.content.strip()
-        print(f"\n========== AI RESPONSE START ==========")
-        print(ai_response)
-        print(f"========== AI RESPONSE END ==========\n")
+        print(f"\n========== AI RESPONSE START ==========", flush=True)
+        print(ai_response, flush=True)
+        print(f"========== AI RESPONSE END ==========\n", flush=True)
 
         # Parse JSON response
         # Remove markdown code blocks if present
@@ -170,7 +170,7 @@ SYLLABUS TEXT:
             ai_response = re.sub(r'\s*```$', '', ai_response)
 
         events = json.loads(ai_response)
-        print(f"[AI PARSED] Successfully parsed {len(events)} events from JSON")
+        print(f"[AI PARSED] Successfully parsed {len(events)} events from JSON", flush=True)
 
         # Add course info to each event
         for event in events:
@@ -179,20 +179,20 @@ SYLLABUS TEXT:
             if course_code:
                 event['course_code'] = course_code
 
-        print(f"\n[SUCCESS] Extracted {len(events)} calendar events")
-        print(f"========== SYLLABUS EXTRACTION END ==========\n")
+        print(f"\n[SUCCESS] Extracted {len(events)} calendar events", flush=True)
+        print(f"========== SYLLABUS EXTRACTION END ==========\n", flush=True)
         return events
 
     except json.JSONDecodeError as e:
-        print(f"\n[ERROR] Failed to parse AI response as JSON: {e}")
-        print(f"[ERROR] AI response was: {ai_response}")
-        print(f"========== SYLLABUS EXTRACTION END (ERROR) ==========\n")
+        print(f"\n[ERROR] Failed to parse AI response as JSON: {e}", flush=True)
+        print(f"[ERROR] AI response was: {ai_response}", flush=True)
+        print(f"========== SYLLABUS EXTRACTION END (ERROR) ==========\n", flush=True)
         return []
     except Exception as e:
-        print(f"\n[ERROR] Error extracting calendar events: {e}")
+        print(f"\n[ERROR] Error extracting calendar events: {e}", flush=True)
         import traceback
-        print(traceback.format_exc())
-        print(f"========== SYLLABUS EXTRACTION END (ERROR) ==========\n")
+        print(traceback.format_exc(), flush=True)
+        print(f"========== SYLLABUS EXTRACTION END (ERROR) ==========\n", flush=True)
         return []
 
 
