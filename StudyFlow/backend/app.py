@@ -3558,9 +3558,10 @@ def browse_notes():
         limit = int(request.args.get('limit', 50))
 
         # Build query (removed username - use user_id instead)
+        # Exclude Wikipedia notes (user_id is NULL)
         query = supabase.table("notes").select(
             "id, original_filename, university, course_code, user_id, topic_tags, page_count, uploaded_at"
-        ).eq("is_public", True)
+        ).eq("is_public", True).not_.is_("user_id", "null")
 
         if university:
             query = query.eq("university", university)
