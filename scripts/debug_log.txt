@@ -7,3 +7,20 @@
 [14:44:37] [+] Supabase client initialized: https://mxddgbpxjoltaimftpmn.supabase.co
 [14:45:46] [+] Supabase client initialized: https://mxddgbpxjoltaimftpmn.supabase.co
 [14:46:25] [+] Supabase client initialized: https://mxddgbpxjoltaimftpmn.supabase.co
+[21:43:21] [+] Supabase client initialized: https://mxddgbpxjoltaimftpmn.supabase.co
+[21:43:48] [+] Supabase client initialized: https://mxddgbpxjoltaimftpmn.supabase.co
+[21:43:48] [+] Updated 0 notes with NULL is_public to True
+[21:43:49] [+] Updated 1 notes with is_public=False to True
+[21:43:49] 
+[SUCCESS] Total notes updated: 1
+[21:43:49] [STATS] Database stats: 257/257 notes are now public
+[21:48:18] [+] Supabase client initialized: https://mxddgbpxjoltaimftpmn.supabase.co
+[21:48:19] [1] Found 19 public notes in database
+[21:48:19] Error: {'message': 'column user_profiles.is_public does not exist', 'code': '42703', 'hint': None, 'details': None}
+[21:48:49] [+] Supabase client initialized: https://mxddgbpxjoltaimftpmn.supabase.co
+[21:48:49] [*] Checking user_profiles structure...
+[21:48:50] [-] Column 'is_public' does NOT exist
+[21:48:50] 
+[ACTION REQUIRED] Please run this SQL in Supabase SQL editor:
+[21:48:50] ============================================================
+[21:48:50] ============================================================

@@ -4457,6 +4457,294 @@ def download_note_file(note_id):
         return jsonify({"error": str(e)}), 500
 
 
+# ============ SYLLABUS & CALENDAR ENDPOINTS ============
+
+@app.route("/api/syllabus/upload", methods=["POST"])
+@supabase_auth_required
+def upload_syllabus():
+    """
+    Upload a course syllabus (PDF/DOCX) and extract calendar events using AI
+
+    Expects multipart/form-data:
+    - file: Syllabus PDF or DOCX file
+    - course_name: Course name (optional)
+    - course_code: Course code (optional)
+    - professor_name: Professor name (optional)
+    - semester: Semester (optional, e.g., "Fall 2026")
+
+    Returns:
+    {
+        "syllabus_id": "uuid",
+        "events": [{...extracted calendar events...}],
+        "message": "Syllabus uploaded and processed"
+    }
+    """
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+        from StudyFlow.backend.syllabus_parser import extract_calendar_events, format_event_for_db, validate_event
+        import PyPDF2
+        import io
+
+        # Get uploaded file
+        if 'file' not in request.files:
+            return jsonify({"error": "No file uploaded"}), 400
+
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({"error": "No file selected"}), 400
+
+        # Get form data
+        course_name = request.form.get('course_name', 'Untitled Course')
+        course_code = request.form.get('course_code')
+        professor_name = request.form.get('professor_name')
+        semester = request.form.get('semester')
+
+        # Validate file type
+        allowed_extensions = {'.pdf', '.docx', '.doc'}
+        file_ext = os.path.splitext(file.filename)[1].lower()
+        if file_ext not in allowed_extensions:
+            return jsonify({"error": f"File type not supported. Please upload PDF or DOCX. Got: {file_ext}"}), 400
+
+        # Read file content
+        file_content = file.read()
+        file_size = len(file_content)
+
+        # Extract text from PDF
+        extracted_text = ""
+        if file_ext == '.pdf':
+            try:
+                pdf_reader = PyPDF2.PdfReader(io.BytesIO(file_content))
+                for page in pdf_reader.pages:
+                    extracted_text += page.extract_text() + "\n"
+                debug_log(f"📄 Extracted {len(extracted_text)} chars from PDF")
+            except Exception as e:
+                debug_log(f"❌ PDF extraction error: {e}")
+                return jsonify({"error": f"Failed to extract text from PDF: {str(e)}"}), 500
+
+        elif file_ext in ['.docx', '.doc']:
+            try:
+                import docx
+                doc = docx.Document(io.BytesIO(file_content))
+                for paragraph in doc.paragraphs:
+                    extracted_text += paragraph.text + "\n"
+                debug_log(f"📄 Extracted {len(extracted_text)} chars from DOCX")
+            except Exception as e:
+                debug_log(f"❌ DOCX extraction error: {e}")
+                return jsonify({"error": f"Failed to extract text from DOCX: {str(e)}"}), 500
+
+        if not extracted_text.strip():
+            return jsonify({"error": "Could not extract text from file"}), 400
+
+        # Upload file to Supabase Storage
+        file_path = f"{request.user_id}/syllabi/{file.filename}"
+        storage_result = supabase.storage.from_('notes').upload(
+            file_path,
+            file_content,
+            {"content-type": file.content_type or "application/pdf"}
+        )
+
+        # Insert syllabus record
+        syllabus_data = {
+            "user_id": request.user_id,
+            "course_name": course_name,
+            "course_code": course_code,
+            "professor_name": professor_name,
+            "semester": semester,
+            "file_path": file_path,
+            "original_filename": file.filename,
+            "extracted_text": extracted_text,
+            "file_size": file_size
+        }
+
+        syllabus_result = supabase.table("syllabi").insert(syllabus_data).execute()
+        syllabus_id = syllabus_result.data[0]['id']
+
+        debug_log(f"✅ Syllabus uploaded: {syllabus_id}")
+
+        # Extract calendar events using AI
+        events = extract_calendar_events(extracted_text, course_name, course_code)
+
+        # Insert events into database
+        inserted_events = []
+        for event in events:
+            if validate_event(event):
+                event_data = format_event_for_db(event, request.user_id, syllabus_id)
+                result = supabase.table("calendar_events").insert(event_data).execute()
+                if result.data:
+                    inserted_events.append(result.data[0])
+
+        debug_log(f"📅 Inserted {len(inserted_events)} calendar events")
+
+        return jsonify({
+            "success": True,
+            "syllabus_id": syllabus_id,
+            "events": inserted_events,
+            "message": f"Syllabus uploaded and {len(inserted_events)} events extracted"
+        }), 200
+
+    except Exception as e:
+        debug_log(f"❌ Upload syllabus error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/calendar/events", methods=["GET"])
+@supabase_auth_required
+def get_calendar_events():
+    """
+    Get user's calendar events
+
+    Query params:
+    - start_date: Filter events after this date (YYYY-MM-DD)
+    - end_date: Filter events before this date (YYYY-MM-DD)
+    - course_code: Filter by course code
+    - completed: Filter by completion status (true/false)
+    """
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        query = supabase.table("calendar_events").select("*").eq("user_id", request.user_id)
+
+        # Apply filters
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        course_code = request.args.get('course_code')
+        completed = request.args.get('completed')
+
+        if start_date:
+            query = query.gte('due_date', start_date)
+        if end_date:
+            query = query.lte('due_date', end_date)
+        if course_code:
+            query = query.eq('course_code', course_code)
+        if completed is not None:
+            query = query.eq('completed', completed.lower() == 'true')
+
+        # Order by due date
+        query = query.order('due_date', desc=False)
+
+        result = query.execute()
+
+        return jsonify({
+            "success": True,
+            "events": result.data
+        }), 200
+
+    except Exception as e:
+        debug_log(f"❌ Get calendar events error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/calendar/events", methods=["POST"])
+@supabase_auth_required
+def create_calendar_event():
+    """
+    Manually create a calendar event
+
+    Request body:
+    {
+        "event_type": "assignment",
+        "title": "Lab Report 3",
+        "description": "Write up lab 3 results",
+        "due_date": "2026-04-15",
+        "due_time": "23:59",
+        "course_name": "Chemistry 101",
+        "course_code": "CHEM101"
+    }
+    """
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+        from StudyFlow.backend.syllabus_parser import format_event_for_db, validate_event
+
+        data = request.get_json()
+
+        if not validate_event(data):
+            return jsonify({"error": "Missing required fields: event_type, title, due_date"}), 400
+
+        event_data = format_event_for_db(data, request.user_id, syllabus_id=None)
+        result = supabase.table("calendar_events").insert(event_data).execute()
+
+        return jsonify({
+            "success": True,
+            "event": result.data[0]
+        }), 201
+
+    except Exception as e:
+        debug_log(f"❌ Create calendar event error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/calendar/events/<event_id>", methods=["PUT"])
+@supabase_auth_required
+def update_calendar_event(event_id):
+    """
+    Update a calendar event (e.g., mark as completed, edit details)
+
+    Request body:
+    {
+        "completed": true,
+        "title": "Updated title",
+        ...
+    }
+    """
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        data = request.get_json()
+
+        # Update event (only if it belongs to user)
+        result = supabase.table("calendar_events").update(data).eq("id", event_id).eq("user_id", request.user_id).execute()
+
+        if not result.data:
+            return jsonify({"error": "Event not found or unauthorized"}), 404
+
+        return jsonify({
+            "success": True,
+            "event": result.data[0]
+        }), 200
+
+    except Exception as e:
+        debug_log(f"❌ Update calendar event error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/calendar/events/<event_id>", methods=["DELETE"])
+@supabase_auth_required
+def delete_calendar_event(event_id):
+    """Delete a calendar event"""
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        result = supabase.table("calendar_events").delete().eq("id", event_id).eq("user_id", request.user_id).execute()
+
+        if not result.data:
+            return jsonify({"error": "Event not found or unauthorized"}), 404
+
+        return jsonify({"success": True}), 200
+
+    except Exception as e:
+        debug_log(f"❌ Delete calendar event error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/syllabi", methods=["GET"])
+@supabase_auth_required
+def get_syllabi():
+    """Get user's uploaded syllabi"""
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        result = supabase.table("syllabi").select("*").eq("user_id", request.user_id).order('created_at', desc=True).execute()
+
+        return jsonify({
+            "success": True,
+            "syllabi": result.data
+        }), 200
+
+    except Exception as e:
+        debug_log(f"❌ Get syllabi error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     try:
         port = int(os.environ.get("PORT", 5000))

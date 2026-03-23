@@ -20,3 +20,5 @@ stripe
 sendgrid
 requests
 pymupdf
+PyPDF2
+python-docx
