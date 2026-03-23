@@ -66,46 +66,75 @@ def extract_calendar_events(syllabus_text: str, course_name: str = None, course_
         syllabus_text = redact_pii(syllabus_text)
 
         # Prepare prompt for AI - FAIR USE: Extract only factual data
+        current_year = datetime.now().year
+        current_month = datetime.now().month
+
+        # Determine likely semester based on current date
+        if current_month >= 8:  # Aug or later - likely Fall semester
+            fall_year = current_year
+            spring_year = current_year + 1
+        else:  # Before Aug - likely Spring semester
+            fall_year = current_year - 1
+            spring_year = current_year
+
         prompt = f"""You are a syllabus parser that extracts ONLY factual scheduling data for Fair Use compliance.
 
-CRITICAL: Extract ONLY factual information (dates, times, task names). Do NOT reproduce:
-- Professor's creative lecture descriptions
-- Original assignment instructions or requirements
-- Proprietary reading lists or materials
-- Any creative expression from the syllabus
+CRITICAL: Extract ONLY factual information (dates, times, task names). Do NOT reproduce professor's creative content.
 
-Extract ONLY:
-- Assignment/exam names (factual titles only)
-- Due dates and times
-- Event types (assignment, exam, quiz, etc.)
+IMPORTANT DATE PARSING RULES:
+- Current date for reference: {datetime.now().strftime('%Y-%m-%d')}
+- For Fall semester dates (Aug-Dec), use year {fall_year}
+- For Spring semester dates (Jan-May), use year {spring_year}
+- For Summer dates (Jun-Jul), use year {spring_year}
+- Look for dates in ANY format: "Sept 15", "9/15", "September 15th", "Week 3 - Sep 15"
+- Look for times in ANY format: "11:59pm", "11:59 PM", "2:00", "14:00"
+- If no time is given, leave due_time as null
+
+WHAT TO EXTRACT:
+- Assignments (homework, papers, projects, labs)
+- Exams (midterms, finals, tests)
+- Quizzes (reading quizzes, chapter quizzes)
+- Presentations (individual or group)
+- Due dates for any graded work
+- Important academic deadlines
+
+WHERE TO LOOK:
+- Course schedule sections
+- Weekly breakdowns
+- Assignment lists
+- Exam schedules
+- Grading breakdown sections
+- Important dates sections
 
 For each event, extract:
 1. event_type: One of [assignment, exam, quiz, reading, lecture, project, presentation, discussion, lab, other]
-2. title: BRIEF factual name only (e.g., "Midterm Exam", "Assignment 3", "Chapter 5 Quiz")
-3. description: MINIMAL factual info ONLY if needed (e.g., "Chapters 1-5" not full instructions)
-4. due_date: Date in YYYY-MM-DD format
-5. due_time: Time in HH:MM 24-hour format if specified (optional)
+2. title: BRIEF factual name (e.g., "Midterm 1", "Essay 2", "Quiz 3")
+3. description: MINIMAL factual info only (e.g., "Chapters 1-5")
+4. due_date: Date in YYYY-MM-DD format (REQUIRED)
+5. due_time: Time in HH:MM 24-hour format (optional)
 
-If the year is not specified, assume it's the current academic year. If only a month and day are given, infer the year based on typical semester schedules (Fall: Aug-Dec, Spring: Jan-May, Summer: Jun-Jul).
+Return ONLY a valid JSON array. Extract EVERY due date you can find!
 
-Current date for reference: {datetime.now().strftime('%Y-%m-%d')}
-
-Return ONLY a valid JSON array of events. Do not include any explanatory text.
-
-Example output (factual data only):
+Example output:
 [
   {{
     "event_type": "quiz",
-    "title": "Reading Quiz 1",
+    "title": "Quiz 1",
     "description": "Chapters 1-3",
-    "due_date": "2026-09-15",
+    "due_date": "{fall_year}-09-15",
     "due_time": "23:59"
   }},
   {{
     "event_type": "exam",
     "title": "Midterm Exam",
-    "due_date": "2026-10-20",
+    "due_date": "{fall_year}-10-20",
     "due_time": "14:00"
+  }},
+  {{
+    "event_type": "assignment",
+    "title": "Paper 1",
+    "due_date": "{fall_year}-11-01",
+    "due_time": null
   }}
 ]
 
