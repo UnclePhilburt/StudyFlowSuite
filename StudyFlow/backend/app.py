@@ -2789,8 +2789,9 @@ def get_notes_usage_stats():
         week_ago = (datetime.now() - timedelta(days=7)).isoformat()
 
         for note_id in user_notes.keys():
-            # Count total usage
-            total_count_response = supabase.table("conversation_messages").select("id", count="exact").filter("sources", "cs", f'[{{"note_id":"{note_id}"}}]').execute()
+            # Count total usage using JSONB containment operator
+            # This checks if the sources array contains an object with this note_id
+            total_count_response = supabase.table("conversation_messages").select("id", count="exact").contains("sources", [{"note_id": note_id}]).execute()
             count = total_count_response.count if total_count_response.count else 0
 
             if count > 0:
@@ -2798,7 +2799,7 @@ def get_notes_usage_stats():
                 total_usage += count
 
             # Count weekly usage
-            weekly_count_response = supabase.table("conversation_messages").select("id", count="exact").filter("sources", "cs", f'[{{"note_id":"{note_id}"}}]').gte("created_at", week_ago).execute()
+            weekly_count_response = supabase.table("conversation_messages").select("id", count="exact").contains("sources", [{"note_id": note_id}]).gte("created_at", week_ago).execute()
             weekly_count = weekly_count_response.count if weekly_count_response.count else 0
             weekly_usage += weekly_count
 
@@ -3176,6 +3177,7 @@ def chat_with_notes():
                 note = supabase.table("notes").select("original_filename").eq("id", result['note_id']).single().execute()
                 filename = note.data['original_filename'] if note.data else "Unknown"
                 sources.append({
+                    "note_id": result['note_id'],  # Include note_id for usage tracking
                     "filename": f"{filename} ({result['university']} - {result['course_code']})" if result['university'] else filename,
                     "similarity": round(result['similarity'], 2)
                 })
