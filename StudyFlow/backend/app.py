@@ -56,19 +56,13 @@ app = Flask(__name__)
 
 # Enable CORS for website
 from flask_cors import CORS
-CORS(app, resources={
-    r"/api/*": {
-        "origins": [
-            "https://unclephilburt.github.io",
-            "http://localhost:8000",
-            "http://localhost:5000",
-            "http://127.0.0.1:8000",
-            "http://127.0.0.1:5000"
-        ],
-        "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization"]
-    }
-})
+CORS(app,
+     resources={r"/api/*": {"origins": "*"}},
+     allow_headers=["Content-Type", "Authorization"],
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+     supports_credentials=True,
+     expose_headers=["Content-Type", "Authorization"]
+)
 
 def send_access_key_email(to_email: str, stripe_id: str) -> bool:
     # Build your message bodies
