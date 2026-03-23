@@ -3201,17 +3201,19 @@ def download_note_endpoint(note_id):
         import uuid
 
         # Get note metadata -- check own notes first, then public notes
-        note = supabase.table("notes").select("*").eq("id", note_id).eq("user_id", request.user_id).maybe_single().execute()
+        result = supabase.table("notes").select("*").eq("id", note_id).eq("user_id", request.user_id).execute()
+        note_data = result.data[0] if result.data else None
 
-        if not note.data:
+        if not note_data:
             # Not the user's own note -- check if it's a public note
-            note = supabase.table("notes").select("*").eq("id", note_id).eq("is_public", True).maybe_single().execute()
+            result = supabase.table("notes").select("*").eq("id", note_id).eq("is_public", True).execute()
+            note_data = result.data[0] if result.data else None
 
-        if not note.data:
+        if not note_data:
             return jsonify({"error": "Note not found or unauthorized"}), 404
 
-        file_path = note.data.get('file_path')
-        original_filename = note.data.get('original_filename')
+        file_path = note_data.get('file_path')
+        original_filename = note_data.get('original_filename')
 
         if not file_path:
             return jsonify({"error": "File not found in storage"}), 404
@@ -3222,9 +3224,9 @@ def download_note_endpoint(note_id):
         # Get username for watermark
         username = "user"
         try:
-            profile = supabase.table("user_profiles").select("username").eq("id", request.user_id).maybe_single().execute()
-            if profile.data and profile.data.get("username"):
-                username = profile.data["username"]
+            profile_result = supabase.table("user_profiles").select("username").eq("id", request.user_id).execute()
+            if profile_result.data and profile_result.data[0].get("username"):
+                username = profile_result.data[0]["username"]
         except Exception:
             pass
 
@@ -4362,13 +4364,14 @@ def download_note_file(note_id):
         import uuid
 
         # Verify note exists and is public
-        note = supabase.table("notes").select("id, file_path, original_filename, user_id").eq("id", note_id).eq("is_public", True).maybe_single().execute()
+        result = supabase.table("notes").select("id, file_path, original_filename, user_id").eq("id", note_id).eq("is_public", True).execute()
+        note_data = result.data[0] if result.data else None
 
-        if not note.data:
+        if not note_data:
             return jsonify({"error": "Note not found or not public"}), 404
 
-        file_path = note.data.get('file_path')
-        original_filename = note.data.get('original_filename', 'note')
+        file_path = note_data.get('file_path')
+        original_filename = note_data.get('original_filename', 'note')
 
         if not file_path:
             return jsonify({"error": "File not found in storage"}), 404
@@ -4379,11 +4382,11 @@ def download_note_file(note_id):
         # Get uploader's username for watermark
         username = "Public"
         try:
-            uploader_id = note.data.get('user_id')
+            uploader_id = note_data.get('user_id')
             if uploader_id:
-                profile = supabase.table("user_profiles").select("username").eq("id", uploader_id).maybe_single().execute()
-                if profile.data and profile.data.get("username"):
-                    username = profile.data["username"]
+                profile_result = supabase.table("user_profiles").select("username").eq("id", uploader_id).execute()
+                if profile_result.data and profile_result.data[0].get("username"):
+                    username = profile_result.data[0]["username"]
         except Exception:
             pass
 
