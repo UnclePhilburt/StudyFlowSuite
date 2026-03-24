@@ -5111,6 +5111,148 @@ def upload_syllabus():
             "message": f"Syllabus uploaded and {len(inserted_events)} events extracted"
         }), 200
 
+
+@app.route("/api/canvas/import", methods=["POST"])
+@supabase_auth_required
+def import_canvas_calendar():
+    """
+    Import calendar events from Canvas iCal feed
+
+    Expects JSON:
+    {
+        "feed_url": "https://canvas.school.edu/feeds/calendars/user_xxx.ics",
+        "auto_sync": true
+    }
+
+    Returns:
+    {
+        "success": true,
+        "events_count": 15,
+        "message": "Imported 15 events from Canvas"
+    }
+    """
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+        from StudyFlow.backend.syllabus_parser import format_event_for_db, validate_event
+        import requests
+        from icalendar import Calendar
+        from datetime import datetime
+
+        data = request.get_json()
+        feed_url = data.get('feed_url')
+        auto_sync = data.get('auto_sync', False)
+
+        if not feed_url:
+            return jsonify({"error": "Missing feed_url"}), 400
+
+        # Validate URL format
+        if not feed_url.startswith('http'):
+            return jsonify({"error": "Invalid feed URL"}), 400
+
+        debug_log(f"[CANVAS] Fetching calendar feed: {feed_url}")
+
+        # Fetch .ics file from Canvas
+        try:
+            response = requests.get(feed_url, timeout=30)
+            response.raise_for_status()
+            ics_content = response.text
+        except requests.exceptions.RequestException as e:
+            debug_log(f"[CANVAS] Failed to fetch feed: {e}")
+            return jsonify({"error": f"Failed to fetch Canvas calendar: {str(e)}"}), 400
+
+        # Parse iCal feed
+        try:
+            cal = Calendar.from_ical(ics_content)
+        except Exception as e:
+            debug_log(f"[CANVAS] Failed to parse iCal: {e}")
+            return jsonify({"error": f"Failed to parse calendar feed: {str(e)}"}), 400
+
+        # Extract events from iCal
+        events = []
+        for component in cal.walk():
+            if component.name == "VEVENT":
+                try:
+                    # Extract event data
+                    summary = str(component.get('summary', 'Untitled'))
+                    description = str(component.get('description', '')) if component.get('description') else None
+                    dtstart = component.get('dtstart').dt if component.get('dtstart') else None
+
+                    # Skip if no date
+                    if not dtstart:
+                        continue
+
+                    # Convert to date/time strings
+                    if isinstance(dtstart, datetime):
+                        due_date = dtstart.strftime('%Y-%m-%d')
+                        due_time = dtstart.strftime('%H:%M:%S')
+                    else:
+                        due_date = dtstart.strftime('%Y-%m-%d')
+                        due_time = None
+
+                    # Detect event type from summary
+                    event_type = 'other'
+                    summary_lower = summary.lower()
+                    if any(word in summary_lower for word in ['assignment', 'homework', 'hw']):
+                        event_type = 'assignment'
+                    elif any(word in summary_lower for word in ['exam', 'test', 'quiz', 'midterm', 'final']):
+                        event_type = 'exam'
+                    elif any(word in summary_lower for word in ['project', 'paper', 'essay', 'presentation']):
+                        event_type = 'project'
+                    elif any(word in summary_lower for word in ['reading', 'chapter', 'read']):
+                        event_type = 'reading'
+
+                    # Extract course name from summary or description
+                    course_name = None
+                    if ':' in summary:
+                        course_name = summary.split(':')[0].strip()
+
+                    event = {
+                        'event_type': event_type,
+                        'title': summary,
+                        'description': description,
+                        'due_date': due_date,
+                        'due_time': due_time,
+                        'course_name': course_name
+                    }
+
+                    events.append(event)
+                except Exception as e:
+                    debug_log(f"[CANVAS] Failed to parse event: {e}")
+                    continue
+
+        debug_log(f"[CANVAS] Parsed {len(events)} events from iCal feed")
+
+        # Insert events into database
+        inserted_events = []
+        for event in events:
+            if validate_event(event):
+                event_data = format_event_for_db(event, request.user_id, syllabus_id=None)
+                result = supabase.table("calendar_events").insert(event_data).execute()
+                if result.data:
+                    inserted_events.append(result.data[0])
+
+        debug_log(f"[CANVAS] Inserted {len(inserted_events)} events")
+
+        # Store Canvas feed URL for auto-sync if requested
+        if auto_sync:
+            try:
+                supabase.table("user_profiles").update({
+                    "canvas_feed_url": feed_url
+                }).eq("id", request.user_id).execute()
+                debug_log(f"[CANVAS] Saved feed URL for auto-sync")
+            except Exception as e:
+                debug_log(f"[CANVAS] Failed to save feed URL: {e}")
+
+        return jsonify({
+            "success": True,
+            "events_count": len(inserted_events),
+            "message": f"Imported {len(inserted_events)} events from Canvas"
+        }), 200
+
+    except Exception as e:
+        debug_log(f"[CANVAS] Import error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
     except Exception as e:
         debug_log(f"❌ Upload syllabus error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
