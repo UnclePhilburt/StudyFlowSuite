@@ -5636,11 +5636,10 @@ def get_subscription_status():
 @supabase_auth_required
 def create_checkout_session():
     """
-    Create a Stripe Checkout session for the Convenience Tier subscription
+    Create a Stripe Checkout session for the Scholar's Club subscription ($5/mo)
 
     Request body:
     {
-        "price_id": "price_xxx",  # Stripe Price ID (we'll create this)
         "success_url": "https://...",
         "cancel_url": "https://..."
     }
@@ -5684,14 +5683,12 @@ def create_checkout_session():
                 "stripe_customer_id": stripe_customer_id
             }).eq("id", request.user_id).execute()
 
-        # Create Stripe Checkout session
-        # Note: You'll need to create a Price in Stripe Dashboard first
-        # For now, using a placeholder - replace with actual price ID
+        # Create Stripe Checkout session for Scholar's Club ($5/mo)
         checkout_session = stripe.checkout.Session.create(
             customer=stripe_customer_id,
             payment_method_types=['card'],
             line_items=[{
-                'price': 'price_1QzVinIlT2DwuCkjC1RfVg6U',  # Replace with your actual Stripe Price ID for $5/mo
+                'price': 'price_1TEJOa9LWKaKRffVgNpExTIz',  # Scholar's Club - $5/month
                 'quantity': 1,
             }],
             mode='subscription',
