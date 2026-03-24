@@ -1152,123 +1152,93 @@ from StudyFlow.logging_utils import debug_log
 
 @app.route("/api/stripe_webhook", methods=["POST"])
 def stripe_webhook():
+    """
+    Handle Stripe webhook events for Scholar's Club subscriptions
+
+    Events handled:
+    - checkout.session.completed: User completes payment, upgrade to 'pro' tier
+    - customer.subscription.updated: Subscription status changes
+    - customer.subscription.deleted: Subscription canceled, downgrade to 'free' tier
+    """
+    from StudyFlow.backend.supabase_client import supabase
+
     # 1) Raw body + signature header
-    payload    = request.get_data()
+    payload = request.get_data()
     sig_header = request.headers.get("Stripe-Signature")
 
     # 2) Verify & parse
     try:
         event = stripe.Webhook.construct_event(payload, sig_header, WEBHOOK_SECRET)
-        app.logger.info(f"✅ Stripe webhook verified: {event['id']} → {event['type']}")
+        debug_log(f"✅ Stripe webhook verified: {event['id']} → {event['type']}")
     except (ValueError, stripe.error.SignatureVerificationError) as e:
-        app.logger.error(f"⚠️ Webhook validation failed: {e}")
+        debug_log(f"⚠️ Webhook validation failed: {e}")
         return "", 400
 
-    # 3) Connect to Postgres
-    try:
-        conn = psycopg2.connect(os.environ["DATABASE_URL"])
-        cur  = conn.cursor()
-    except Exception as db_err:
-        app.logger.error(f"❌ DB connection error: {db_err}")
-        return "", 500
-
     evt_type = event["type"]
-    obj      = event["data"]["object"]
+    obj = event["data"]["object"]
 
-    # 4) Handle subscription.created (with email fetch + upsert)
-    if evt_type == "customer.subscription.created":
-        cust_id = obj["customer"]
-        status  = obj["status"]
-        # fetch customer email
+    # 3) Handle checkout.session.completed - User just subscribed to Scholar's Club
+    if evt_type == "checkout.session.completed":
         try:
-            customer = stripe.Customer.retrieve(cust_id)
-            email = customer.get("email")
-        except Exception as e:
-            app.logger.error(f"❌ Failed to retrieve customer email: {e}")
-            cur.close(); conn.close()
-            return "", 500
+            cust_id = obj["customer"]
+            subscription_id = obj.get("subscription")
+            user_id = obj["metadata"].get("user_id")  # From checkout session metadata
 
-        try:
-            cur.execute(
-                """
-                INSERT INTO users (email, stripe_id, subscription_status)
-                VALUES (%s, %s, %s)
-                ON CONFLICT (stripe_id)
-                DO UPDATE SET subscription_status = EXCLUDED.subscription_status
-                """,
-                (email, cust_id, status)
-            )
-            conn.commit()
-            app.logger.info(f"📥 Subscription created/upserted: {cust_id} → {status}")
-            
-            if send_access_key_email(email, cust_id):
-                app.logger.info(f"✅ Access key emailed to {email}")
-            else:
-                app.logger.error(f"❌ Could not email access key to {email}")
+            if not user_id:
+                debug_log(f"⚠️ No user_id in checkout session metadata")
+                return jsonify({"received": True}), 200
+
+            # Update user_profiles to 'pro' tier
+            supabase.table("user_profiles").update({
+                "subscription_tier": "pro",
+                "subscription_status": "active",
+                "stripe_customer_id": cust_id,
+                "stripe_subscription_id": subscription_id
+            }).eq("id", user_id).execute()
+
+            debug_log(f"🎉 Scholar's Club activated for user {user_id}")
 
         except Exception as e:
-            app.logger.error(f"❌ Failed to upsert subscription_status: {e}")
-            cur.close(); conn.close()
+            debug_log(f"❌ checkout.session.completed error: {e}\n{traceback.format_exc()}")
             return "", 500
 
-    # 5) Handle subscription.updated
+    # 4) Handle customer.subscription.updated - Subscription status changed
     elif evt_type == "customer.subscription.updated":
-        cust_id = obj["customer"]
-        status  = obj["status"]
         try:
-            cur.execute(
-                "UPDATE users SET subscription_status = %s WHERE stripe_id = %s",
-                (status, cust_id)
-            )
-            conn.commit()
-            app.logger.info(f"🔄 Subscription updated: {cust_id} → {status}")
+            cust_id = obj["customer"]
+            status = obj["status"]
+            subscription_id = obj["id"]
+
+            # Update subscription status in user_profiles
+            supabase.table("user_profiles").update({
+                "subscription_status": status,
+                "stripe_subscription_id": subscription_id
+            }).eq("stripe_customer_id", cust_id).execute()
+
+            debug_log(f"🔄 Subscription updated: {cust_id} → {status}")
+
         except Exception as e:
-            app.logger.error(f"❌ Failed to update subscription_status: {e}")
-            cur.close(); conn.close()
+            debug_log(f"❌ customer.subscription.updated error: {e}\n{traceback.format_exc()}")
             return "", 500
 
-    # 6) Handle subscription.deleted
+    # 5) Handle customer.subscription.deleted - User canceled or subscription expired
     elif evt_type == "customer.subscription.deleted":
-        cust_id = obj["customer"]
         try:
-            cur.execute(
-                "UPDATE users SET subscription_status = %s WHERE stripe_id = %s",
-                ("canceled", cust_id)
-            )
-            conn.commit()
-            app.logger.info(f"🗑️ Subscription canceled: {cust_id}")
+            cust_id = obj["customer"]
+
+            # Downgrade user back to free tier
+            supabase.table("user_profiles").update({
+                "subscription_tier": "free",
+                "subscription_status": "canceled",
+                "stripe_subscription_id": None
+            }).eq("stripe_customer_id", cust_id).execute()
+
+            debug_log(f"🗑️ Subscription canceled, user downgraded to free tier: {cust_id}")
+
         except Exception as e:
-            app.logger.error(f"❌ Failed to cancel subscription: {e}")
-            cur.close(); conn.close()
+            debug_log(f"❌ customer.subscription.deleted error: {e}\n{traceback.format_exc()}")
             return "", 500
 
-    # 7) Handle checkout.session.completed (new customers)
-    elif evt_type == "checkout.session.completed":
-        cust_id = obj["customer"]
-        email   = obj["customer_details"]["email"]
-        if send_access_key_email(email, cust_id):
-            app.logger.info(f"✅ Access key emailed to {email}")
-        else:
-            app.logger.error(f"❌ Could not email access key to {email}")
-        try:
-            cur.execute(
-                """
-                INSERT INTO users (email, stripe_id, subscription_status)
-                VALUES (%s, %s, %s)
-                ON CONFLICT (stripe_id) DO NOTHING
-                """,
-                (email, cust_id, "active")
-            )
-            conn.commit()
-            app.logger.info(f"🎉 New user created: {email} | {cust_id}")
-        except Exception as e:
-            app.logger.error(f"❌ Failed to insert new user: {e}")
-            cur.close(); conn.close()
-            return "", 500
-
-    # 8) Clean up & return
-    cur.close()
-    conn.close()
     return jsonify({"received": True}), 200
 
 @app.route("/api/deepflow_question", methods=["POST"])
