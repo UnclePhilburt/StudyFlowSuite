@@ -3091,20 +3091,24 @@ def get_notes_usage_stats():
         weekly_usage = 0
         week_ago = (datetime.now() - timedelta(days=7)).isoformat()
 
-        for note_id in user_notes.keys():
-            # Count total usage using JSONB containment operator
-            # This checks if the sources array contains an object with this note_id
-            total_count_response = supabase.table("conversation_messages").select("id", count="exact").contains("sources", [{"note_id": note_id}]).execute()
-            count = total_count_response.count if total_count_response.count else 0
+        # Query all assistant messages with sources
+        all_messages_response = supabase.table("conversation_messages").select("sources, created_at").eq("role", "assistant").not_.is_("sources", "null").execute()
 
-            if count > 0:
-                note_usage[note_id] = count
-                total_usage += count
+        for message in all_messages_response.data:
+            sources = message.get('sources', [])
+            created_at = message.get('created_at', '')
 
-            # Count weekly usage
-            weekly_count_response = supabase.table("conversation_messages").select("id", count="exact").contains("sources", [{"note_id": note_id}]).gte("created_at", week_ago).execute()
-            weekly_count = weekly_count_response.count if weekly_count_response.count else 0
-            weekly_usage += weekly_count
+            # Check each source in the message
+            for source in sources:
+                source_note_id = source.get('note_id')
+                if source_note_id in user_notes:
+                    # Count this usage
+                    note_usage[source_note_id] = note_usage.get(source_note_id, 0) + 1
+                    total_usage += 1
+
+                    # Count weekly usage
+                    if created_at >= week_ago:
+                        weekly_usage += 1
 
         # Get top notes
         top_notes = []
