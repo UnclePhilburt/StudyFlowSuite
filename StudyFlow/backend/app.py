@@ -4012,6 +4012,121 @@ def chat_with_notes():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/generate-quiz", methods=["POST"])
+@supabase_auth_required
+@account_not_frozen
+def generate_quiz():
+    """
+    Generate a quiz based on user's notes for a specific topic
+
+    Expects JSON:
+    {
+        "topic": "photosynthesis"
+    }
+
+    Returns:
+    {
+        "questions": [
+            {
+                "question": "What is the primary function of chlorophyll?",
+                "options": ["A", "B", "C", "D"],
+                "correctIndex": 2
+            }
+        ]
+    }
+    """
+    try:
+        from StudyFlow.backend.supabase_client import search_notes_vector, supabase
+        from StudyFlow.backend.embedding_client import generate_embedding
+        from StudyFlow.backend.gemini_client import call_gemini_api
+
+        data = request.get_json()
+        if not data or not data.get('topic'):
+            return jsonify({"error": "Missing topic"}), 400
+
+        topic = data.get('topic')
+        debug_log(f"📝 Generating quiz for topic: '{topic}'")
+
+        # Generate embedding for the topic
+        topic_embedding = generate_embedding(topic)
+        if not topic_embedding:
+            return jsonify({"error": "Failed to generate topic embedding"}), 500
+
+        # Search for relevant notes
+        search_results = search_notes_vector(
+            query_embedding=topic_embedding,
+            user_id=request.user_id,
+            university=None,
+            course_code=None,
+            match_threshold=0.3,  # Lower threshold to get more results
+            match_count=10  # Get more chunks for quiz generation
+        )
+
+        if not search_results or len(search_results) == 0:
+            debug_log(f"[!] No relevant notes found for topic: {topic}")
+            return jsonify({"questions": []}), 200
+
+        debug_log(f"🔍 Found {len(search_results)} relevant note chunks")
+
+        # Combine the content from top chunks
+        combined_content = "\n\n".join([result['content'] for result in search_results[:5]])  # Top 5 chunks
+
+        # Create prompt for AI to generate quiz
+        prompt = f"""Based on the following notes about "{topic}", generate 5 multiple choice quiz questions.
+
+Notes:
+{combined_content}
+
+Generate exactly 5 multiple choice questions with 4 options each. Format your response as JSON:
+{{
+    "questions": [
+        {{
+            "question": "Question text here?",
+            "options": ["Option A", "Option B", "Option C", "Option D"],
+            "correctIndex": 0
+        }}
+    ]
+}}
+
+Make sure the questions test understanding of the key concepts in the notes. The correctIndex should be 0-3 (0=first option, 1=second option, etc.)."""
+
+        # Call Gemini API to generate quiz
+        response_text = call_gemini_api(prompt)
+
+        if not response_text:
+            debug_log("[!] Gemini API returned empty response")
+            return jsonify({"error": "Failed to generate quiz questions"}), 500
+
+        # Parse JSON response
+        import json
+        try:
+            # Try to extract JSON from markdown code blocks if present
+            if "```json" in response_text:
+                json_start = response_text.find("```json") + 7
+                json_end = response_text.find("```", json_start)
+                response_text = response_text[json_start:json_end].strip()
+            elif "```" in response_text:
+                json_start = response_text.find("```") + 3
+                json_end = response_text.find("```", json_start)
+                response_text = response_text[json_start:json_end].strip()
+
+            quiz_data = json.loads(response_text)
+            questions = quiz_data.get('questions', [])
+
+            debug_log(f"[+] Generated {len(questions)} quiz questions")
+
+            return jsonify({"questions": questions}), 200
+
+        except json.JSONDecodeError as je:
+            debug_log(f"[!] Failed to parse quiz JSON: {je}")
+            debug_log(f"Raw response: {response_text[:500]}")
+            return jsonify({"error": "Failed to parse quiz response"}), 500
+
+    except Exception as e:
+        debug_log(f"❌ Quiz generation error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/conversations", methods=["GET"])
 @supabase_auth_required
 def list_conversations():
