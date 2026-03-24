@@ -4036,6 +4036,8 @@ def generate_quiz():
     }
     """
     try:
+        debug_log(f"📝 Quiz generation endpoint called by user {request.user_id}")
+
         from StudyFlow.backend.supabase_client import search_notes_vector, supabase
         from StudyFlow.backend.embedding_client import generate_embedding
         import google.generativeai as genai
@@ -4043,34 +4045,41 @@ def generate_quiz():
 
         data = request.get_json()
         if not data or not data.get('topic'):
+            debug_log("[!] Missing topic in request")
             return jsonify({"error": "Missing topic"}), 400
 
         topic = data.get('topic')
         debug_log(f"📝 Generating quiz for topic: '{topic}'")
 
         # Generate embedding for the topic
+        debug_log(f"[1/4] Generating embedding for topic...")
         topic_embedding = generate_embedding(topic)
         if not topic_embedding:
+            debug_log("[!] Failed to generate topic embedding")
             return jsonify({"error": "Failed to generate topic embedding"}), 500
+        debug_log(f"[+] Embedding generated successfully")
 
         # Search for relevant notes
+        debug_log(f"[2/4] Searching for relevant notes...")
         search_results = search_notes_vector(
             query_embedding=topic_embedding,
             user_id=request.user_id,
             university=None,
             course_code=None,
-            match_threshold=0.3,  # Lower threshold to get more results
-            match_count=10  # Get more chunks for quiz generation
+            match_threshold=0.3,
+            match_count=10
         )
 
         if not search_results or len(search_results) == 0:
             debug_log(f"[!] No relevant notes found for topic: {topic}")
             return jsonify({"questions": []}), 200
 
-        debug_log(f"🔍 Found {len(search_results)} relevant note chunks")
+        debug_log(f"[+] Found {len(search_results)} relevant note chunks")
 
         # Combine the content from top chunks
-        combined_content = "\n\n".join([result['content'] for result in search_results[:5]])  # Top 5 chunks
+        debug_log(f"[3/4] Combining content from top 5 chunks...")
+        combined_content = "\n\n".join([result['content'] for result in search_results[:5]])
+        debug_log(f"[+] Combined content length: {len(combined_content)} characters")
 
         # Create prompt for AI to generate quiz
         prompt = f"""Based on the following notes about "{topic}", generate 5 multiple choice quiz questions.
@@ -4092,6 +4101,7 @@ Generate exactly 5 multiple choice questions with 4 options each. Format your re
 Make sure the questions test understanding of the key concepts in the notes. The correctIndex should be 0-3 (0=first option, 1=second option, etc.)."""
 
         # Call Gemini API to generate quiz
+        debug_log(f"[4/4] Calling Gemini API...")
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
             debug_log("⚠️ GEMINI_API_KEY not found in environment")
@@ -4099,6 +4109,7 @@ Make sure the questions test understanding of the key concepts in the notes. The
 
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
+        debug_log(f"[+] Gemini model configured: gemini-3.1-flash-lite-preview")
 
         response = model.generate_content(
             prompt,
@@ -4109,6 +4120,7 @@ Make sure the questions test understanding of the key concepts in the notes. The
         )
 
         response_text = response.text.strip()
+        debug_log(f"[+] Gemini response received ({len(response_text)} characters)")
 
         if not response_text:
             debug_log("[!] Gemini API returned empty response")
