@@ -3532,22 +3532,6 @@ def download_note_endpoint(note_id):
             profile.get('subscription_status') == 'active'
         )
 
-        # CHECK: Must have uploaded at least 5 notes before downloading (free users only)
-        if not is_scholar:
-            # Count how many notes user has uploaded
-            notes_count_result = supabase.table("notes").select("id", count="exact").eq("user_id", request.user_id).execute()
-            user_notes_count = notes_count_result.count or 0
-
-            if user_notes_count < 5:
-                debug_log(f"[!] User {request.user_id} tried to download with only {user_notes_count}/5 notes uploaded")
-                return jsonify({
-                    "error": "Contribution required",
-                    "message": f"You must upload at least 5 notes before downloading. You have {user_notes_count}/5 notes.",
-                    "contribution_required": True,
-                    "notes_uploaded": user_notes_count,
-                    "notes_required": 5
-                }), 403
-
         if not is_scholar:
             # Free user - enforce 3 downloads per day limit
             today = date.today()
@@ -4883,22 +4867,6 @@ def download_note_file(note_id):
             profile.get('subscription_tier') == 'pro' and
             profile.get('subscription_status') == 'active'
         )
-
-        # CHECK: Must have uploaded at least 5 notes before downloading (free users only)
-        if not is_scholar:
-            # Count how many notes user has uploaded
-            notes_count_result = supabase.table("notes").select("id", count="exact").eq("user_id", request.user_id).execute()
-            user_notes_count = notes_count_result.count or 0
-
-            if user_notes_count < 5:
-                debug_log(f"[!] User {request.user_id} tried to download with only {user_notes_count}/5 notes uploaded")
-                return jsonify({
-                    "error": "Contribution required",
-                    "message": f"You must upload at least 5 notes before downloading. You have {user_notes_count}/5 notes.",
-                    "contribution_required": True,
-                    "notes_uploaded": user_notes_count,
-                    "notes_required": 5
-                }), 403
 
         if not is_scholar:
             # Free user - enforce 3 downloads per day limit
