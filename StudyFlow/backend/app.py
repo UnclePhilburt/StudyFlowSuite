@@ -5601,6 +5601,168 @@ def process_dmca_takedown(takedown_id):
         return jsonify({"error": str(e)}), 500
 
 
+# ============ SUBSCRIPTION ENDPOINTS ============
+
+@app.route("/api/subscription/status", methods=["GET"])
+@supabase_auth_required
+def get_subscription_status():
+    """
+    Get user's current subscription status
+    Returns subscription_tier and subscription_status from user_profiles
+    """
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        response = supabase.table("user_profiles").select(
+            "subscription_tier, subscription_status, stripe_customer_id, stripe_subscription_id"
+        ).eq("id", request.user_id).single().execute()
+
+        if response.data:
+            return jsonify(response.data), 200
+        else:
+            return jsonify({
+                "subscription_tier": "free",
+                "subscription_status": None,
+                "stripe_customer_id": None,
+                "stripe_subscription_id": None
+            }), 200
+
+    except Exception as e:
+        debug_log(f"Get subscription status error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/subscription/create-checkout", methods=["POST"])
+@supabase_auth_required
+def create_checkout_session():
+    """
+    Create a Stripe Checkout session for the Convenience Tier subscription
+
+    Request body:
+    {
+        "price_id": "price_xxx",  # Stripe Price ID (we'll create this)
+        "success_url": "https://...",
+        "cancel_url": "https://..."
+    }
+
+    Returns:
+    {
+        "checkout_url": "https://checkout.stripe.com/..."
+    }
+    """
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+        import stripe
+
+        data = request.get_json()
+        success_url = data.get('success_url')
+        cancel_url = data.get('cancel_url')
+
+        # Get user email
+        user_email = request.user_email
+
+        # Get or create Stripe customer
+        response = supabase.table("user_profiles").select(
+            "stripe_customer_id"
+        ).eq("id", request.user_id).single().execute()
+
+        stripe_customer_id = response.data.get('stripe_customer_id') if response.data else None
+
+        if stripe_customer_id:
+            # Retrieve existing customer
+            customer = stripe.Customer.retrieve(stripe_customer_id)
+        else:
+            # Create new customer
+            customer = stripe.Customer.create(
+                email=user_email,
+                metadata={'user_id': request.user_id}
+            )
+            stripe_customer_id = customer.id
+
+            # Save customer ID to database
+            supabase.table("user_profiles").update({
+                "stripe_customer_id": stripe_customer_id
+            }).eq("id", request.user_id).execute()
+
+        # Create Stripe Checkout session
+        # Note: You'll need to create a Price in Stripe Dashboard first
+        # For now, using a placeholder - replace with actual price ID
+        checkout_session = stripe.checkout.Session.create(
+            customer=stripe_customer_id,
+            payment_method_types=['card'],
+            line_items=[{
+                'price': 'price_1QzVinIlT2DwuCkjC1RfVg6U',  # Replace with your actual Stripe Price ID for $5/mo
+                'quantity': 1,
+            }],
+            mode='subscription',
+            success_url=success_url,
+            cancel_url=cancel_url,
+            metadata={
+                'user_id': request.user_id
+            }
+        )
+
+        debug_log(f"Created checkout session for user {request.user_id}: {checkout_session.id}")
+
+        return jsonify({
+            "checkout_url": checkout_session.url
+        }), 200
+
+    except Exception as e:
+        debug_log(f"Create checkout session error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/subscription/customer-portal", methods=["POST"])
+@supabase_auth_required
+def create_customer_portal():
+    """
+    Create a Stripe Customer Portal session for managing subscriptions
+
+    Request body:
+    {
+        "return_url": "https://..."
+    }
+
+    Returns:
+    {
+        "portal_url": "https://billing.stripe.com/..."
+    }
+    """
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+        import stripe
+
+        data = request.get_json()
+        return_url = data.get('return_url')
+
+        # Get Stripe customer ID
+        response = supabase.table("user_profiles").select(
+            "stripe_customer_id"
+        ).eq("id", request.user_id).single().execute()
+
+        stripe_customer_id = response.data.get('stripe_customer_id') if response.data else None
+
+        if not stripe_customer_id:
+            return jsonify({"error": "No subscription found"}), 404
+
+        # Create Customer Portal session
+        portal_session = stripe.billing_portal.Session.create(
+            customer=stripe_customer_id,
+            return_url=return_url
+        )
+
+        debug_log(f"Created portal session for user {request.user_id}")
+
+        return jsonify({
+            "portal_url": portal_session.url
+        }), 200
+
+    except Exception as e:
+        debug_log(f"Create customer portal error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     try:
         port = int(os.environ.get("PORT", 5000))
