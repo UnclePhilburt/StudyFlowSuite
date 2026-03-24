@@ -5115,6 +5115,10 @@ def upload_syllabus():
             "message": f"Syllabus uploaded and {len(inserted_events)} events extracted"
         }), 200
 
+    except Exception as e:
+        debug_log(f"❌ Syllabus upload error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
 
 @app.route("/api/canvas/import", methods=["POST"])
 @supabase_auth_required
