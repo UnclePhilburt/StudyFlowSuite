@@ -7,10 +7,10 @@ MEDIA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "Media")
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QPushButton, QVBoxLayout, QLabel,
     QHBoxLayout, QGraphicsDropShadowEffect, QSplashScreen, QTabBar,
-    QStackedWidget
+    QStackedWidget, QMenu
 )
 from PySide6.QtGui import (
-    QFont, QPixmap, QColor, QPainter, QLinearGradient, QBrush
+    QFont, QPixmap, QColor, QPainter, QLinearGradient, QBrush, QAction
 )
 from PySide6.QtCore import (
     Qt, QPoint, QRect, QPropertyAnimation, QEasingCurve, QTimer
@@ -159,6 +159,26 @@ class ModernMenu(QMainWindow):
         self.tab_bar.currentChanged.connect(self.slide_to_index)
         self.top_bar_layout.addWidget(self.tab_bar)
         self.top_bar_layout.addStretch()
+
+        # Beta button
+        self.beta_button = QPushButton("Beta", self.top_bar)
+        self.beta_button.setFixedHeight(25)
+        self.beta_button.setStyleSheet("""
+            QPushButton {
+                color: white;
+                font-size: 12px;
+                font-weight: 600;
+                background-color: #7c9885;
+                border: none;
+                border-radius: 4px;
+                padding: 4px 12px;
+            }
+            QPushButton:hover {
+                background-color: #6b8575;
+            }
+        """)
+        self.beta_button.clicked.connect(self.show_beta_menu)
+        self.top_bar_layout.addWidget(self.beta_button)
 
         # Close button
         self.close_button = QPushButton("×", self.top_bar)
@@ -367,6 +387,40 @@ class ModernMenu(QMainWindow):
         self.anim_next.finished.connect(finalize_switch)
         self.anim_current.start()
         self.anim_next.start()
+
+    def show_beta_menu(self):
+        """Shows the Beta features menu."""
+        menu = QMenu(self)
+        menu.setStyleSheet("""
+            QMenu {
+                background-color: white;
+                border: 2px solid #7c9885;
+                border-radius: 8px;
+                padding: 8px;
+            }
+            QMenu::item {
+                padding: 8px 20px;
+                color: #333333;
+                font-size: 14px;
+            }
+            QMenu::item:selected {
+                background-color: #e8f5e9;
+                border-radius: 4px;
+            }
+        """)
+
+        # Quiz Maker action
+        quiz_maker_action = QAction("Quiz Maker", self)
+        quiz_maker_action.triggered.connect(self.open_quiz_maker)
+        menu.addAction(quiz_maker_action)
+
+        # Show menu below the Beta button
+        menu.exec(self.beta_button.mapToGlobal(self.beta_button.rect().bottomLeft()))
+
+    def open_quiz_maker(self):
+        """Opens the Quiz Maker feature."""
+        # Placeholder for now - you'll implement this later
+        print("Quiz Maker clicked!")
 
     # ~~~~~~~~~~~~~~ MOUSE DRAG TO MOVE WINDOW (Main Window) ~~~~~~~~~~~~~~
     def mousePressEvent(self, event):
