@@ -3498,15 +3498,55 @@ def download_note_endpoint(note_id):
         # DAILY DOWNLOAD LIMIT CHECK (3 downloads/day for free users)
         # Fetch user profile to check subscription and download count
         profile_result = supabase.table("user_profiles").select(
-            "subscription_tier, subscription_status, daily_downloads_count, daily_downloads_reset_date, good_standing, permanent_bad_standing"
+            "subscription_tier, subscription_status, daily_downloads_count, daily_downloads_reset_date, good_standing, permanent_bad_standing, last_verified_upload_date"
         ).eq("id", request.user_id).single().execute()
         profile = profile_result.data
+
+        # CHECK: Good standing expires after 30 days without a quality upload (free users only)
+        from datetime import datetime, timedelta
+        is_scholar_check = (
+            profile.get('subscription_tier') == 'pro' and
+            profile.get('subscription_status') == 'active'
+        )
+
+        if not is_scholar_check and profile.get('good_standing', False):
+            last_upload = profile.get('last_verified_upload_date')
+            if last_upload:
+                try:
+                    last_upload_date = datetime.fromisoformat(last_upload.replace('Z', '+00:00'))
+                    days_since_upload = (datetime.utcnow().replace(tzinfo=last_upload_date.tzinfo) - last_upload_date).days
+
+                    if days_since_upload > 30:
+                        # Revoke good standing - hasn't uploaded in 30+ days
+                        supabase.table("user_profiles").update({
+                            "good_standing": False
+                        }).eq("id", request.user_id).execute()
+                        profile['good_standing'] = False
+                        debug_log(f"[!] User {request.user_id} lost good standing (no upload for {days_since_upload} days)")
+                except Exception as e:
+                    debug_log(f"[-] Error checking last upload date: {e}")
 
         # Check if Scholar's Club member (unlimited downloads)
         is_scholar = (
             profile.get('subscription_tier') == 'pro' and
             profile.get('subscription_status') == 'active'
         )
+
+        # CHECK: Must have uploaded at least 5 notes before downloading (free users only)
+        if not is_scholar:
+            # Count how many notes user has uploaded
+            notes_count_result = supabase.table("notes").select("id", count="exact").eq("user_id", request.user_id).execute()
+            user_notes_count = notes_count_result.count or 0
+
+            if user_notes_count < 5:
+                debug_log(f"[!] User {request.user_id} tried to download with only {user_notes_count}/5 notes uploaded")
+                return jsonify({
+                    "error": "Contribution required",
+                    "message": f"You must upload at least 5 notes before downloading. You have {user_notes_count}/5 notes.",
+                    "contribution_required": True,
+                    "notes_uploaded": user_notes_count,
+                    "notes_required": 5
+                }), 403
 
         if not is_scholar:
             # Free user - enforce 3 downloads per day limit
@@ -4810,15 +4850,55 @@ def download_note_file(note_id):
         # DAILY DOWNLOAD LIMIT CHECK (3 downloads/day for free users)
         # Fetch user profile to check subscription and download count
         profile_result = supabase.table("user_profiles").select(
-            "subscription_tier, subscription_status, daily_downloads_count, daily_downloads_reset_date, good_standing, permanent_bad_standing"
+            "subscription_tier, subscription_status, daily_downloads_count, daily_downloads_reset_date, good_standing, permanent_bad_standing, last_verified_upload_date"
         ).eq("id", request.user_id).single().execute()
         profile = profile_result.data
+
+        # CHECK: Good standing expires after 30 days without a quality upload (free users only)
+        from datetime import datetime, timedelta
+        is_scholar_check = (
+            profile.get('subscription_tier') == 'pro' and
+            profile.get('subscription_status') == 'active'
+        )
+
+        if not is_scholar_check and profile.get('good_standing', False):
+            last_upload = profile.get('last_verified_upload_date')
+            if last_upload:
+                try:
+                    last_upload_date = datetime.fromisoformat(last_upload.replace('Z', '+00:00'))
+                    days_since_upload = (datetime.utcnow().replace(tzinfo=last_upload_date.tzinfo) - last_upload_date).days
+
+                    if days_since_upload > 30:
+                        # Revoke good standing - hasn't uploaded in 30+ days
+                        supabase.table("user_profiles").update({
+                            "good_standing": False
+                        }).eq("id", request.user_id).execute()
+                        profile['good_standing'] = False
+                        debug_log(f"[!] User {request.user_id} lost good standing (no upload for {days_since_upload} days)")
+                except Exception as e:
+                    debug_log(f"[-] Error checking last upload date: {e}")
 
         # Check if Scholar's Club member (unlimited downloads)
         is_scholar = (
             profile.get('subscription_tier') == 'pro' and
             profile.get('subscription_status') == 'active'
         )
+
+        # CHECK: Must have uploaded at least 5 notes before downloading (free users only)
+        if not is_scholar:
+            # Count how many notes user has uploaded
+            notes_count_result = supabase.table("notes").select("id", count="exact").eq("user_id", request.user_id).execute()
+            user_notes_count = notes_count_result.count or 0
+
+            if user_notes_count < 5:
+                debug_log(f"[!] User {request.user_id} tried to download with only {user_notes_count}/5 notes uploaded")
+                return jsonify({
+                    "error": "Contribution required",
+                    "message": f"You must upload at least 5 notes before downloading. You have {user_notes_count}/5 notes.",
+                    "contribution_required": True,
+                    "notes_uploaded": user_notes_count,
+                    "notes_required": 5
+                }), 403
 
         if not is_scholar:
             # Free user - enforce 3 downloads per day limit
