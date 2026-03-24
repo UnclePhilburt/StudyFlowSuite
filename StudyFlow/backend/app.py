@@ -4671,6 +4671,68 @@ def view_note_file(note_id):
         return jsonify({"error": str(e), "traceback": error_trace}), 500
 
 
+@app.route("/api/notes/<note_id>/view-as-images", methods=["GET"])
+def view_note_as_images(note_id):
+    """
+    Convert PDF to images for secure viewing (prevents download/print)
+    Returns JSON with base64-encoded images for each page
+    No auth required since notes are already public
+    """
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+        import fitz  # PyMuPDF
+        import base64
+        from io import BytesIO
+
+        # Verify note exists and is public
+        note = supabase.table("notes").select("id, file_path, original_filename, file_type, page_count").eq("id", note_id).eq("is_public", True).single().execute()
+
+        if not note.data:
+            return jsonify({"error": "Note not found or not public"}), 404
+
+        # Only convert PDFs
+        if note.data.get('file_type') != 'pdf':
+            return jsonify({"error": "Only PDFs can be converted to images"}), 400
+
+        # Download PDF from Supabase storage
+        file_path = note.data.get('file_path')
+        if not file_path:
+            return jsonify({"error": "File path not found"}), 404
+
+        file_data = supabase.storage.from_('note-files').download(file_path)
+
+        # Convert PDF pages to images
+        pdf_document = fitz.open(stream=file_data, filetype="pdf")
+        images = []
+
+        for page_num in range(len(pdf_document)):
+            page = pdf_document[page_num]
+            # Render page at 2x resolution for better quality
+            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+            img_data = pix.tobytes("png")
+
+            # Convert to base64
+            img_base64 = base64.b64encode(img_data).decode('utf-8')
+            images.append({
+                "page": page_num + 1,
+                "data": f"data:image/png;base64,{img_base64}"
+            })
+
+        pdf_document.close()
+
+        return jsonify({
+            "note_id": note_id,
+            "filename": note.data.get('original_filename'),
+            "total_pages": len(images),
+            "images": images
+        }), 200
+
+    except Exception as e:
+        error_trace = traceback.format_exc()
+        debug_log(f"❌ PDF to image conversion error: {e}\n{error_trace}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/notes/<note_id>/download", methods=["GET"])
 @supabase_auth_required
 def download_note_file(note_id):
