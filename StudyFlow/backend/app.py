@@ -4013,7 +4013,7 @@ def chat_with_notes():
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/api/generate-quiz", methods=["POST"])
+@app.route("/api/generate-quiz", methods=["POST", "OPTIONS"])
 @supabase_auth_required
 @account_not_frozen
 def generate_quiz():
@@ -4036,7 +4036,12 @@ def generate_quiz():
         ]
     }
     """
+    # Handle OPTIONS request for CORS
+    if request.method == "OPTIONS":
+        return jsonify({"status": "ok"}), 200
+
     try:
+        print(f"[QUIZ] Endpoint hit! User ID: {getattr(request, 'user_id', 'UNKNOWN')}")
         debug_log(f"📝 Quiz generation endpoint called by user {request.user_id}")
 
         from StudyFlow.backend.supabase_client import search_notes_vector, supabase
@@ -4151,6 +4156,8 @@ Make sure the questions test understanding of the key concepts in the notes. The
             return jsonify({"error": "Failed to parse quiz response"}), 500
 
     except Exception as e:
+        print(f"[QUIZ ERROR] {e}")
+        print(traceback.format_exc())
         debug_log(f"❌ Quiz generation error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
