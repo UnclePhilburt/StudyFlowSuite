@@ -20,6 +20,10 @@ def supabase_auth_required(f):
     """
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        # Allow OPTIONS requests (CORS preflight) without authentication
+        if request.method == 'OPTIONS':
+            return f(*args, **kwargs)
+
         # Get token from Authorization header
         auth_header = request.headers.get('Authorization')
 
