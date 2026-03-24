@@ -4098,7 +4098,7 @@ Make sure the questions test understanding of the key concepts in the notes. The
             return jsonify({"error": "API configuration error"}), 500
 
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
 
         response = model.generate_content(
             prompt,
