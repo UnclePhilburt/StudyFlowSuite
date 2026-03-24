@@ -4038,7 +4038,8 @@ def generate_quiz():
     try:
         from StudyFlow.backend.supabase_client import search_notes_vector, supabase
         from StudyFlow.backend.embedding_client import generate_embedding
-        from StudyFlow.backend.gemini_client import call_gemini_api
+        import google.generativeai as genai
+        import os
 
         data = request.get_json()
         if not data or not data.get('topic'):
@@ -4091,7 +4092,23 @@ Generate exactly 5 multiple choice questions with 4 options each. Format your re
 Make sure the questions test understanding of the key concepts in the notes. The correctIndex should be 0-3 (0=first option, 1=second option, etc.)."""
 
         # Call Gemini API to generate quiz
-        response_text = call_gemini_api(prompt)
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            debug_log("⚠️ GEMINI_API_KEY not found in environment")
+            return jsonify({"error": "API configuration error"}), 500
+
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-2.5-flash')
+
+        response = model.generate_content(
+            prompt,
+            generation_config={
+                'temperature': 0.7,
+                'max_output_tokens': 2000,
+            }
+        )
+
+        response_text = response.text.strip()
 
         if not response_text:
             debug_log("[!] Gemini API returned empty response")
