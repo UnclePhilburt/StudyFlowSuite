@@ -3483,8 +3483,49 @@ def download_note_endpoint(note_id):
         from StudyFlow.backend.supabase_client import supabase
         from StudyFlow.backend.pdf_flatten import flatten_pdf, flatten_image, can_flatten, convert_to_pdf
         from flask import send_file
+        from datetime import date
         import io
         import uuid
+
+        # DAILY DOWNLOAD LIMIT CHECK (3 downloads/day for free users)
+        # Fetch user profile to check subscription and download count
+        profile_result = supabase.table("user_profiles").select(
+            "subscription_tier, subscription_status, daily_downloads_count, daily_downloads_reset_date, good_standing, permanent_bad_standing"
+        ).eq("id", request.user_id).single().execute()
+        profile = profile_result.data
+
+        # Check if Scholar's Club member (unlimited downloads)
+        is_scholar = (
+            profile.get('subscription_tier') == 'pro' and
+            profile.get('subscription_status') == 'active'
+        )
+
+        if not is_scholar:
+            # Free user - enforce 3 downloads per day limit
+            today = date.today()
+            reset_date = profile.get('daily_downloads_reset_date')
+            download_count = profile.get('daily_downloads_count', 0)
+
+            # Reset counter if new day
+            if not reset_date or str(reset_date) != str(today):
+                supabase.table("user_profiles").update({
+                    "daily_downloads_count": 0,
+                    "daily_downloads_reset_date": str(today)
+                }).eq("id", request.user_id).execute()
+                download_count = 0
+                debug_log(f"[+] Reset daily download count for user {request.user_id}")
+
+            # Check if at limit
+            if download_count >= 3:
+                debug_log(f"[!] User {request.user_id} hit daily download limit ({download_count}/3)")
+                return jsonify({
+                    "error": "Daily download limit reached",
+                    "message": "You've used all 3 downloads today. Join Scholar's Club for unlimited downloads!",
+                    "limit_reached": True,
+                    "downloads_used": download_count,
+                    "downloads_limit": 3,
+                    "subscribe_url": "https://unclephilburt.github.io/studyflowwebsite/account.html"
+                }), 403
 
         # Get note metadata -- check own notes first, then public notes
         result = supabase.table("notes").select("*").eq("id", note_id).eq("user_id", request.user_id).execute()
@@ -3496,16 +3537,14 @@ def download_note_endpoint(note_id):
             note_data = result.data[0] if result.data else None
 
             # GOOD STANDING CHECK: Required for downloading public notes (not your own)
+            # (Reuse profile fetched earlier for download limit check)
             if note_data:
-                profile_result = supabase.table("user_profiles").select("good_standing, permanent_bad_standing").eq("id", request.user_id).single().execute()
-                profile = profile_result.data
-
                 # Block if permanently banned
                 if profile.get('permanent_bad_standing', False):
                     return jsonify({"error": "Account suspended due to DMCA violations"}), 403
 
-                # Check good standing
-                if not profile.get('good_standing', False):
+                # Check good standing (Scholar's Club members are always in good standing)
+                if not is_scholar and not profile.get('good_standing', False):
                     return jsonify({
                         "error": "Good Standing required to download notes",
                         "message": "Upload a verified note or subscribe to regain access",
@@ -3570,6 +3609,17 @@ def download_note_endpoint(note_id):
 
         download_name = f"{name_base}_studyflow.pdf"
         mimetype = 'application/pdf'
+
+        # Increment download counter for free users
+        if not is_scholar:
+            try:
+                new_count = (profile.get('daily_downloads_count', 0) or 0) + 1
+                supabase.table("user_profiles").update({
+                    "daily_downloads_count": new_count
+                }).eq("id", request.user_id).execute()
+                debug_log(f"[+] User {request.user_id} download count: {new_count}/3")
+            except Exception as count_err:
+                debug_log(f"[-] Failed to increment download count: {count_err}")
 
         return send_file(
             io.BytesIO(file_data),
@@ -4739,13 +4789,55 @@ def download_note_file(note_id):
     """
     Download a public note file with flattening and watermark.
     REQUIRES GOOD STANDING: Missouri HB 2271 compliance
+    NOTE: This is a duplicate endpoint - the one at line 3474 takes precedence
     """
     try:
         from StudyFlow.backend.supabase_client import supabase
         from StudyFlow.backend.pdf_flatten import flatten_pdf, flatten_image, can_flatten, convert_to_pdf
         from flask import send_file
+        from datetime import date
         import io
         import uuid
+
+        # DAILY DOWNLOAD LIMIT CHECK (3 downloads/day for free users)
+        # Fetch user profile to check subscription and download count
+        profile_result = supabase.table("user_profiles").select(
+            "subscription_tier, subscription_status, daily_downloads_count, daily_downloads_reset_date, good_standing, permanent_bad_standing"
+        ).eq("id", request.user_id).single().execute()
+        profile = profile_result.data
+
+        # Check if Scholar's Club member (unlimited downloads)
+        is_scholar = (
+            profile.get('subscription_tier') == 'pro' and
+            profile.get('subscription_status') == 'active'
+        )
+
+        if not is_scholar:
+            # Free user - enforce 3 downloads per day limit
+            today = date.today()
+            reset_date = profile.get('daily_downloads_reset_date')
+            download_count = profile.get('daily_downloads_count', 0)
+
+            # Reset counter if new day
+            if not reset_date or str(reset_date) != str(today):
+                supabase.table("user_profiles").update({
+                    "daily_downloads_count": 0,
+                    "daily_downloads_reset_date": str(today)
+                }).eq("id", request.user_id).execute()
+                download_count = 0
+                debug_log(f"[+] Reset daily download count for user {request.user_id}")
+
+            # Check if at limit
+            if download_count >= 3:
+                debug_log(f"[!] User {request.user_id} hit daily download limit ({download_count}/3)")
+                return jsonify({
+                    "error": "Daily download limit reached",
+                    "message": "You've used all 3 downloads today. Join Scholar's Club for unlimited downloads!",
+                    "limit_reached": True,
+                    "downloads_used": download_count,
+                    "downloads_limit": 3,
+                    "subscribe_url": "https://unclephilburt.github.io/studyflowwebsite/account.html"
+                }), 403
 
         # Verify note exists (check both own notes and public notes)
         result = supabase.table("notes").select("id, file_path, original_filename, user_id").eq("id", note_id).execute()
@@ -4758,16 +4850,14 @@ def download_note_file(note_id):
         is_own_note = note_data.get('user_id') == request.user_id
 
         # GOOD STANDING CHECK: Only required for downloading OTHER people's notes
+        # (Reuse profile fetched earlier for download limit check)
         if not is_own_note:
-            profile_result = supabase.table("user_profiles").select("good_standing, permanent_bad_standing").eq("id", request.user_id).single().execute()
-            profile = profile_result.data
-
             # Block if permanently banned
             if profile.get('permanent_bad_standing', False):
                 return jsonify({"error": "Account suspended due to DMCA violations"}), 403
 
-            # Check good standing
-            if not profile.get('good_standing', False):
+            # Check good standing (Scholar's Club members are always in good standing)
+            if not is_scholar and not profile.get('good_standing', False):
                 return jsonify({
                     "error": "Good Standing required to download notes",
                     "message": "Upload a verified note or subscribe to regain access",
@@ -4845,6 +4935,17 @@ def download_note_file(note_id):
 
         download_name = f"{name_base}_studyflow.pdf"
         mimetype = 'application/pdf'
+
+        # Increment download counter for free users
+        if not is_scholar:
+            try:
+                new_count = (profile.get('daily_downloads_count', 0) or 0) + 1
+                supabase.table("user_profiles").update({
+                    "daily_downloads_count": new_count
+                }).eq("id", request.user_id).execute()
+                debug_log(f"[+] User {request.user_id} download count: {new_count}/3")
+            except Exception as count_err:
+                debug_log(f"[-] Failed to increment download count: {count_err}")
 
         return send_file(
             io.BytesIO(file_data),
@@ -5680,6 +5781,58 @@ def get_subscription_status():
 
     except Exception as e:
         debug_log(f"Get subscription status error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/downloads/daily-status", methods=["GET"])
+@supabase_auth_required
+def get_daily_download_status():
+    """
+    Get user's daily download count and limit
+    Returns download count, limit, and whether user is Scholar's Club member
+    """
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+        from datetime import date
+
+        response = supabase.table("user_profiles").select(
+            "subscription_tier, subscription_status, daily_downloads_count, daily_downloads_reset_date"
+        ).eq("id", request.user_id).single().execute()
+
+        if not response.data:
+            return jsonify({"error": "User not found"}), 404
+
+        profile = response.data
+
+        # Check if Scholar's Club member (unlimited downloads)
+        is_scholar = (
+            profile.get('subscription_tier') == 'pro' and
+            profile.get('subscription_status') == 'active'
+        )
+
+        # Reset counter if new day
+        today = date.today()
+        reset_date = profile.get('daily_downloads_reset_date')
+        download_count = profile.get('daily_downloads_count', 0) or 0
+
+        if not is_scholar and (not reset_date or str(reset_date) != str(today)):
+            # Reset for new day
+            supabase.table("user_profiles").update({
+                "daily_downloads_count": 0,
+                "daily_downloads_reset_date": str(today)
+            }).eq("id", request.user_id).execute()
+            download_count = 0
+
+        return jsonify({
+            "is_scholar": is_scholar,
+            "downloads_used": download_count if not is_scholar else None,
+            "downloads_limit": 3 if not is_scholar else None,
+            "downloads_remaining": (3 - download_count) if not is_scholar else None,
+            "reset_date": str(today) if not is_scholar else None
+        }), 200
+
+    except Exception as e:
+        debug_log(f"Get daily download status error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
 
