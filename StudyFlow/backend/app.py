@@ -15,6 +15,7 @@ import psycopg2
 import traceback
 import requests
 import stripe
+import google.generativeai as genai
 
 
 from StudyFlow.backend.image_processing import preprocess_image
@@ -4040,8 +4041,6 @@ def generate_quiz():
 
         from StudyFlow.backend.supabase_client import search_notes_vector, supabase
         from StudyFlow.backend.embedding_client import generate_embedding
-        import google.generativeai as genai
-        import os
 
         data = request.get_json()
         if not data or not data.get('topic'):
