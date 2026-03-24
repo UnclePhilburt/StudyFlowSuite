@@ -793,7 +793,10 @@ def reset_password():
 
 @app.route("/api/create-subscription", methods=["POST"])
 def create_subscription():
-    """Create Stripe subscription for user"""
+    """Create Stripe subscription for user (with Supabase)"""
+    from StudyFlow.backend.supabase_client import supabase
+    from datetime import datetime
+
     try:
         data = request.json
         email = data.get('email')
@@ -804,21 +807,48 @@ def create_subscription():
         if not email or not payment_method_id:
             return jsonify({'error': 'Missing required fields'}), 400
 
-        # Create or get Stripe customer
-        conn = psycopg2.connect(os.environ["DATABASE_URL"])
-        cur = conn.cursor()
-        cur.execute("SELECT stripe_customer_id FROM user_profiles WHERE email = %s", (email,))
-        result = cur.fetchone()
+        # Check if user already exists in Supabase
+        result = supabase.table("user_profiles").select("id, stripe_customer_id").eq("email", email).execute()
 
-        if result and result[0]:
-            customer_id = result[0]
+        user_id = None
+        customer_id = None
+
+        if result.data and len(result.data) > 0:
+            # User exists
+            user_id = result.data[0]['id']
+            customer_id = result.data[0].get('stripe_customer_id')
+            debug_log(f"Existing user found: {user_id}")
+        else:
+            # Create new Supabase auth user (auto-creates user_profile via trigger)
+            import secrets
+            temp_password = secrets.token_urlsafe(32)
+
+            auth_result = supabase.auth.sign_up({
+                "email": email,
+                "password": temp_password,
+                "options": {
+                    "data": {
+                        "full_name": name
+                    }
+                }
+            })
+
+            if auth_result.user:
+                user_id = auth_result.user.id
+                debug_log(f"New user created: {user_id}")
+            else:
+                raise Exception("Failed to create user account")
+
+        # Create or retrieve Stripe customer
+        if customer_id:
             customer = stripe.Customer.retrieve(customer_id)
         else:
             customer = stripe.Customer.create(
                 email=email,
                 name=name,
                 payment_method=payment_method_id,
-                invoice_settings={'default_payment_method': payment_method_id}
+                invoice_settings={'default_payment_method': payment_method_id},
+                metadata={'user_id': user_id}
             )
             customer_id = customer.id
 
@@ -827,61 +857,50 @@ def create_subscription():
             customer=customer_id,
             items=[{'price': 'price_1TCOih9LWKaKRffVWuR3bQin'}],  # $4.99/month
             trial_period_days=7,
-            expand=['latest_invoice.payment_intent']
+            expand=['latest_invoice.payment_intent'],
+            metadata={'user_id': user_id}
         )
 
         # Calculate trial end date
-        trial_ends_at = datetime.fromtimestamp(subscription.trial_end)
+        trial_ends_at = datetime.fromtimestamp(subscription.trial_end).isoformat()
 
-        # Update or insert user
-        try:
-            cur.execute("""
-                INSERT INTO users (email, name, stripe_customer_id, stripe_subscription_id, subscription_status, trial_ends_at)
-                VALUES (%s, %s, %s, %s, 'trialing', %s)
-                ON CONFLICT (email)
-                DO UPDATE SET
-                    stripe_customer_id = EXCLUDED.stripe_customer_id,
-                    stripe_subscription_id = EXCLUDED.stripe_subscription_id,
-                    subscription_status = EXCLUDED.subscription_status,
-                    trial_ends_at = EXCLUDED.trial_ends_at
-                RETURNING id
-            """, (email, name, customer_id, subscription.id, trial_ends_at))
-            user_id = cur.fetchone()[0]
-            conn.commit()
+        # Update user_profile with subscription info
+        supabase.table("user_profiles").update({
+            "stripe_customer_id": customer_id,
+            "stripe_subscription_id": subscription.id,
+            "subscription_tier": "pro",
+            "subscription_status": "trialing",
+            "full_name": name
+        }).eq("id", user_id).execute()
 
-            # Send welcome email
-            send_access_key_email(email, customer_id)
+        # Send welcome email
+        send_access_key_email(email, customer_id)
 
-            # Create JWT token
-            token = create_token(user_id, email)
+        # Create JWT token for website auth
+        token = create_token(user_id, email)
 
-            app.logger.info(f"✅ Subscription created for {email}: {subscription.id}")
+        debug_log(f"✅ Subscription created for {email}: {subscription.id}")
 
-            return jsonify({
-                'success': True,
-                'token': token,
-                'user': {
-                    'id': user_id,
-                    'email': email,
-                    'name': name,
-                    'subscription_status': 'trialing',
-                    'stripe_customer_id': customer_id,
-                    'trial_ends_at': trial_ends_at.isoformat()
-                }
-            }), 200
-
-        except Exception as db_error:
-            conn.rollback()
-            raise db_error
-        finally:
-            conn.close()
+        return jsonify({
+            'success': True,
+            'token': token,
+            'user': {
+                'id': user_id,
+                'email': email,
+                'name': name,
+                'subscription_status': 'trialing',
+                'subscription_tier': 'pro',
+                'stripe_customer_id': customer_id,
+                'trial_ends_at': trial_ends_at
+            }
+        }), 200
 
     except stripe.error.CardError as e:
-        app.logger.error(f"❌ Card error: {e}")
+        debug_log(f"❌ Card error: {e}")
         return jsonify({'error': 'Card was declined'}), 400
     except Exception as e:
-        app.logger.error(f"❌ Subscription creation error: {e}\n{traceback.format_exc()}")
-        return jsonify({'error': 'Subscription creation failed'}), 500
+        debug_log(f"❌ Subscription creation error: {e}\n{traceback.format_exc()}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route("/api/me", methods=["GET"])
 @supabase_auth_required
