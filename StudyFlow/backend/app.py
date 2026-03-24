@@ -5840,7 +5840,7 @@ def get_daily_download_status():
 @supabase_auth_required
 def create_checkout_session():
     """
-    Create a Stripe Checkout session for the Scholar's Club subscription ($5/mo)
+    Create a Stripe Checkout session for the Scholar's Club subscription ($4.99/mo)
 
     Request body:
     {
@@ -5887,12 +5887,12 @@ def create_checkout_session():
                 "stripe_customer_id": stripe_customer_id
             }).eq("id", request.user_id).execute()
 
-        # Create Stripe Checkout session for Scholar's Club ($5/mo)
+        # Create Stripe Checkout session for Scholar's Club ($4.99/mo)
         checkout_session = stripe.checkout.Session.create(
             customer=stripe_customer_id,
             payment_method_types=['card'],
             line_items=[{
-                'price': 'price_1TEJOa9LWKaKRffVgNpExTIz',  # Scholar's Club - $5/month
+                'price': 'price_1TEJOa9LWKaKRffVgNpExTIz',  # Scholar's Club - $4.99/month
                 'quantity': 1,
             }],
             mode='subscription',
