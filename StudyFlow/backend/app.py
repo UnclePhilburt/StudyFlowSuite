@@ -3019,6 +3019,10 @@ def list_notes():
         ...
     ]
     """
+    # Handle OPTIONS preflight
+    if request.method == 'OPTIONS':
+        return '', 200
+
     try:
         from StudyFlow.backend.supabase_client import get_user_notes
 
