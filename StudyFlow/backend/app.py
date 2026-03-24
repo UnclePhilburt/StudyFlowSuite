@@ -2999,7 +2999,7 @@ NOT study material: grocery lists, personal emails, blank pages, random text, ad
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/api/notes/list", methods=["GET"])
+@app.route("/api/notes/list", methods=["GET", "OPTIONS"])
 @supabase_auth_required
 def list_notes():
     """
