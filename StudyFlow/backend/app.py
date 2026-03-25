@@ -3957,7 +3957,10 @@ def chat_with_notes():
                 sources.append({
                     "note_id": result['note_id'],
                     "filename": f"{filename} ({result['university']} - {result['course_code']})" if result.get('university') else filename,
-                    "similarity": round(result['similarity'], 2)
+                    "similarity": round(result['similarity'], 2),
+                    "username": result.get('username'),
+                    "university": result.get('university'),
+                    "course_code": result.get('course_code')
                 })
                 # Add original_filename to result for context
                 result['original_filename'] = filename
