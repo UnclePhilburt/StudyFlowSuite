@@ -1,5 +1,6 @@
 # requirements.txt
 Flask
+Flask-CORS
 gunicorn
 gevent
 openai>=1.50.0
@@ -23,3 +24,4 @@ requests
 pymupdf
 PyPDF2
 python-docx
+supabase
