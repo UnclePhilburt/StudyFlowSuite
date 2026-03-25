@@ -4561,7 +4561,13 @@ def submit_takedown_request():
 
         debug_log(f"📋 DMCA takedown request submitted: {request_id}")
 
-        # TODO: Send email notification to admin and confirmation to requestor
+        # Send email notification to admin
+        send_dmca_report_notification_to_admin(
+            takedown_id=request_id,
+            note_filename=data['note_filename'],
+            reporter_email=data['requestor_email'],
+            reason=data['complaint_description'][:200]
+        )
 
         return jsonify({
             "success": True,
