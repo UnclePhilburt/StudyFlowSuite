@@ -1023,6 +1023,7 @@ def get_current_user():
             "email": profile.get("email"),
             "name": profile.get("full_name"),
             "subscription_status": profile.get("subscription_tier", "free"),
+            "edu_verified": profile.get("edu_email_verified", False),
             "is_beta": False,  # Legacy field, always False for new users
             "created_at": profile.get("created_at")
         }), 200
