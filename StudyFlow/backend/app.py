@@ -4018,6 +4018,14 @@ def generate_quiz_test():
     """Test endpoint to verify routing works"""
     return jsonify({"status": "ok", "message": "Quiz endpoint is reachable"}), 200
 
+@app.route("/api/generate-quiz-test-post", methods=["POST"])
+def generate_quiz_test_post():
+    """Test POST endpoint"""
+    print("[TEST POST] Endpoint hit!")
+    data = request.get_json()
+    print(f"[TEST POST] Data: {data}")
+    return jsonify({"status": "ok", "message": "POST works", "data": data}), 200
+
 @app.route("/api/generate-quiz", methods=["POST", "OPTIONS"])
 def generate_quiz():
     """
@@ -4039,14 +4047,19 @@ def generate_quiz():
         ]
     }
     """
-    print("[QUIZ] Endpoint called!")
+    try:
+        print(f"[QUIZ] RAW Endpoint called! Method: {request.method}, Path: {request.path}")
 
-    # Handle OPTIONS request for CORS
-    if request.method == "OPTIONS":
-        print("[QUIZ] OPTIONS request")
-        return jsonify({"status": "ok"}), 200
+        # Handle OPTIONS request for CORS
+        if request.method == "OPTIONS":
+            print("[QUIZ] OPTIONS request")
+            return jsonify({"status": "ok"}), 200
 
-    print("[QUIZ] POST request received")
+        print("[QUIZ] POST request received")
+    except Exception as early_error:
+        print(f"[QUIZ] VERY EARLY ERROR: {early_error}")
+        print(traceback.format_exc())
+        return jsonify({"error": str(early_error)}), 500
 
     # Manually check auth since decorators might be causing issues
     from StudyFlow.backend.supabase_client import supabase
