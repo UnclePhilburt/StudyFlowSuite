@@ -4579,6 +4579,36 @@ def submit_takedown_request():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/newsletter/subscribe", methods=["POST"])
+def newsletter_subscribe():
+    """
+    Subscribe an email to the newsletter (no auth required).
+
+    Body: { "email": "user@example.com" }
+    """
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        data = request.json
+        email = data.get('email', '').strip().lower()
+
+        if not email or '@' not in email:
+            return jsonify({"error": "Valid email address required"}), 400
+
+        # Upsert so duplicate emails don't cause errors
+        supabase.table("newsletter_subscribers").upsert({
+            "email": email
+        }, on_conflict="email").execute()
+
+        debug_log(f"Newsletter subscription: {email}")
+
+        return jsonify({"success": True}), 200
+
+    except Exception as e:
+        debug_log(f"Newsletter subscribe error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/notes/<note_id>/view", methods=["POST"])
 @supabase_auth_required
 def track_note_view(note_id):
