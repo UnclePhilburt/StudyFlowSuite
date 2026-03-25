@@ -18,7 +18,7 @@ redis
 flower
 psycopg2-binary>=2.9.9
 stripe
-sendgrid
+sib-api-v3-sdk
 requests
 pymupdf
 PyPDF2

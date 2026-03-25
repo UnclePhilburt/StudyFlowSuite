@@ -25,18 +25,22 @@ from StudyFlow.backend.submit_button_storage import register_submit_button_uploa
 from StudyFlow.backend.tasks import process_question_async, celery_app
 from StudyFlow.backend import tasks  # 🧠 registers the Celery task
 from StudyFlow.backend.supabase_auth import supabase_auth_required, account_not_frozen  # Supabase Auth decorators
-from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import Mail, Email, MailSettings, SandBoxMode
+import sib_api_v3_sdk
+from sib_api_v3_sdk.rest import ApiException
 
 BACKEND_URL = os.environ.get("BACKEND_URL", "https://studyflowsuite.onrender.com")
 
 stripe.api_key = os.environ['STRIPE_SECRET_KEY']
 WEBHOOK_SECRET    = os.environ['STRIPE_WEBHOOK_SECRET']
 
-SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY")
-if not SENDGRID_API_KEY:
-    raise RuntimeError("Missing SENDGRID_API_KEY environment variable")
-sg_client = SendGridAPIClient(SENDGRID_API_KEY)
+BREVO_API_KEY = os.environ.get("BREVO_API_KEY")
+if not BREVO_API_KEY:
+    raise RuntimeError("Missing BREVO_API_KEY environment variable")
+
+# Configure Brevo API client
+configuration = sib_api_v3_sdk.Configuration()
+configuration.api_key['api-key'] = BREVO_API_KEY
+brevo_client = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(configuration))
 
 # Import AI clients
 from StudyFlow.backend.ai_manager import triple_call_ai_api_json_final
@@ -127,20 +131,18 @@ Legal Requirement: DMCA Safe Harbor requires responding within 24-48 hours.
     """
 
     try:
-        sg = SendGridAPIClient(os.getenv("SENDGRID_API_KEY"))
-        message = Mail(
-            from_email=Email("info@studyflowsuite.com", "StudyFlow DMCA System"),
-            to_emails=admin_email,
+        send_email = sib_api_v3_sdk.SendSmtpEmail(
+            to=[{"email": admin_email}],
+            sender={"email": "info@studyflowsuite.com", "name": "StudyFlow DMCA System"},
             subject=f"[DMCA] New Takedown Report - {note_filename}",
-            plain_text_content=plain_text,
-            html_content=html_content
+            html_content=html_content,
+            text_content=plain_text
         )
-        message.mail_settings = MailSettings(sandbox_mode=SandBoxMode(enable=False))
 
-        response = sg.send(message)
-        app.logger.info(f"✅ DMCA admin notification sent ({response.status_code})")
+        response = brevo_client.send_transac_email(send_email)
+        app.logger.info(f"✅ DMCA admin notification sent (message_id: {response.message_id})")
         return True
-    except Exception as e:
+    except ApiException as e:
         app.logger.error(f"❌ Failed to send DMCA admin notification: {e}")
         return False
 
@@ -216,19 +218,17 @@ def send_dmca_strike_notification_to_user(user_email: str, user_name: str, strik
         """
 
     try:
-        sg = SendGridAPIClient(os.getenv("SENDGRID_API_KEY"))
-        message = Mail(
-            from_email=Email("info@studyflowsuite.com", "StudyFlow Legal"),
-            to_emails=user_email,
+        send_email = sib_api_v3_sdk.SendSmtpEmail(
+            to=[{"email": user_email}],
+            sender={"email": "info@studyflowsuite.com", "name": "StudyFlow Legal"},
             subject=subject,
             html_content=html_content
         )
-        message.mail_settings = MailSettings(sandbox_mode=SandBoxMode(enable=False))
 
-        response = sg.send(message)
-        app.logger.info(f"✅ DMCA strike notification sent to user ({response.status_code})")
+        response = brevo_client.send_transac_email(send_email)
+        app.logger.info(f"✅ DMCA strike notification sent to user (message_id: {response.message_id})")
         return True
-    except Exception as e:
+    except ApiException as e:
         app.logger.error(f"❌ Failed to send DMCA strike notification: {e}")
         return False
 
@@ -273,19 +273,17 @@ def send_dmca_report_confirmation_to_reporter(reporter_email: str, reporter_name
     """
 
     try:
-        sg = SendGridAPIClient(os.getenv("SENDGRID_API_KEY"))
-        message = Mail(
-            from_email=Email("info@studyflowsuite.com", "StudyFlow Legal"),
-            to_emails=reporter_email,
+        send_email = sib_api_v3_sdk.SendSmtpEmail(
+            to=[{"email": reporter_email}],
+            sender={"email": "info@studyflowsuite.com", "name": "StudyFlow Legal"},
             subject=subject,
             html_content=html_content
         )
-        message.mail_settings = MailSettings(sandbox_mode=SandBoxMode(enable=False))
 
-        response = sg.send(message)
-        app.logger.info(f"✅ DMCA confirmation sent to reporter ({response.status_code})")
+        response = brevo_client.send_transac_email(send_email)
+        app.logger.info(f"✅ DMCA confirmation sent to reporter (message_id: {response.message_id})")
         return True
-    except Exception as e:
+    except ApiException as e:
         app.logger.error(f"❌ Failed to send DMCA confirmation: {e}")
         return False
 
@@ -304,29 +302,22 @@ def send_access_key_email(to_email: str, stripe_id: str) -> bool:
         "Keep it safe—enter it when launching the app."
     )
 
-    # Create the SendGrid client from env var
-    sg = SendGridAPIClient(os.getenv("SENDGRID_API_KEY"))
-
-    # Construct the Mail object
-    message = Mail(
-        from_email=Email("info@studyflowsuite.com", "StudyFlow Suite"),
-        to_emails=to_email,
-        subject="Your StudyFlow Access Key",
-        plain_text_content=plain_text_content,
-        html_content=html_content
-    )
-    # Make sure sandbox is off
-    message.mail_settings = MailSettings(sandbox_mode=SandBoxMode(enable=False))
-
     try:
         app.logger.debug(f"➤ Sending access key email to {to_email}")
-        response = sg.send(message)
-        app.logger.info(f"✔️  SendGrid replied {response.status_code}")
-        app.logger.debug(f"   body: {response.body}")
-        app.logger.debug(f"   headers: {response.headers}")
+
+        send_email = sib_api_v3_sdk.SendSmtpEmail(
+            to=[{"email": to_email}],
+            sender={"email": "info@studyflowsuite.com", "name": "StudyFlow Suite"},
+            subject="Your StudyFlow Access Key",
+            html_content=html_content,
+            text_content=plain_text_content
+        )
+
+        response = brevo_client.send_transac_email(send_email)
+        app.logger.info(f"✔️  Brevo replied (message_id: {response.message_id})")
         return True
-    except Exception as e:
-        app.logger.error("❌  SendGrid error sending access key email", exc_info=e)
+    except ApiException as e:
+        app.logger.error("❌  Brevo error sending access key email", exc_info=e)
         return False
 
 import logging
@@ -2541,46 +2532,43 @@ def send_download_link():
         if not email:
             return jsonify({'error': 'Email is required'}), 400
 
-        # Send email using SendGrid
-        message = Mail(
-            from_email=Email("info@studyflowsuite.com", "StudyFlow Suite"),
-            to_emails=email,
+        html_content = """
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                <h2 style="color: #667eea;">Open StudyFlow on Your Computer</h2>
+                <p>You visited StudyFlow on your mobile device, but our Chrome extension only works on desktop computers.</p>
+                <p style="margin: 30px 0;">
+                    <a href="https://studyflowsuite.com/"
+                       style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                              color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px;
+                              font-weight: bold;">
+                        Open on Desktop
+                    </a>
+                </p>
+                <h3 style="color: #1e293b;">Requirements:</h3>
+                <ul style="line-height: 1.8;">
+                    <li>✅ Desktop or laptop computer</li>
+                    <li>✅ Chrome browser</li>
+                    <li>✅ Follow the installation guide on the website</li>
+                </ul>
+                <p style="margin-top: 30px; color: #64748b; font-size: 14px;">
+                    Questions? Visit our <a href="https://studyflowsuite.com/docs.html" style="color: #667eea;">FAQ page</a>.
+                </p>
+                <hr style="margin: 30px 0; border: none; border-top: 1px solid #e2e8f0;">
+                <p style="color: #94a3b8; font-size: 12px; text-align: center;">
+                    StudyFlow Suite - AI-Powered Quiz Automation<br>
+                    <a href="https://studyflowsuite.com/" style="color: #667eea;">studyflowsuite.com</a>
+                </p>
+            </div>
+        """
+
+        send_email = sib_api_v3_sdk.SendSmtpEmail(
+            to=[{"email": email}],
+            sender={"email": "info@studyflowsuite.com", "name": "StudyFlow Suite"},
             subject="StudyFlow Download Link - Open on Desktop",
-            html_content="""
-                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                    <h2 style="color: #667eea;">Open StudyFlow on Your Computer</h2>
-                    <p>You visited StudyFlow on your mobile device, but our Chrome extension only works on desktop computers.</p>
-                    <p style="margin: 30px 0;">
-                        <a href="https://unclephilburt.github.io/studyflowwebsite/"
-                           style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                                  color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px;
-                                  font-weight: bold;">
-                            Open on Desktop
-                        </a>
-                    </p>
-                    <h3 style="color: #1e293b;">Requirements:</h3>
-                    <ul style="line-height: 1.8;">
-                        <li>✅ Desktop or laptop computer</li>
-                        <li>✅ Chrome browser</li>
-                        <li>✅ Follow the installation guide on the website</li>
-                    </ul>
-                    <p style="margin-top: 30px; color: #64748b; font-size: 14px;">
-                        Questions? Visit our <a href="https://unclephilburt.github.io/studyflowwebsite/docs.html" style="color: #667eea;">FAQ page</a>.
-                    </p>
-                    <hr style="margin: 30px 0; border: none; border-top: 1px solid #e2e8f0;">
-                    <p style="color: #94a3b8; font-size: 12px; text-align: center;">
-                        StudyFlow Suite - AI-Powered Quiz Automation<br>
-                        <a href="https://unclephilburt.github.io/studyflowwebsite/" style="color: #667eea;">unclephilburt.github.io/studyflowwebsite</a>
-                    </p>
-                </div>
-            """
+            html_content=html_content
         )
 
-        # Make sure sandbox is off
-        message.mail_settings = MailSettings(sandbox_mode=SandBoxMode(enable=False))
-
-        sg = SendGridAPIClient(os.getenv("SENDGRID_API_KEY"))
-        response = sg.send(message)
+        response = brevo_client.send_transac_email(send_email)
 
         app.logger.info(f"✅ Download link sent to {email}")
         return jsonify({'success': True, 'message': 'Email sent successfully'}), 200
@@ -3267,18 +3255,7 @@ def send_edu_verification():
             return jsonify({"error": "Failed to update profile"}), 500
 
         # Send verification email
-        verification_url = f"https://unclephilburt.github.io/studyflowsuitewebsite/verify-edu.html?token={verification_token}"
-
-        message = Mail(
-            from_email=Email("info@studyflowsuite.com", "StudyFlow Suite"),
-            to_emails=edu_email,
-            subject="Verify your university email - StudyFlow Suite"
-        )
-
-        message.dynamic_template_data = {
-            'verification_url': verification_url,
-            'email': edu_email
-        }
+        verification_url = f"https://studyflowsuite.com/verify-edu.html?token={verification_token}"
 
         html_content = f"""
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
@@ -3302,11 +3279,14 @@ def send_edu_verification():
         </div>
         """
 
-        message.content = html_content
-        message.mail_settings = MailSettings(sandbox_mode=SandBoxMode(enable=False))
+        send_email = sib_api_v3_sdk.SendSmtpEmail(
+            to=[{"email": edu_email}],
+            sender={"email": "info@studyflowsuite.com", "name": "StudyFlow Suite"},
+            subject="Verify your university email - StudyFlow Suite",
+            html_content=html_content
+        )
 
-        sg = SendGridAPIClient(os.getenv("SENDGRID_API_KEY"))
-        response = sg.send(message)
+        response = brevo_client.send_transac_email(send_email)
 
         debug_log(f"Verification email sent to {edu_email}")
         return jsonify({"success": True, "message": "Verification email sent"}), 200
