@@ -211,7 +211,9 @@ def reset_password_email(email: str):
     Returns: (success, error)
     """
     try:
-        supabase.auth.reset_password_for_email(email)
+        supabase.auth.reset_password_for_email(email, {
+            "redirect_to": "https://studyflowsuite.com/reset-password.html"
+        })
         debug_log(f"✅ Password reset email sent to {email}")
         return True, None
 
