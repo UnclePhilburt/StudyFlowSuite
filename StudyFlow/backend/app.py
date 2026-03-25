@@ -64,6 +64,8 @@ CORS(app,
          "https://unclephilburt.github.io",
          "https://studyflowsuite.com",
          "https://www.studyflowsuite.com",
+         "http://studyflowsuite.com",
+         "http://www.studyflowsuite.com",
          "http://localhost:*",
          "http://127.0.0.1:*"
      ]}},
