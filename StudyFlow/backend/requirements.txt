@@ -19,7 +19,7 @@ redis
 flower
 psycopg2-binary>=2.9.9
 stripe
-sib-api-v3-sdk
+brevo-python
 requests
 pymupdf
 PyPDF2

@@ -23,10 +23,13 @@ from StudyFlow.config import TESSERACT_PATH
 from StudyFlow.logging_utils import debug_log
 from StudyFlow.backend.submit_button_storage import register_submit_button_upload
 from StudyFlow.backend.tasks import process_question_async, celery_app
-from StudyFlow.backend import tasks  # 🧠 registers the Celery task
+from StudyFlow.backend import tasks  # registers the Celery task
 from StudyFlow.backend.supabase_auth import supabase_auth_required, account_not_frozen  # Supabase Auth decorators
-import sib_api_v3_sdk
-from sib_api_v3_sdk.rest import ApiException
+from brevo import Brevo
+from brevo.transactional_emails import (
+    SendTransacEmailRequestSender,
+    SendTransacEmailRequestToItem,
+)
 
 BACKEND_URL = os.environ.get("BACKEND_URL", "https://studyflowsuite.onrender.com")
 
@@ -37,10 +40,8 @@ BREVO_API_KEY = os.environ.get("BREVO_API_KEY")
 if not BREVO_API_KEY:
     raise RuntimeError("Missing BREVO_API_KEY environment variable")
 
-# Configure Brevo API client
-configuration = sib_api_v3_sdk.Configuration()
-configuration.api_key['api-key'] = BREVO_API_KEY
-brevo_client = sib_api_v3_sdk.TransactionalEmailsApi(sib_api_v3_sdk.ApiClient(configuration))
+# Configure Brevo client
+brevo_client = Brevo(api_key=BREVO_API_KEY)
 
 # Import AI clients
 from StudyFlow.backend.ai_manager import triple_call_ai_api_json_final
@@ -131,19 +132,22 @@ Legal Requirement: DMCA Safe Harbor requires responding within 24-48 hours.
     """
 
     try:
-        send_email = sib_api_v3_sdk.SendSmtpEmail(
-            to=[{"email": admin_email}],
-            sender={"email": "info@studyflowsuite.com", "name": "StudyFlow DMCA System"},
-            subject=f"[DMCA] New Takedown Report - {note_filename}",
+        brevo_client.transactional_emails.send_transac_email(
             html_content=html_content,
-            text_content=plain_text
+            sender=SendTransacEmailRequestSender(
+                email="info@studyflowsuite.com",
+                name="StudyFlow DMCA System"
+            ),
+            subject=f"[DMCA] New Takedown Report - {note_filename}",
+            to=[
+                SendTransacEmailRequestToItem(email=admin_email)
+            ]
         )
 
-        response = brevo_client.send_transac_email(send_email)
-        app.logger.info(f"✅ DMCA admin notification sent (message_id: {response.message_id})")
+        app.logger.info("DMCA admin notification sent successfully")
         return True
-    except ApiException as e:
-        app.logger.error(f"❌ Failed to send DMCA admin notification: {e}")
+    except Exception as e:
+        app.logger.error(f"Failed to send DMCA admin notification: {e}")
         return False
 
 
@@ -218,18 +222,22 @@ def send_dmca_strike_notification_to_user(user_email: str, user_name: str, strik
         """
 
     try:
-        send_email = sib_api_v3_sdk.SendSmtpEmail(
-            to=[{"email": user_email}],
-            sender={"email": "info@studyflowsuite.com", "name": "StudyFlow Legal"},
+        brevo_client.transactional_emails.send_transac_email(
+            html_content=html_content,
+            sender=SendTransacEmailRequestSender(
+                email="info@studyflowsuite.com",
+                name="StudyFlow Legal"
+            ),
             subject=subject,
-            html_content=html_content
+            to=[
+                SendTransacEmailRequestToItem(email=user_email, name=user_name)
+            ]
         )
 
-        response = brevo_client.send_transac_email(send_email)
-        app.logger.info(f"✅ DMCA strike notification sent to user (message_id: {response.message_id})")
+        app.logger.info("DMCA strike notification sent to user successfully")
         return True
-    except ApiException as e:
-        app.logger.error(f"❌ Failed to send DMCA strike notification: {e}")
+    except Exception as e:
+        app.logger.error(f"Failed to send DMCA strike notification: {e}")
         return False
 
 
@@ -273,18 +281,22 @@ def send_dmca_report_confirmation_to_reporter(reporter_email: str, reporter_name
     """
 
     try:
-        send_email = sib_api_v3_sdk.SendSmtpEmail(
-            to=[{"email": reporter_email}],
-            sender={"email": "info@studyflowsuite.com", "name": "StudyFlow Legal"},
+        brevo_client.transactional_emails.send_transac_email(
+            html_content=html_content,
+            sender=SendTransacEmailRequestSender(
+                email="info@studyflowsuite.com",
+                name="StudyFlow Legal"
+            ),
             subject=subject,
-            html_content=html_content
+            to=[
+                SendTransacEmailRequestToItem(email=reporter_email, name=reporter_name)
+            ]
         )
 
-        response = brevo_client.send_transac_email(send_email)
-        app.logger.info(f"✅ DMCA confirmation sent to reporter (message_id: {response.message_id})")
+        app.logger.info("DMCA confirmation sent to reporter successfully")
         return True
-    except ApiException as e:
-        app.logger.error(f"❌ Failed to send DMCA confirmation: {e}")
+    except Exception as e:
+        app.logger.error(f"Failed to send DMCA confirmation: {e}")
         return False
 
 
@@ -303,21 +315,24 @@ def send_access_key_email(to_email: str, stripe_id: str) -> bool:
     )
 
     try:
-        app.logger.debug(f"➤ Sending access key email to {to_email}")
+        app.logger.debug(f"Sending access key email to {to_email}")
 
-        send_email = sib_api_v3_sdk.SendSmtpEmail(
-            to=[{"email": to_email}],
-            sender={"email": "info@studyflowsuite.com", "name": "StudyFlow Suite"},
-            subject="Your StudyFlow Access Key",
+        brevo_client.transactional_emails.send_transac_email(
             html_content=html_content,
-            text_content=plain_text_content
+            sender=SendTransacEmailRequestSender(
+                email="info@studyflowsuite.com",
+                name="StudyFlow Suite"
+            ),
+            subject="Your StudyFlow Access Key",
+            to=[
+                SendTransacEmailRequestToItem(email=to_email)
+            ]
         )
 
-        response = brevo_client.send_transac_email(send_email)
-        app.logger.info(f"✔️  Brevo replied (message_id: {response.message_id})")
+        app.logger.info("Access key email sent successfully")
         return True
-    except ApiException as e:
-        app.logger.error("❌  Brevo error sending access key email", exc_info=e)
+    except Exception as e:
+        app.logger.error("Brevo error sending access key email", exc_info=e)
         return False
 
 import logging
@@ -2561,20 +2576,23 @@ def send_download_link():
             </div>
         """
 
-        send_email = sib_api_v3_sdk.SendSmtpEmail(
-            to=[{"email": email}],
-            sender={"email": "info@studyflowsuite.com", "name": "StudyFlow Suite"},
+        brevo_client.transactional_emails.send_transac_email(
+            html_content=html_content,
+            sender=SendTransacEmailRequestSender(
+                email="info@studyflowsuite.com",
+                name="StudyFlow Suite"
+            ),
             subject="StudyFlow Download Link - Open on Desktop",
-            html_content=html_content
+            to=[
+                SendTransacEmailRequestToItem(email=email)
+            ]
         )
 
-        response = brevo_client.send_transac_email(send_email)
-
-        app.logger.info(f"✅ Download link sent to {email}")
+        app.logger.info(f"Download link sent to {email}")
         return jsonify({'success': True, 'message': 'Email sent successfully'}), 200
 
     except Exception as e:
-        app.logger.error(f"❌ Error sending download link: {e}")
+        app.logger.error(f"Error sending download link: {e}")
         return jsonify({'error': 'Failed to send email'}), 500
 
 
@@ -3279,20 +3297,23 @@ def send_edu_verification():
         </div>
         """
 
-        send_email = sib_api_v3_sdk.SendSmtpEmail(
-            to=[{"email": edu_email}],
-            sender={"email": "info@studyflowsuite.com", "name": "StudyFlow Suite"},
+        brevo_client.transactional_emails.send_transac_email(
+            html_content=html_content,
+            sender=SendTransacEmailRequestSender(
+                email="info@studyflowsuite.com",
+                name="StudyFlow Suite"
+            ),
             subject="Verify your university email - StudyFlow Suite",
-            html_content=html_content
+            to=[
+                SendTransacEmailRequestToItem(email=edu_email)
+            ]
         )
-
-        response = brevo_client.send_transac_email(send_email)
 
         debug_log(f"Verification email sent to {edu_email}")
         return jsonify({"success": True, "message": "Verification email sent"}), 200
 
     except Exception as e:
-        debug_log(f"❌ Send .edu verification error: {e}\n{traceback.format_exc()}")
+        debug_log(f"Send .edu verification error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
 
