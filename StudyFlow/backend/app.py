@@ -62,6 +62,8 @@ from flask_cors import CORS
 CORS(app,
      resources={r"/api/*": {"origins": [
          "https://unclephilburt.github.io",
+         "https://studyflowsuite.com",
+         "https://www.studyflowsuite.com",
          "http://localhost:*",
          "http://127.0.0.1:*"
      ]}},
