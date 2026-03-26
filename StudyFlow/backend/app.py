@@ -6625,6 +6625,67 @@ def save_annotations(note_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/notes/<note_id>/content", methods=["PUT"])
+@supabase_auth_required
+def update_note_content(note_id):
+    """
+    Update the text content of a note.
+    Auth required, verifies note ownership.
+    Accepts JSON body: { "content": "the new text" }
+    Re-uploads text as bytes to existing file_path in Supabase Storage.
+    """
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        data = request.get_json()
+        if not data or "content" not in data:
+            return jsonify({"error": "Missing 'content' in request body"}), 400
+
+        new_content = data["content"]
+
+        # Get note and verify ownership
+        note_response = supabase.table("notes").select(
+            "id, user_id, file_path"
+        ).eq("id", note_id).execute()
+
+        if not note_response.data:
+            return jsonify({"error": "Note not found"}), 404
+
+        note_data = note_response.data[0]
+
+        if note_data.get("user_id") != request.user_id:
+            return jsonify({"error": "Not authorized to edit this note"}), 403
+
+        file_path = note_data.get("file_path")
+        if not file_path:
+            return jsonify({"error": "No file path for this note"}), 404
+
+        # Re-upload: delete old file then upload new content
+        content_bytes = new_content.encode("utf-8")
+
+        try:
+            supabase.storage.from_("note-files").remove([file_path])
+        except Exception as remove_err:
+            debug_log(f"Warning: could not remove old file: {remove_err}")
+
+        supabase.storage.from_("note-files").upload(
+            path=file_path,
+            file=content_bytes,
+            file_options={"content-type": "text/plain; charset=utf-8"}
+        )
+
+        # Update file_size in the notes table
+        supabase.table("notes").update({
+            "file_size": len(content_bytes)
+        }).eq("id", note_id).execute()
+
+        return jsonify({"success": True}), 200
+
+    except Exception as e:
+        debug_log(f"Update note content error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     try:
         port = int(os.environ.get("PORT", 5000))
