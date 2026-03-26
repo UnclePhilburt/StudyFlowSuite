@@ -6846,6 +6846,359 @@ def create_note():
         return jsonify({"error": str(e)}), 500
 
 
+# ──────────────────────────────────────────────
+# ONLYOFFICE Private Office Endpoints
+# ──────────────────────────────────────────────
+
+ONLYOFFICE_URL = os.environ.get("ONLYOFFICE_URL", "")
+ONLYOFFICE_JWT_SECRET = os.environ.get("ONLYOFFICE_JWT_SECRET", "")
+
+OFFICE_CONTENT_TYPES = {
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+}
+
+OFFICE_DOCUMENT_TYPES = {
+    "docx": "word",
+    "xlsx": "cell",
+    "pptx": "slide",
+}
+
+
+def _create_blank_document(file_type):
+    """Generate a minimal blank office document and return bytes."""
+    buf = BytesIO()
+    if file_type == "docx":
+        from docx import Document as DocxDocument
+        doc = DocxDocument()
+        doc.add_paragraph("")
+        doc.save(buf)
+    elif file_type == "xlsx":
+        from openpyxl import Workbook
+        wb = Workbook()
+        wb.save(buf)
+    elif file_type == "pptx":
+        from pptx import Presentation
+        prs = Presentation()
+        prs.slide_layouts[6]  # blank layout reference
+        prs.slides.add_slide(prs.slide_layouts[6])
+        prs.save(buf)
+    else:
+        raise ValueError(f"Unsupported file type: {file_type}")
+    buf.seek(0)
+    return buf.read()
+
+
+@app.route("/api/office/create", methods=["POST"])
+@supabase_auth_required
+def office_create():
+    """Create a new blank office document (docx/xlsx/pptx)."""
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+        import uuid
+
+        data = request.get_json()
+        if not data or "title" not in data or "type" not in data:
+            return jsonify({"error": "Missing 'title' or 'type'"}), 400
+
+        file_type = data["type"].lower()
+        if file_type not in OFFICE_CONTENT_TYPES:
+            return jsonify({"error": f"Unsupported type: {file_type}. Use docx, xlsx, or pptx."}), 400
+
+        title = data["title"].strip() or "Untitled"
+        doc_id = str(uuid.uuid4())
+        file_path = f"office/{request.user_id}/{doc_id}.{file_type}"
+
+        # Generate blank document
+        file_bytes = _create_blank_document(file_type)
+
+        # Upload to Supabase Storage
+        supabase.storage.from_("note-files").upload(
+            path=file_path,
+            file=file_bytes,
+            file_options={"content-type": OFFICE_CONTENT_TYPES[file_type]},
+        )
+
+        # Insert row into notes table
+        note_row = {
+            "id": doc_id,
+            "user_id": request.user_id,
+            "original_filename": title,
+            "file_path": file_path,
+            "file_type": file_type,
+            "file_size": len(file_bytes),
+        }
+        supabase.table("notes").insert(note_row).execute()
+
+        debug_log(f"[Office] Created {file_type} doc '{title}' for user {request.user_id}")
+        return jsonify({"success": True, "doc_id": doc_id}), 201
+
+    except Exception as e:
+        debug_log(f"Office create error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/office/<doc_id>/editor-config", methods=["GET"])
+@supabase_auth_required
+def office_editor_config(doc_id):
+    """Return ONLYOFFICE editor config with signed JWT."""
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+        import jwt
+
+        # Get note and verify ownership
+        note_resp = supabase.table("notes").select(
+            "id, user_id, file_path, file_type, file_size, original_filename"
+        ).eq("id", doc_id).execute()
+
+        if not note_resp.data:
+            return jsonify({"error": "Document not found"}), 404
+
+        note = note_resp.data[0]
+        if note["user_id"] != request.user_id:
+            return jsonify({"error": "Not authorized"}), 403
+
+        file_type = note["file_type"]
+        title = note.get("original_filename", "Untitled")
+
+        # Generate 1-hour signed URL
+        signed = supabase.storage.from_("note-files").create_signed_url(
+            note["file_path"], 3600
+        )
+        doc_url = signed.get("signedURL") or signed.get("signedUrl", "")
+
+        # Build document key (changes when file changes to bust ONLYOFFICE cache)
+        doc_key = f"{doc_id}_{note.get('file_size', 0)}"
+
+        callback_url = f"{BACKEND_URL}/api/office/callback?doc_id={doc_id}"
+
+        config = {
+            "document": {
+                "fileType": file_type,
+                "key": doc_key,
+                "title": f"{title}.{file_type}",
+                "url": doc_url,
+                "permissions": {
+                    "edit": True,
+                    "download": True,
+                    "print": True,
+                },
+            },
+            "documentType": OFFICE_DOCUMENT_TYPES.get(file_type, "word"),
+            "editorConfig": {
+                "callbackUrl": callback_url,
+                "user": {
+                    "id": request.user_id,
+                    "name": request.user_email or "User",
+                },
+                "customization": {
+                    "autosave": True,
+                    "forcesave": True,
+                    "chat": False,
+                    "comments": False,
+                    "compactHeader": True,
+                },
+                "mode": "edit",
+            },
+        }
+
+        # Sign the config JWT for ONLYOFFICE
+        token = ""
+        if ONLYOFFICE_JWT_SECRET:
+            token = jwt.encode(config, ONLYOFFICE_JWT_SECRET, algorithm="HS256")
+            config["token"] = token
+
+        debug_log(f"[Office] Editor config for doc {doc_id}, type={file_type}")
+        return jsonify({
+            "config": config,
+            "token": token,
+            "docServerUrl": ONLYOFFICE_URL,
+        }), 200
+
+    except Exception as e:
+        debug_log(f"Office editor-config error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/office/callback", methods=["POST"])
+def office_callback():
+    """
+    ONLYOFFICE callback handler (server-to-server, no Supabase auth).
+    Called by ONLYOFFICE when document status changes.
+    Status 2 = closed after editing, 6 = force save.
+    """
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+        import jwt
+
+        doc_id = request.args.get("doc_id")
+        if not doc_id:
+            return jsonify({"error": 0})
+
+        body = request.get_json(force=True)
+        debug_log(f"[Office Callback] doc_id={doc_id}, status={body.get('status')}")
+
+        # Verify ONLYOFFICE JWT if secret is configured
+        if ONLYOFFICE_JWT_SECRET:
+            token = body.get("token")
+            if not token:
+                auth_header = request.headers.get("Authorization", "")
+                if auth_header.startswith("Bearer "):
+                    token = auth_header[7:]
+            if token:
+                try:
+                    jwt.decode(token, ONLYOFFICE_JWT_SECRET, algorithms=["HS256"])
+                except jwt.InvalidTokenError as jwt_err:
+                    debug_log(f"[Office Callback] JWT verification failed: {jwt_err}")
+                    return jsonify({"error": 0})
+
+        status = body.get("status")
+        download_url = body.get("url")
+
+        # Status 2 = closed after editing, 6 = force save
+        if status in (2, 6) and download_url:
+            # Download the saved file from ONLYOFFICE temp URL
+            resp = requests.get(download_url, timeout=30)
+            if resp.status_code == 200:
+                file_bytes = resp.content
+
+                # Get note to find storage path
+                note_resp = supabase.table("notes").select(
+                    "file_path"
+                ).eq("id", doc_id).execute()
+
+                if note_resp.data:
+                    file_path = note_resp.data[0]["file_path"]
+                    file_ext = file_path.rsplit(".", 1)[-1]
+                    content_type = OFFICE_CONTENT_TYPES.get(file_ext, "application/octet-stream")
+
+                    # Remove old file and upload new version
+                    try:
+                        supabase.storage.from_("note-files").remove([file_path])
+                    except Exception as rm_err:
+                        debug_log(f"[Office Callback] Remove old file warning: {rm_err}")
+
+                    supabase.storage.from_("note-files").upload(
+                        path=file_path,
+                        file=file_bytes,
+                        file_options={"content-type": content_type},
+                    )
+
+                    # Update file size in notes table
+                    supabase.table("notes").update({
+                        "file_size": len(file_bytes)
+                    }).eq("id", doc_id).execute()
+
+                    debug_log(f"[Office Callback] Saved {len(file_bytes)} bytes for doc {doc_id}")
+            else:
+                debug_log(f"[Office Callback] Download failed: HTTP {resp.status_code}")
+
+        return jsonify({"error": 0})
+
+    except Exception as e:
+        debug_log(f"Office callback error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": 0})
+
+
+@app.route("/api/office/list", methods=["GET"])
+@supabase_auth_required
+def office_list():
+    """List all office documents for the authenticated user."""
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        resp = supabase.table("notes").select(
+            "id, original_filename, file_type, file_size, created_at"
+        ).eq("user_id", request.user_id).in_(
+            "file_type", ["docx", "xlsx", "pptx"]
+        ).order("created_at", desc=True).execute()
+
+        docs = []
+        for row in resp.data:
+            docs.append({
+                "id": row["id"],
+                "title": row.get("original_filename", "Untitled"),
+                "type": row["file_type"],
+                "size": row.get("file_size", 0),
+                "created_at": row.get("created_at", ""),
+            })
+
+        return jsonify({"documents": docs}), 200
+
+    except Exception as e:
+        debug_log(f"Office list error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/office/<doc_id>", methods=["DELETE"])
+@supabase_auth_required
+def office_delete(doc_id):
+    """Delete an office document."""
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        note_resp = supabase.table("notes").select(
+            "id, user_id, file_path"
+        ).eq("id", doc_id).execute()
+
+        if not note_resp.data:
+            return jsonify({"error": "Document not found"}), 404
+
+        note = note_resp.data[0]
+        if note["user_id"] != request.user_id:
+            return jsonify({"error": "Not authorized"}), 403
+
+        # Remove from storage
+        try:
+            supabase.storage.from_("note-files").remove([note["file_path"]])
+        except Exception as rm_err:
+            debug_log(f"[Office] Storage remove warning: {rm_err}")
+
+        # Delete row
+        supabase.table("notes").delete().eq("id", doc_id).execute()
+
+        debug_log(f"[Office] Deleted doc {doc_id}")
+        return jsonify({"success": True}), 200
+
+    except Exception as e:
+        debug_log(f"Office delete error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/office/<doc_id>/rename", methods=["PATCH"])
+@supabase_auth_required
+def office_rename(doc_id):
+    """Rename an office document."""
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        data = request.get_json()
+        if not data or "title" not in data:
+            return jsonify({"error": "Missing 'title'"}), 400
+
+        note_resp = supabase.table("notes").select(
+            "id, user_id"
+        ).eq("id", doc_id).execute()
+
+        if not note_resp.data:
+            return jsonify({"error": "Document not found"}), 404
+
+        if note_resp.data[0]["user_id"] != request.user_id:
+            return jsonify({"error": "Not authorized"}), 403
+
+        supabase.table("notes").update({
+            "original_filename": data["title"].strip()
+        }).eq("id", doc_id).execute()
+
+        debug_log(f"[Office] Renamed doc {doc_id} to '{data['title']}'")
+        return jsonify({"success": True}), 200
+
+    except Exception as e:
+        debug_log(f"Office rename error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     try:
         port = int(os.environ.get("PORT", 5000))

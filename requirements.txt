@@ -29,3 +29,5 @@ python-docx
 supabase>=2.0.0
 pgvector
 icalendar
+openpyxl
+python-pptx
