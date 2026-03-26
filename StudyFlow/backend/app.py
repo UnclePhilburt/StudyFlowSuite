@@ -6663,6 +6663,11 @@ def update_note_content(note_id):
         # Re-upload: delete old file then upload new content
         content_bytes = new_content.encode("utf-8")
 
+        # Detect HTML content for proper content-type
+        import re
+        is_html = bool(re.search(r'<[a-z][\s\S]*>', new_content[:500], re.IGNORECASE))
+        content_type = "text/html; charset=utf-8" if is_html else "text/plain; charset=utf-8"
+
         try:
             supabase.storage.from_("note-files").remove([file_path])
         except Exception as remove_err:
@@ -6671,7 +6676,7 @@ def update_note_content(note_id):
         supabase.storage.from_("note-files").upload(
             path=file_path,
             file=content_bytes,
-            file_options={"content-type": "text/plain; charset=utf-8"}
+            file_options={"content-type": content_type}
         )
 
         # Update file_size in the notes table
@@ -6683,6 +6688,53 @@ def update_note_content(note_id):
 
     except Exception as e:
         debug_log(f"Update note content error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/notes/create", methods=["POST"])
+@supabase_auth_required
+def create_note():
+    """
+    Create a new empty rich-text note.
+    Accepts optional JSON body: { "title": "My Note" }
+    Defaults title to "Untitled" if not provided.
+    """
+    try:
+        import uuid as _uuid
+        from StudyFlow.backend.supabase_client import supabase
+
+        data = request.get_json(silent=True) or {}
+        title = (data.get("title") or "").strip() or "Untitled"
+
+        note_id = str(_uuid.uuid4())
+        user_id = request.user_id
+        file_path = f"{user_id}/{note_id}.html"
+
+        # Upload empty HTML file to Supabase Storage
+        empty_html = b""
+        supabase.storage.from_("note-files").upload(
+            path=file_path,
+            file=empty_html,
+            file_options={"content-type": "text/html; charset=utf-8"}
+        )
+
+        # Insert row into notes table
+        note_row = {
+            "id": note_id,
+            "user_id": user_id,
+            "original_filename": title + ".html",
+            "file_type": "txt",
+            "file_path": file_path,
+            "file_size": 0,
+            "is_public": False,
+            "page_count": 1,
+        }
+        supabase.table("notes").insert(note_row).execute()
+
+        return jsonify({"success": True, "note_id": note_id}), 201
+
+    except Exception as e:
+        debug_log(f"Create note error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
 
