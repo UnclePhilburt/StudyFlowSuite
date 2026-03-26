@@ -6512,15 +6512,84 @@ def get_annotations(note_id):
 @app.route("/api/notes/<note_id>/annotations", methods=["POST"])
 @supabase_auth_required
 def save_annotations(note_id):
-    """Upsert annotations per page for a note. Deletes pages with empty objects."""
+    """Upsert annotations per page for a note. Deletes pages with empty objects.
+    If save_as_new=true, duplicates the note first and saves annotations to the copy."""
     try:
         from StudyFlow.backend.supabase_client import supabase
         data = request.get_json()
         pages = data.get("annotations", [])
+        save_as_new = data.get("save_as_new", False)
 
         if not isinstance(pages, list):
             return jsonify({"error": "annotations must be a list"}), 400
 
+        target_note_id = note_id
+
+        # If saving as a new note, duplicate the original first
+        if save_as_new:
+            try:
+                # Fetch original note record
+                original = supabase.table("notes") \
+                    .select("*") \
+                    .eq("id", note_id) \
+                    .eq("user_id", request.user_id) \
+                    .single() \
+                    .execute()
+
+                if not original.data:
+                    return jsonify({"error": "Original note not found"}), 404
+
+                orig = original.data
+
+                # Copy the file in Supabase Storage
+                import uuid as uuid_lib
+                new_note_id = str(uuid_lib.uuid4())
+                original_path = orig.get("file_path", "")
+                file_ext = original_path.rsplit('.', 1)[1] if '.' in original_path else 'pdf'
+                new_file_path = f"{request.user_id}/{new_note_id}.{file_ext}"
+
+                # Download original file from storage
+                file_bytes = supabase.storage.from_("note-files").download(original_path)
+
+                # Upload as new file
+                supabase.storage.from_("note-files").upload(
+                    path=new_file_path,
+                    file=file_bytes,
+                    file_options={"content-type": "application/pdf"}
+                )
+
+                # Build the new filename
+                orig_filename = orig.get("original_filename", "Untitled")
+                name_part = orig_filename.rsplit('.', 1)[0] if '.' in orig_filename else orig_filename
+                new_filename = f"{name_part} (annotated).pdf"
+
+                # Create new note record
+                new_note_data = {
+                    "id": new_note_id,
+                    "user_id": request.user_id,
+                    "original_filename": new_filename,
+                    "file_type": "pdf",
+                    "file_size": orig.get("file_size", 0),
+                    "file_path": new_file_path,
+                    "page_count": orig.get("page_count", 1),
+                    "processed": orig.get("processed", False),
+                    "is_public": False,
+                    "username": orig.get("username"),
+                    "university": orig.get("university"),
+                    "course_code": orig.get("course_code"),
+                    "professor": orig.get("professor"),
+                    "semester": orig.get("semester"),
+                }
+                supabase.table("notes").insert(new_note_data).execute()
+
+                target_note_id = new_note_id
+                debug_log(f"[+] Duplicated note {note_id} -> {new_note_id} for save_as_new")
+
+            except Exception as dup_err:
+                debug_log(f"Save as new - duplication error: {dup_err}\n{traceback.format_exc()}")
+                return jsonify({"error": f"Failed to duplicate note: {str(dup_err)}"}), 500
+
+        # Save annotations to the target note
         for page in pages:
             page_number = page.get("page_number")
             objects = page.get("objects", [])
@@ -6533,20 +6602,24 @@ def save_annotations(note_id):
                 supabase.table("note_annotations") \
                     .delete() \
                     .eq("user_id", request.user_id) \
-                    .eq("note_id", note_id) \
+                    .eq("note_id", target_note_id) \
                     .eq("page_number", page_number) \
                     .execute()
             else:
                 # Upsert annotation data
                 supabase.table("note_annotations").upsert({
                     "user_id": request.user_id,
-                    "note_id": note_id,
+                    "note_id": target_note_id,
                     "page_number": page_number,
                     "annotations_json": {"objects": objects},
                     "updated_at": "now()"
                 }, on_conflict="user_id,note_id,page_number").execute()
 
-        return jsonify({"success": True}), 200
+        result = {"success": True}
+        if save_as_new:
+            result["new_note_id"] = target_note_id
+
+        return jsonify(result), 200
     except Exception as e:
         debug_log(f"Save annotations error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
