@@ -91,7 +91,7 @@ CORS(app,
          "http://127.0.0.1:*"
      ]}},
      allow_headers=["Content-Type", "Authorization"],
-     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+     methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
      supports_credentials=True,
      expose_headers=["Content-Type", "Authorization"]
 )
