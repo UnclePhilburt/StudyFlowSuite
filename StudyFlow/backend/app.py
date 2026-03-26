@@ -6554,7 +6554,8 @@ def save_annotations(note_id):
 
         target_note_id = note_id
 
-        # If saving as a new note, duplicate the original first
+        # If saving as a new note, create a new note record pointing to the SAME file
+        # (annotations are stored separately, watermarks are applied during download)
         if save_as_new:
             try:
                 # Fetch original note record
@@ -6570,36 +6571,24 @@ def save_annotations(note_id):
 
                 orig = original.data
 
-                # Copy the file in Supabase Storage
+                # Create new note ID but reference the SAME file_path
+                # This preserves the watermark (applied during download) and saves storage
                 import uuid as uuid_lib
                 new_note_id = str(uuid_lib.uuid4())
-                original_path = orig.get("file_path", "")
-                file_ext = original_path.rsplit('.', 1)[1] if '.' in original_path else 'pdf'
-                new_file_path = f"{request.user_id}/{new_note_id}.{file_ext}"
-
-                # Download original file from storage
-                file_bytes = supabase.storage.from_("note-files").download(original_path)
-
-                # Upload as new file
-                supabase.storage.from_("note-files").upload(
-                    path=new_file_path,
-                    file=file_bytes,
-                    file_options={"content-type": "application/pdf"}
-                )
 
                 # Build the new filename
                 orig_filename = orig.get("original_filename", "Untitled")
                 name_part = orig_filename.rsplit('.', 1)[0] if '.' in orig_filename else orig_filename
                 new_filename = f"{name_part} (annotated).pdf"
 
-                # Create new note record
+                # Create new note record pointing to SAME file
                 new_note_data = {
                     "id": new_note_id,
                     "user_id": request.user_id,
                     "original_filename": new_filename,
-                    "file_type": "pdf",
+                    "file_type": orig.get("file_type", "pdf"),
                     "file_size": orig.get("file_size", 0),
-                    "file_path": new_file_path,
+                    "file_path": orig.get("file_path"),  # Same file path - no duplication
                     "page_count": orig.get("page_count", 1),
                     "processed": orig.get("processed", False),
                     "is_public": False,
@@ -6612,11 +6601,11 @@ def save_annotations(note_id):
                 supabase.table("notes").insert(new_note_data).execute()
 
                 target_note_id = new_note_id
-                debug_log(f"[+] Duplicated note {note_id} -> {new_note_id} for save_as_new")
+                debug_log(f"[+] Created annotated note {new_note_id} referencing original {note_id} (shared file)")
 
             except Exception as dup_err:
-                debug_log(f"Save as new - duplication error: {dup_err}\n{traceback.format_exc()}")
-                return jsonify({"error": f"Failed to duplicate note: {str(dup_err)}"}), 500
+                debug_log(f"Save as new - creation error: {dup_err}\n{traceback.format_exc()}")
+                return jsonify({"error": f"Failed to create annotated note: {str(dup_err)}"}), 500
 
         # Save annotations to the target note
         for page in pages:
