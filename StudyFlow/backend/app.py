@@ -6937,30 +6937,30 @@ def office_create():
 
         title = data["title"].strip() or "Untitled"
         doc_id = str(uuid.uuid4())
-        file_path = f"office/{request.user_id}/{doc_id}.{file_type}"
+        file_path = f"office-temp/{request.user_id}/{doc_id}.{file_type}"
 
         # Generate blank document
         file_bytes = _create_blank_document(file_type)
 
-        # Upload to Supabase Storage
+        # Upload to Supabase Storage (temporary location, not in notes table)
         supabase.storage.from_("note-files").upload(
             path=file_path,
             file=file_bytes,
             file_options={"content-type": OFFICE_CONTENT_TYPES[file_type]},
         )
 
-        # Insert row into notes table
-        note_row = {
+        # Store in office_documents table (temporary documents, not notes)
+        office_doc = {
             "id": doc_id,
             "user_id": request.user_id,
-            "original_filename": title,
+            "title": title,
             "file_path": file_path,
             "file_type": file_type,
             "file_size": len(file_bytes),
         }
-        supabase.table("notes").insert(note_row).execute()
+        supabase.table("office_documents").insert(office_doc).execute()
 
-        debug_log(f"[Office] Created {file_type} doc '{title}' for user {request.user_id}")
+        debug_log(f"[Office] Created temporary {file_type} doc '{title}' for user {request.user_id}")
         return jsonify({"success": True, "doc_id": doc_id}), 201
 
     except Exception as e:
@@ -6976,29 +6976,29 @@ def office_editor_config(doc_id):
         from StudyFlow.backend.supabase_client import supabase
         import jwt
 
-        # Get note and verify ownership
-        note_resp = supabase.table("notes").select(
-            "id, user_id, file_path, file_type, file_size, original_filename"
+        # Get office document and verify ownership
+        doc_resp = supabase.table("office_documents").select(
+            "id, user_id, file_path, file_type, file_size, title"
         ).eq("id", doc_id).execute()
 
-        if not note_resp.data:
+        if not doc_resp.data:
             return jsonify({"error": "Document not found"}), 404
 
-        note = note_resp.data[0]
-        if note["user_id"] != request.user_id:
+        doc = doc_resp.data[0]
+        if doc["user_id"] != request.user_id:
             return jsonify({"error": "Not authorized"}), 403
 
-        file_type = note["file_type"]
-        title = note.get("original_filename", "Untitled")
+        file_type = doc["file_type"]
+        title = doc.get("title", "Untitled")
 
         # Generate 1-hour signed URL
         signed = supabase.storage.from_("note-files").create_signed_url(
-            note["file_path"], 3600
+            doc["file_path"], 3600
         )
         doc_url = signed.get("signedURL") or signed.get("signedUrl", "")
 
         # Build document key (changes when file changes to bust ONLYOFFICE cache)
-        doc_key = f"{doc_id}_{note.get('file_size', 0)}"
+        doc_key = f"{doc_id}_{doc.get('file_size', 0)}"
 
         callback_url = f"{BACKEND_URL}/api/office/callback?doc_id={doc_id}"
 
@@ -7114,13 +7114,13 @@ def office_callback():
             if resp.status_code == 200:
                 file_bytes = resp.content
 
-                # Get note to find storage path
-                note_resp = supabase.table("notes").select(
+                # Get office document to find storage path
+                doc_resp = supabase.table("office_documents").select(
                     "file_path"
                 ).eq("id", doc_id).execute()
 
-                if note_resp.data:
-                    file_path = note_resp.data[0]["file_path"]
+                if doc_resp.data:
+                    file_path = doc_resp.data[0]["file_path"]
                     file_ext = file_path.rsplit(".", 1)[-1]
                     content_type = OFFICE_CONTENT_TYPES.get(file_ext, "application/octet-stream")
 
@@ -7136,9 +7136,10 @@ def office_callback():
                         file_options={"content-type": content_type},
                     )
 
-                    # Update file size in notes table
-                    supabase.table("notes").update({
-                        "file_size": len(file_bytes)
+                    # Update file size in office_documents table
+                    supabase.table("office_documents").update({
+                        "file_size": len(file_bytes),
+                        "updated_at": "now()"
                     }).eq("id", doc_id).execute()
 
                     debug_log(f"[Office Callback] Saved {len(file_bytes)} bytes for doc {doc_id}")
@@ -7159,20 +7160,18 @@ def office_list():
     try:
         from StudyFlow.backend.supabase_client import supabase
 
-        resp = supabase.table("notes").select(
-            "id, original_filename, file_type, file_size, uploaded_at"
-        ).eq("user_id", request.user_id).in_(
-            "file_type", ["docx", "xlsx", "pptx"]
-        ).order("uploaded_at", desc=True).execute()
+        resp = supabase.table("office_documents").select(
+            "id, title, file_type, file_size, created_at"
+        ).eq("user_id", request.user_id).order("created_at", desc=True).execute()
 
         docs = []
         for row in resp.data:
             docs.append({
                 "id": row["id"],
-                "title": row.get("original_filename", "Untitled"),
+                "title": row.get("title", "Untitled"),
                 "type": row["file_type"],
                 "size": row.get("file_size", 0),
-                "created_at": row.get("uploaded_at", ""),
+                "created_at": row.get("created_at", ""),
             })
 
         return jsonify({"documents": docs}), 200
@@ -7189,25 +7188,25 @@ def office_delete(doc_id):
     try:
         from StudyFlow.backend.supabase_client import supabase
 
-        note_resp = supabase.table("notes").select(
+        doc_resp = supabase.table("office_documents").select(
             "id, user_id, file_path"
         ).eq("id", doc_id).execute()
 
-        if not note_resp.data:
+        if not doc_resp.data:
             return jsonify({"error": "Document not found"}), 404
 
-        note = note_resp.data[0]
-        if note["user_id"] != request.user_id:
+        doc = doc_resp.data[0]
+        if doc["user_id"] != request.user_id:
             return jsonify({"error": "Not authorized"}), 403
 
         # Remove from storage
         try:
-            supabase.storage.from_("note-files").remove([note["file_path"]])
+            supabase.storage.from_("note-files").remove([doc["file_path"]])
         except Exception as rm_err:
             debug_log(f"[Office] Storage remove warning: {rm_err}")
 
         # Delete row
-        supabase.table("notes").delete().eq("id", doc_id).execute()
+        supabase.table("office_documents").delete().eq("id", doc_id).execute()
 
         debug_log(f"[Office] Deleted doc {doc_id}")
         return jsonify({"success": True}), 200
@@ -7228,18 +7227,18 @@ def office_rename(doc_id):
         if not data or "title" not in data:
             return jsonify({"error": "Missing 'title'"}), 400
 
-        note_resp = supabase.table("notes").select(
+        doc_resp = supabase.table("office_documents").select(
             "id, user_id"
         ).eq("id", doc_id).execute()
 
-        if not note_resp.data:
+        if not doc_resp.data:
             return jsonify({"error": "Document not found"}), 404
 
-        if note_resp.data[0]["user_id"] != request.user_id:
+        if doc_resp.data[0]["user_id"] != request.user_id:
             return jsonify({"error": "Not authorized"}), 403
 
-        supabase.table("notes").update({
-            "original_filename": data["title"].strip()
+        supabase.table("office_documents").update({
+            "title": data["title"].strip()
         }).eq("id", doc_id).execute()
 
         debug_log(f"[Office] Renamed doc {doc_id} to '{data['title']}'")
