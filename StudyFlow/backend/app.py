@@ -7000,11 +7000,16 @@ def office_editor_config(doc_id):
                     "compactHeader": True,
                     "customer": {
                         "name": "StudyFlow",
+                        "address": "StudyFlow Suite",
+                        "mail": "info@studyflowsuite.com",
                         "www": "studyflowsuite.com",
+                        "info": "StudyFlow Office",
                         "logo": "https://studyflowsuite.com/icon128.png",
+                        "logoDark": "https://studyflowsuite.com/icon128.png",
                     },
                     "logo": {
                         "image": "https://studyflowsuite.com/icon128.png",
+                        "imageDark": "https://studyflowsuite.com/icon128.png",
                         "imageEmbedded": "https://studyflowsuite.com/icon128.png",
                         "url": "https://studyflowsuite.com",
                     },
@@ -7013,6 +7018,7 @@ def office_editor_config(doc_id):
                     },
                     "goback": {
                         "url": "https://studyflowsuite.com/office.html",
+                        "text": "Back to Office",
                     },
                 },
                 "mode": "edit",
