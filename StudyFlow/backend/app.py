@@ -4428,8 +4428,8 @@ def browse_notes():
             # Usage count - simplified for now (TODO: fix JSONB query)
             note['usage_count'] = 0
 
-            # Rename original_filename to filename for frontend
-            note['filename'] = note.pop('original_filename')
+            # Rename original_filename to filename for frontend (with fallback)
+            note['filename'] = note.pop('original_filename', note.pop('filename', 'Unknown'))
 
             # Remove user_id from response
             note.pop('user_id', None)
