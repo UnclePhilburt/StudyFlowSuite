@@ -6418,6 +6418,71 @@ def mark_notifications_read():
         return jsonify({"error": str(e)}), 500
 
 
+# ============ NOTE FAVORITES ENDPOINTS ============
+
+@app.route("/api/notes/favorite", methods=["POST"])
+@supabase_auth_required
+def favorite_note():
+    """Add a note to the user's favorites."""
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+        data = request.get_json()
+        note_id = data.get("note_id")
+        if not note_id:
+            return jsonify({"error": "Missing note_id"}), 400
+
+        supabase.table("note_favorites").upsert({
+            "user_id": request.user_id,
+            "note_id": note_id
+        }, on_conflict="user_id,note_id").execute()
+
+        return jsonify({"success": True}), 200
+    except Exception as e:
+        debug_log(f"Favorite note error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/notes/favorite", methods=["DELETE"])
+@supabase_auth_required
+def unfavorite_note():
+    """Remove a note from the user's favorites."""
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+        data = request.get_json()
+        note_id = data.get("note_id")
+        if not note_id:
+            return jsonify({"error": "Missing note_id"}), 400
+
+        supabase.table("note_favorites") \
+            .delete() \
+            .eq("user_id", request.user_id) \
+            .eq("note_id", note_id) \
+            .execute()
+
+        return jsonify({"success": True}), 200
+    except Exception as e:
+        debug_log(f"Unfavorite note error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/notes/favorites", methods=["GET"])
+@supabase_auth_required
+def get_favorite_notes():
+    """Get all favorited note IDs for the user."""
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+        result = supabase.table("note_favorites") \
+            .select("note_id, created_at") \
+            .eq("user_id", request.user_id) \
+            .order("created_at", desc=True) \
+            .execute()
+
+        return jsonify({"favorites": result.data or []}), 200
+    except Exception as e:
+        debug_log(f"Get favorites error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     try:
         port = int(os.environ.get("PORT", 5000))
