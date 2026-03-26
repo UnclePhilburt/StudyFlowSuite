@@ -6720,9 +6720,22 @@ def upload_note_image():
         if len(file_bytes) > 5 * 1024 * 1024:
             return jsonify({"error": "Image must be under 5MB"}), 400
 
-        ext = content_type.split("/")[-1]
-        if ext == "jpeg":
-            ext = "jpg"
+        # Convert to WebP for smaller file sizes (skip GIFs to preserve animation)
+        from PIL import Image
+        from io import BytesIO
+
+        if content_type != "image/gif":
+            img = Image.open(BytesIO(file_bytes))
+            if img.mode in ("RGBA", "P"):
+                img = img.convert("RGBA")
+            else:
+                img = img.convert("RGB")
+            buf = BytesIO()
+            img.save(buf, format="WEBP", quality=85)
+            file_bytes = buf.getvalue()
+            content_type = "image/webp"
+
+        ext = "gif" if content_type == "image/gif" else "webp"
         image_id = str(_uuid.uuid4())
         storage_path = f"note-images/{request.user_id}/{image_id}.{ext}"
 
