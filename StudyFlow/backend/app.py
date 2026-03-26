@@ -4728,7 +4728,7 @@ def get_note_metadata(note_id):
             return jsonify({"error": "Note not found or not public"}), 404
 
         # Detect file type from extension
-        filename = note.data['original_filename']
+        filename = note.data.get('original_filename') or note.data.get('filename') or 'unknown.pdf'
         ext = os.path.splitext(filename)[1].lower()
 
         if ext in ['.pdf']:
