@@ -6483,6 +6483,75 @@ def get_favorite_notes():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/notes/<note_id>/annotations", methods=["GET"])
+@supabase_auth_required
+def get_annotations(note_id):
+    """Get all annotations for a note belonging to the current user."""
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+        result = supabase.table("note_annotations") \
+            .select("page_number, annotations_json") \
+            .eq("user_id", request.user_id) \
+            .eq("note_id", note_id) \
+            .order("page_number") \
+            .execute()
+
+        annotations = []
+        for row in (result.data or []):
+            annotations.append({
+                "page_number": row["page_number"],
+                "objects": row["annotations_json"].get("objects", []) if isinstance(row["annotations_json"], dict) else []
+            })
+
+        return jsonify({"annotations": annotations}), 200
+    except Exception as e:
+        debug_log(f"Get annotations error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/notes/<note_id>/annotations", methods=["POST"])
+@supabase_auth_required
+def save_annotations(note_id):
+    """Upsert annotations per page for a note. Deletes pages with empty objects."""
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+        data = request.get_json()
+        pages = data.get("annotations", [])
+
+        if not isinstance(pages, list):
+            return jsonify({"error": "annotations must be a list"}), 400
+
+        for page in pages:
+            page_number = page.get("page_number")
+            objects = page.get("objects", [])
+
+            if page_number is None:
+                continue
+
+            if not objects:
+                # Delete empty annotation rows
+                supabase.table("note_annotations") \
+                    .delete() \
+                    .eq("user_id", request.user_id) \
+                    .eq("note_id", note_id) \
+                    .eq("page_number", page_number) \
+                    .execute()
+            else:
+                # Upsert annotation data
+                supabase.table("note_annotations").upsert({
+                    "user_id": request.user_id,
+                    "note_id": note_id,
+                    "page_number": page_number,
+                    "annotations_json": {"objects": objects},
+                    "updated_at": "now()"
+                }, on_conflict="user_id,note_id,page_number").execute()
+
+        return jsonify({"success": True}), 200
+    except Exception as e:
+        debug_log(f"Save annotations error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     try:
         port = int(os.environ.get("PORT", 5000))
