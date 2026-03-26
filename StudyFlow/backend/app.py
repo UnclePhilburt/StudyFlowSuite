@@ -4721,7 +4721,7 @@ def get_note_metadata(note_id):
 
         # Get note details - check if public OR owned by current user
         note_response = supabase.table("notes").select(
-            "id, original_filename, university, course_code, user_id, page_count, is_public"
+            "id, original_filename, file_type, university, course_code, user_id, page_count, is_public"
         ).eq("id", note_id).execute()
 
         if not note_response.data:
@@ -4736,20 +4736,37 @@ def get_note_metadata(note_id):
         if not is_public and not is_owner:
             return jsonify({"error": "Note not found or not public"}), 404
 
-        # Detect file type from extension
+        # Get filename and file type
         filename = note_data.get('original_filename') or note_data.get('filename') or 'unknown.pdf'
-        ext = os.path.splitext(filename)[1].lower()
 
-        if ext in ['.pdf']:
+        # Use stored file_type from database (more reliable than extension)
+        stored_file_type = note_data.get('file_type', '').lower()
+
+        # Map stored file_type to viewer format
+        if stored_file_type == 'pdf':
             file_type = 'pdf'
-        elif ext in ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']:
+        elif stored_file_type in ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'image']:
             file_type = 'image'
-        elif ext in ['.doc', '.docx', '.odt']:
+        elif stored_file_type in ['doc', 'docx', 'odt', 'document']:
             file_type = 'document'
-        elif ext in ['.txt', '.md', '.markdown']:
+        elif stored_file_type in ['txt', 'md', 'markdown', 'text']:
             file_type = 'text'
         else:
-            file_type = 'other'
+            # Fallback to extension detection if file_type not set
+            ext = os.path.splitext(filename)[1].lower()
+            if ext in ['.pdf']:
+                file_type = 'pdf'
+            elif ext in ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']:
+                file_type = 'image'
+            elif ext in ['.doc', '.docx', '.odt']:
+                file_type = 'document'
+            elif ext in ['.txt', '.md', '.markdown']:
+                file_type = 'text'
+            else:
+                file_type = 'other'
+
+        # Get extension for response
+        ext = os.path.splitext(filename)[1].lower() if '.' in filename else ''
 
         # Get username
         try:
