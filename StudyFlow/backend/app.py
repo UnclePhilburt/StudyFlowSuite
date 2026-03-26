@@ -3012,6 +3012,36 @@ NOT study material: grocery lists, personal emails, blank pages, random text, ad
             print(f"[GOOD STANDING] Verification failed: {verify_error}", flush=True)
             # Don't fail the upload if verification fails
 
+        # Notify other users in the same course about the new note
+        try:
+            uni = course_metadata.get('university')
+            ccode = course_metadata.get('course_code')
+            if uni and ccode:
+                # Find all users who have uploaded to the same university+course_code
+                course_users = supabase.table("notes") \
+                    .select("user_id") \
+                    .eq("university", uni) \
+                    .eq("course_code", ccode) \
+                    .neq("user_id", request.user_id) \
+                    .execute()
+                notified_ids = set()
+                for row in (course_users.data or []):
+                    uid = row.get("user_id")
+                    if uid and uid not in notified_ids:
+                        notified_ids.add(uid)
+                        create_notification(
+                            user_id=uid,
+                            notif_type="course_new_note",
+                            title="New Note in Course",
+                            message=f"New note in {ccode}: {original_filename} by @{username or 'someone'}",
+                            note_id=note_id,
+                            actor_username=username,
+                        )
+                if notified_ids:
+                    debug_log(f"[+] Notified {len(notified_ids)} users about new note in {ccode}")
+        except Exception as notif_err:
+            debug_log(f"[-] Upload notification failed (non-blocking): {notif_err}")
+
         return jsonify({
             "success": True,
             "note_id": note_id,
@@ -3023,7 +3053,7 @@ NOT study material: grocery lists, personal emails, blank pages, random text, ad
         }), 200
 
     except Exception as e:
-        debug_log(f"❌ Upload error: {e}\n{traceback.format_exc()}")
+        debug_log(f"Upload error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -4021,6 +4051,43 @@ def chat_with_notes():
         except Exception as log_error:
             debug_log(f"[-] Provenance logging failed (non-blocking): {log_error}")
 
+        # Notify note owners when their note is cited in chat
+        try:
+            from datetime import datetime, timedelta
+            for src in sources:
+                src_note_id = src.get("note_id")
+                if not src_note_id:
+                    continue
+                # Look up the note owner
+                note_row = supabase.table("notes").select("user_id, original_filename").eq("id", src_note_id).execute()
+                if not note_row.data:
+                    continue
+                owner_id = note_row.data[0].get("user_id")
+                if not owner_id or owner_id == request.user_id:
+                    continue
+                # Skip duplicate citation notifications within 24 hours
+                cutoff = (datetime.utcnow() - timedelta(hours=24)).isoformat()
+                existing = supabase.table("notifications") \
+                    .select("id") \
+                    .eq("user_id", owner_id) \
+                    .eq("type", "note_cited") \
+                    .eq("note_id", src_note_id) \
+                    .gte("created_at", cutoff) \
+                    .limit(1) \
+                    .execute()
+                if existing.data:
+                    continue
+                fname = note_row.data[0].get("original_filename", "your note")
+                create_notification(
+                    user_id=owner_id,
+                    notif_type="note_cited",
+                    title="Note Cited",
+                    message=f"Your note {fname} was cited in a chat",
+                    note_id=src_note_id,
+                )
+        except Exception as notif_err:
+            debug_log(f"[-] Citation notification failed (non-blocking): {notif_err}")
+
         # Generate title for new conversations (if title is still None)
         if conversation and not conversation.get('title'):
             try:
@@ -4039,7 +4106,7 @@ def chat_with_notes():
         }), 200
 
     except Exception as e:
-        debug_log(f"❌ Chat error: {e}\n{traceback.format_exc()}")
+        debug_log(f"Chat error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -5839,6 +5906,25 @@ def download_note_with_certification(note_id):
             "user_agent": request.headers.get('User-Agent')
         }).execute()
 
+        # Notify the uploader that their note was downloaded
+        try:
+            note_owner_id = note.get('user_id')
+            if note_owner_id and note_owner_id != request.user_id:
+                # Get downloader username
+                dl_profile = supabase.table("user_profiles").select("username").eq("id", request.user_id).execute()
+                dl_username = dl_profile.data[0].get("username", "Someone") if dl_profile.data else "Someone"
+                fname = note.get('original_filename', 'a note')
+                create_notification(
+                    user_id=note_owner_id,
+                    notif_type="note_downloaded",
+                    title="Note Downloaded",
+                    message=f"@{dl_username} downloaded your note {fname}",
+                    note_id=note_id,
+                    actor_username=dl_username,
+                )
+        except Exception as notif_err:
+            debug_log(f"[-] Download notification failed (non-blocking): {notif_err}")
+
         # Generate signed URL for download
         file_path = note.get('file_path')
         if not file_path:
@@ -6260,6 +6346,75 @@ def create_customer_portal():
 
     except Exception as e:
         debug_log(f"Create customer portal error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ============ NOTIFICATION ENDPOINTS ============
+
+def create_notification(user_id, notif_type, title, message, note_id=None, actor_username=None):
+    """Helper to insert a notification row."""
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+        row = {
+            "user_id": user_id,
+            "type": notif_type,
+            "title": title,
+            "message": message,
+            "is_read": False,
+        }
+        if note_id:
+            row["note_id"] = note_id
+        if actor_username:
+            row["actor_username"] = actor_username
+        supabase.table("notifications").insert(row).execute()
+    except Exception as e:
+        debug_log(f"[-] Failed to create notification: {e}")
+
+
+@app.route("/api/notifications", methods=["GET"])
+@supabase_auth_required
+def get_notifications():
+    """Return the last 50 notifications for the authenticated user."""
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+        result = supabase.table("notifications") \
+            .select("*") \
+            .eq("user_id", request.user_id) \
+            .order("created_at", desc=True) \
+            .limit(50) \
+            .execute()
+        return jsonify({"notifications": result.data or []}), 200
+    except Exception as e:
+        debug_log(f"Get notifications error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/notifications/read", methods=["POST"])
+@supabase_auth_required
+def mark_notifications_read():
+    """Mark a single notification or all notifications as read."""
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+        data = request.get_json()
+
+        if data.get("all"):
+            supabase.table("notifications") \
+                .update({"is_read": True}) \
+                .eq("user_id", request.user_id) \
+                .eq("is_read", False) \
+                .execute()
+        elif data.get("notification_id"):
+            supabase.table("notifications") \
+                .update({"is_read": True}) \
+                .eq("id", data["notification_id"]) \
+                .eq("user_id", request.user_id) \
+                .execute()
+        else:
+            return jsonify({"error": "Provide notification_id or all:true"}), 400
+
+        return jsonify({"success": True}), 200
+    except Exception as e:
+        debug_log(f"Mark notifications read error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
 
