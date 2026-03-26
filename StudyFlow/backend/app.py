@@ -4425,8 +4425,12 @@ def browse_notes():
             except:
                 note['view_count'] = 0
 
-            # Usage count - simplified for now (TODO: fix JSONB query)
-            note['usage_count'] = 0
+            # Download count from download_transactions table
+            try:
+                dl_count_response = supabase.table("download_transactions").select("id", count="exact").eq("note_id", note['id']).execute()
+                note['usage_count'] = dl_count_response.count if dl_count_response.count else 0
+            except:
+                note['usage_count'] = 0
 
             # Rename original_filename to filename for frontend (with fallback)
             note['filename'] = note.pop('original_filename', note.pop('filename', 'Unknown'))
