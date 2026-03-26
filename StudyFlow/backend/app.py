@@ -3198,25 +3198,25 @@ def delete_note_endpoint(note_id):
 def rename_note_endpoint(note_id):
     """
     Rename a note by ID (only if it belongs to current user).
-    Request body: { "filename": "new_name.pdf" }
+    Request body: { "original_filename": "new_name.pdf" }
     """
     try:
         from StudyFlow.backend.supabase_client import supabase
 
         data = request.get_json()
-        new_filename = data.get("filename", "").strip()
+        new_filename = data.get("original_filename", "").strip()
 
         if not new_filename:
             return jsonify({"error": "Filename is required"}), 400
 
         # Verify ownership and update filename
         response = supabase.table("notes").update({
-            "filename": new_filename
+            "original_filename": new_filename
         }).eq("id", note_id).eq("user_id", request.user_id).execute()
 
         if response.data:
             debug_log(f"Renamed note {note_id} to {new_filename}")
-            return jsonify({"success": True, "filename": new_filename}), 200
+            return jsonify({"success": True, "original_filename": new_filename}), 200
         else:
             return jsonify({"error": "Note not found or unauthorized"}), 404
 
