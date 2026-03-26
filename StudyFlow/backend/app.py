@@ -4920,9 +4920,9 @@ def view_note_file(note_id):
 @app.route("/api/notes/<note_id>/view-as-images", methods=["GET"])
 def view_note_as_images(note_id):
     """
-    Convert PDF to images for secure viewing (prevents download/print)
+    Convert PDF/DOCX to images for secure viewing (prevents download/print)
     Returns JSON with base64-encoded images for each page
-    No auth required since notes are already public
+    Auth optional - works for public notes or user's own notes
     """
     try:
         from StudyFlow.backend.supabase_client import supabase
@@ -4930,14 +4930,43 @@ def view_note_as_images(note_id):
         import base64
         from io import BytesIO
 
-        # Verify note exists and is public
-        note = supabase.table("notes").select("id, file_path, original_filename, file_type, page_count").eq("id", note_id).eq("is_public", True).single().execute()
+        # Check if user is authenticated
+        auth_header = request.headers.get('Authorization')
+        user_id = None
+        if auth_header and auth_header.startswith('Bearer '):
+            token = auth_header.split(' ')[1]
+            try:
+                user_response = supabase.auth.get_user(token)
+                if user_response and user_response.user:
+                    user_id = user_response.user.id
+            except:
+                pass
+
+        # Fetch note - either public OR owned by authenticated user
+        note_query = supabase.table("notes").select("id, file_path, original_filename, file_type, page_count, user_id, is_public").eq("id", note_id)
+        note = note_query.single().execute()
 
         if not note.data:
+            return jsonify({"error": "Note not found"}), 404
+
+        # Check access: must be public OR owned by authenticated user
+        is_public = note.data.get('is_public', False)
+        note_owner_id = note.data.get('user_id')
+
+        if not is_public and (not user_id or user_id != note_owner_id):
             return jsonify({"error": "Note not found or not public"}), 404
 
-        # Only convert PDFs
-        if note.data.get('file_type') != 'pdf':
+        # Only PDFs can be converted to images
+        # Office documents (docx, xlsx, pptx) should be opened in Office editor instead
+        file_type = note.data.get('file_type', '').lower()
+        if file_type in ['docx', 'xlsx', 'pptx']:
+            return jsonify({
+                "error": "Office documents cannot be viewed as images",
+                "suggestion": "Open this document in StudyFlow Office instead",
+                "redirect": f"/office-editor.html?id={note_id}"
+            }), 400
+
+        if file_type != 'pdf':
             return jsonify({"error": "Only PDFs can be converted to images"}), 400
 
         # Download PDF from Supabase storage
@@ -7131,10 +7160,10 @@ def office_list():
         from StudyFlow.backend.supabase_client import supabase
 
         resp = supabase.table("notes").select(
-            "id, original_filename, file_type, file_size, created_at"
+            "id, original_filename, file_type, file_size, uploaded_at"
         ).eq("user_id", request.user_id).in_(
             "file_type", ["docx", "xlsx", "pptx"]
-        ).order("created_at", desc=True).execute()
+        ).order("uploaded_at", desc=True).execute()
 
         docs = []
         for row in resp.data:
@@ -7143,7 +7172,7 @@ def office_list():
                 "title": row.get("original_filename", "Untitled"),
                 "type": row["file_type"],
                 "size": row.get("file_size", 0),
-                "created_at": row.get("created_at", ""),
+                "created_at": row.get("uploaded_at", ""),
             })
 
         return jsonify({"documents": docs}), 200
