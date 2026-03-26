@@ -3934,8 +3934,14 @@ def chat_with_notes():
 
         # Add search result metadata and enrich with missing fields
         sources = []
+        seen_note_ids = set()
         if search_results:
-            for result in search_results[:3]:  # Top 3 sources
+            for result in search_results:  # Deduplicate by note_id, up to 3 unique notes
+                if result['note_id'] in seen_note_ids:
+                    continue
+                seen_note_ids.add(result['note_id'])
+                if len(sources) >= 3:
+                    break
                 note_result = supabase.table("notes").select("original_filename, user_id, university, course_code").eq("id", result['note_id']).execute()
                 note_data = note_result.data[0] if note_result.data else {}
                 filename = note_data.get('original_filename', 'Unknown')
