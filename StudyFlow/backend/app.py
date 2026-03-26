@@ -4719,16 +4719,25 @@ def get_note_metadata(note_id):
         from StudyFlow.backend.supabase_client import supabase
         import os
 
-        # Get note details
-        note = supabase.table("notes").select(
-            "id, original_filename, university, course_code, user_id, page_count"
-        ).eq("id", note_id).eq("is_public", True).single().execute()
+        # Get note details - check if public OR owned by current user
+        note_response = supabase.table("notes").select(
+            "id, original_filename, university, course_code, user_id, page_count, is_public"
+        ).eq("id", note_id).execute()
 
-        if not note.data:
+        if not note_response.data:
+            return jsonify({"error": "Note not found"}), 404
+
+        note_data = note_response.data[0]
+
+        # Check if user has access (either public or owns it)
+        is_public = note_data.get('is_public', False)
+        is_owner = note_data.get('user_id') == request.user_id
+
+        if not is_public and not is_owner:
             return jsonify({"error": "Note not found or not public"}), 404
 
         # Detect file type from extension
-        filename = note.data.get('original_filename') or note.data.get('filename') or 'unknown.pdf'
+        filename = note_data.get('original_filename') or note_data.get('filename') or 'unknown.pdf'
         ext = os.path.splitext(filename)[1].lower()
 
         if ext in ['.pdf']:
@@ -4744,24 +4753,24 @@ def get_note_metadata(note_id):
 
         # Get username
         try:
-            user_profile = supabase.table("user_profiles").select("username").eq("id", note.data['user_id']).single().execute()
+            user_profile = supabase.table("user_profiles").select("username").eq("id", note_data['user_id']).single().execute()
             username = user_profile.data['username'] if user_profile.data else 'Anonymous'
         except:
             username = 'Anonymous'
 
         # Build response
-        note_data = {
-            "id": note.data['id'],
+        response_data = {
+            "id": note_data['id'],
             "filename": filename,
             "file_type": file_type,
             "extension": ext,
-            "university": note.data.get('university'),
-            "course_code": note.data.get('course_code'),
+            "university": note_data.get('university'),
+            "course_code": note_data.get('course_code'),
             "username": username,
-            "page_count": note.data.get('page_count', 0)
+            "page_count": note_data.get('page_count', 0)
         }
 
-        return jsonify({"note": note_data}), 200
+        return jsonify({"note": response_data}), 200
 
     except Exception as e:
         debug_log(f"❌ Get note metadata error: {e}\n{traceback.format_exc()}")
