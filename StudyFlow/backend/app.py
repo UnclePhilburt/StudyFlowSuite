@@ -6998,6 +6998,22 @@ def office_editor_config(doc_id):
                     "autosave": True,
                     "forcesave": True,
                     "compactHeader": True,
+                    "customer": {
+                        "name": "StudyFlow",
+                        "www": "studyflowsuite.com",
+                        "logo": "https://studyflowsuite.com/icon128.png",
+                    },
+                    "logo": {
+                        "image": "https://studyflowsuite.com/icon128.png",
+                        "imageEmbedded": "https://studyflowsuite.com/icon128.png",
+                        "url": "https://studyflowsuite.com",
+                    },
+                    "feedback": {
+                        "visible": False,
+                    },
+                    "goback": {
+                        "url": "https://studyflowsuite.com/office.html",
+                    },
                 },
                 "mode": "edit",
             },
