@@ -6691,6 +6691,61 @@ def update_note_content(note_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/notes/upload-image", methods=["POST"])
+@supabase_auth_required
+def upload_note_image():
+    """
+    Upload an image for embedding in a rich-text note.
+    Accepts multipart file upload. Returns a signed URL for the image.
+    """
+    try:
+        import uuid as _uuid
+        from StudyFlow.backend.supabase_client import supabase
+
+        if "file" not in request.files:
+            return jsonify({"error": "No file provided"}), 400
+
+        file = request.files["file"]
+        if not file.filename:
+            return jsonify({"error": "No filename"}), 400
+
+        # Validate image type
+        allowed = {"image/png", "image/jpeg", "image/gif", "image/webp"}
+        content_type = file.content_type or ""
+        if content_type not in allowed:
+            return jsonify({"error": "Only PNG, JPEG, GIF, and WebP images are allowed"}), 400
+
+        # 5MB limit
+        file_bytes = file.read()
+        if len(file_bytes) > 5 * 1024 * 1024:
+            return jsonify({"error": "Image must be under 5MB"}), 400
+
+        ext = content_type.split("/")[-1]
+        if ext == "jpeg":
+            ext = "jpg"
+        image_id = str(_uuid.uuid4())
+        storage_path = f"note-images/{request.user_id}/{image_id}.{ext}"
+
+        supabase.storage.from_("note-files").upload(
+            path=storage_path,
+            file=file_bytes,
+            file_options={"content-type": content_type}
+        )
+
+        # Generate a long-lived signed URL (7 days)
+        signed = supabase.storage.from_("note-files").create_signed_url(
+            path=storage_path,
+            expires_in=604800
+        )
+        url = signed.get("signedURL") or signed.get("signedUrl")
+
+        return jsonify({"success": True, "url": url}), 200
+
+    except Exception as e:
+        debug_log(f"Upload note image error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/notes/<note_id>/raw-content", methods=["GET"])
 @supabase_auth_required
 def get_note_raw_content(note_id):
