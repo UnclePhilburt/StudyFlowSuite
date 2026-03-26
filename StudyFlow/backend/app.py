@@ -6983,6 +6983,8 @@ def office_editor_config(doc_id):
                     "edit": True,
                     "download": True,
                     "print": True,
+                    "chat": False,
+                    "comment": False,
                 },
             },
             "documentType": OFFICE_DOCUMENT_TYPES.get(file_type, "word"),
@@ -6995,8 +6997,6 @@ def office_editor_config(doc_id):
                 "customization": {
                     "autosave": True,
                     "forcesave": True,
-                    "chat": False,
-                    "comments": False,
                     "compactHeader": True,
                 },
                 "mode": "edit",
