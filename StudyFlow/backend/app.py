@@ -6691,6 +6691,46 @@ def update_note_content(note_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/notes/<note_id>/raw-content", methods=["GET"])
+@supabase_auth_required
+def get_note_raw_content(note_id):
+    """
+    Get the raw file content of a note (authenticated, owner only).
+    Returns the file bytes directly with appropriate content-type.
+    """
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        note_response = supabase.table("notes").select(
+            "id, user_id, file_path, original_filename"
+        ).eq("id", note_id).execute()
+
+        if not note_response.data:
+            return jsonify({"error": "Note not found"}), 404
+
+        note_data = note_response.data[0]
+
+        if note_data.get("user_id") != request.user_id:
+            return jsonify({"error": "Not authorized"}), 403
+
+        file_path = note_data.get("file_path")
+        if not file_path:
+            return jsonify({"error": "No file path"}), 404
+
+        try:
+            file_bytes = supabase.storage.from_("note-files").download(file_path)
+        except Exception:
+            # File might be empty (new note) -- return empty string
+            return "", 200, {"Content-Type": "text/html; charset=utf-8"}
+
+        content_type = "text/html; charset=utf-8" if file_path.endswith(".html") else "text/plain; charset=utf-8"
+        return file_bytes, 200, {"Content-Type": content_type}
+
+    except Exception as e:
+        debug_log(f"Get note raw content error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/notes/create", methods=["POST"])
 @supabase_auth_required
 def create_note():
