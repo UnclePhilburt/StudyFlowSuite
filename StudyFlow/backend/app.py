@@ -4861,7 +4861,8 @@ def get_note_metadata(note_id):
             "university": note_data.get('university'),
             "course_code": note_data.get('course_code'),
             "username": username,
-            "page_count": note_data.get('page_count', 0)
+            "page_count": note_data.get('page_count', 0),
+            "is_owner": is_owner  # Include ownership status for annotation access control
         }
 
         return jsonify({"note": response_data}), 200
