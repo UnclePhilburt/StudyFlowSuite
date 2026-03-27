@@ -3934,6 +3934,7 @@ def chat_with_notes():
         message = data.get('message')
         conv_id = data.get('conversation_id')
         search_scope = data.get('search_scope', 'all')  # 'personal' or 'all'
+        source = data.get('source', 'chat')  # 'chat' or 'plugin'
 
         # Get or create conversation
         if conv_id:
@@ -3941,7 +3942,7 @@ def chat_with_notes():
             if not conversation:
                 return jsonify({"error": "Conversation not found or access denied"}), 404
         else:
-            conv_id = create_conversation(request.user_id)
+            conv_id = create_conversation(request.user_id, source=source)
             conversation = get_conversation(conv_id, request.user_id)
 
         debug_log(f"💬 Chat message in conversation {conv_id}: '{message[:50]}...'")

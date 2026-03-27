@@ -9,15 +9,21 @@ from StudyFlow.logging_utils import debug_log
 from StudyFlow.backend.supabase_client import supabase
 
 
-def create_conversation(user_id: str) -> str:
-    """Create a new conversation in the database and return its ID"""
+def create_conversation(user_id: str, source: str = "chat") -> str:
+    """Create a new conversation in the database and return its ID.
+
+    Args:
+        user_id: The user's ID
+        source: Where this conversation originated - 'chat' or 'plugin'
+    """
     try:
         conv_id = str(uuid.uuid4())
 
         response = supabase.table("conversations").insert({
             "id": conv_id,
             "user_id": user_id,
-            "title": None  # Will be auto-generated from first message
+            "title": None,  # Will be auto-generated from first message
+            "source": source
         }).execute()
 
         debug_log(f"💬 Created conversation {conv_id} for user {user_id}")
@@ -74,9 +80,9 @@ def add_message(conv_id: str, role: str, content: str, sources: List[Dict] = Non
 
 
 def list_user_conversations(user_id: str, limit: int = 20) -> List[Dict]:
-    """List all conversations for a user, ordered by most recent (excludes soft-deleted)"""
+    """List chat conversations for a user, ordered by most recent (excludes soft-deleted and plugin conversations)"""
     try:
-        response = supabase.table("conversations").select("*").eq("user_id", user_id).is_("deleted_at", "null").order("updated_at", desc=True).limit(limit).execute()
+        response = supabase.table("conversations").select("*").eq("user_id", user_id).eq("source", "chat").is_("deleted_at", "null").order("updated_at", desc=True).limit(limit).execute()
 
         return response.data if response.data else []
 
