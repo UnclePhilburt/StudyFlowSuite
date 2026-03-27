@@ -3933,6 +3933,7 @@ def chat_with_notes():
 
         message = data.get('message')
         conv_id = data.get('conversation_id')
+        search_scope = data.get('search_scope', 'all')  # 'personal' or 'all'
 
         # Get or create conversation
         if conv_id:
@@ -3961,6 +3962,14 @@ def chat_with_notes():
         )
 
         debug_log(f"🔍 Found {len(search_results) if search_results else 0} relevant chunks")
+
+        # Filter to personal notes only if requested
+        if search_scope == 'personal' and search_results:
+            note_ids = list(set(r['note_id'] for r in search_results))
+            ownership = supabase.table("notes").select("id, user_id").in_("id", note_ids).execute()
+            personal_note_ids = set(n['id'] for n in ownership.data if n['user_id'] == request.user_id)
+            search_results = [r for r in search_results if r['note_id'] in personal_note_ids]
+            debug_log(f"Filtered to {len(search_results)} personal chunks")
 
         # Add search result metadata and enrich with missing fields
         sources = []
