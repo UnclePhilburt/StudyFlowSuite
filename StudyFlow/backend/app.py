@@ -7053,6 +7053,13 @@ def office_editor_config(doc_id):
             },
         }
 
+        # Add StudyFlow Assistant plugin for word documents
+        if config["documentType"] == "word":
+            config["plugins"] = {
+                "autostart": ["asc.{7C9885A0-0001-0001-0001-000000000001}"],
+                "pluginsData": ["https://studyflowsuite.com/plugins/study-assistant/config.json"]
+            }
+
         # Sign the config JWT for ONLYOFFICE
         token = ""
         if ONLYOFFICE_JWT_SECRET:
