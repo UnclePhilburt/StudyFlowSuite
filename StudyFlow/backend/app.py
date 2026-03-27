@@ -3991,13 +3991,22 @@ def chat_with_notes():
                 if not result.get('course_code') and note_data.get('course_code'):
                     result['course_code'] = note_data['course_code']
 
+                # Detect Wikipedia sources and build URL
+                is_wikipedia = result.get('university') == 'Wikipedia' or (note_data.get('university') == 'Wikipedia')
+                wikipedia_url = None
+                if is_wikipedia and filename.endswith('.txt'):
+                    article_title = filename.replace('.txt', '')
+                    wikipedia_url = f"https://en.wikipedia.org/wiki/{article_title.replace(' ', '_')}"
+
                 sources.append({
                     "note_id": result['note_id'],
-                    "filename": f"{filename} ({result['university']} - {result['course_code']})" if result.get('university') else filename,
+                    "filename": f"{filename} ({result['university']} - {result['course_code']})" if result.get('university') and not is_wikipedia else filename,
                     "similarity": round(result['similarity'], 2),
                     "username": result.get('username'),
                     "university": result.get('university'),
-                    "course_code": result.get('course_code')
+                    "course_code": result.get('course_code'),
+                    "from_wikipedia": is_wikipedia,
+                    "wikipedia_url": wikipedia_url
                 })
                 # Add original_filename to result for context
                 result['original_filename'] = filename
