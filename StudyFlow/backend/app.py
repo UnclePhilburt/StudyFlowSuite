@@ -7645,7 +7645,7 @@ def delete_group(group_id):
 @app.route("/api/groups/<group_id>/invite", methods=["POST"])
 @supabase_auth_required
 def invite_to_group(group_id):
-    """Invite a user to a group by username. Members can invite."""
+    """Send a pending invite to a user. They must accept via notifications."""
     try:
         from StudyFlow.backend.supabase_client import supabase
 
@@ -7674,32 +7674,141 @@ def invite_to_group(group_id):
         if existing.data:
             return jsonify({"error": "User is already a member"}), 400
 
-        supabase.table("study_group_members").insert({
-            "group_id": group_id,
-            "user_id": target_id,
-            "role": "member"
-        }).execute()
+        # Check for existing pending invite
+        existing_invite = supabase.table("study_group_invites").select("id, status").eq(
+            "group_id", group_id).eq("invited_user_id", target_id).execute()
+        if existing_invite.data:
+            if existing_invite.data[0]["status"] == "pending":
+                return jsonify({"error": "Invite already pending"}), 400
+            # Update declined invite back to pending
+            supabase.table("study_group_invites").update({
+                "status": "pending",
+                "invited_by": request.user_id
+            }).eq("id", existing_invite.data[0]["id"]).execute()
+        else:
+            supabase.table("study_group_invites").insert({
+                "group_id": group_id,
+                "invited_by": request.user_id,
+                "invited_user_id": target_id,
+                "status": "pending"
+            }).execute()
 
-        # Notify
-        try:
-            group_resp = supabase.table("study_groups").select("name").eq("id", group_id).execute()
-            group_name = group_resp.data[0]["name"] if group_resp.data else "a study group"
-            inviter_profile = supabase.table("user_profiles").select("username").eq("id", request.user_id).execute()
-            inviter_name = inviter_profile.data[0]["username"] if inviter_profile.data else "Someone"
-            create_notification(
-                user_id=target_id,
-                notif_type="group_invite",
-                title="Study Group Invite",
-                message=f"@{inviter_name} added you to '{group_name}'",
-            )
-        except Exception:
-            pass
+        # Send notification
+        group_resp = supabase.table("study_groups").select("name").eq("id", group_id).execute()
+        group_name = group_resp.data[0]["name"] if group_resp.data else "a study group"
+        inviter_profile = supabase.table("user_profiles").select("username").eq("id", request.user_id).execute()
+        inviter_name = inviter_profile.data[0]["username"] if inviter_profile.data else "Someone"
 
-        debug_log(f"[Groups] Added @{username} to group {group_id}")
+        create_notification(
+            user_id=target_id,
+            notif_type="group_invite",
+            title="Study Group Invite",
+            message=f"@{inviter_name} invited you to '{group_name}'",
+        )
+
+        debug_log(f"[Groups] Invited @{username} to group {group_id}")
         return jsonify({"success": True}), 200
 
     except Exception as e:
         debug_log(f"Invite to group error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/groups/invites", methods=["GET"])
+@supabase_auth_required
+def get_pending_invites():
+    """Get all pending group invites for the current user."""
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        invites_resp = supabase.table("study_group_invites").select(
+            "id, group_id, invited_by, created_at"
+        ).eq("invited_user_id", request.user_id).eq("status", "pending").order("created_at", desc=True).execute()
+
+        invites = []
+        for inv in (invites_resp.data or []):
+            group = supabase.table("study_groups").select("name").eq("id", inv["group_id"]).execute()
+            inviter = supabase.table("user_profiles").select("username").eq("id", inv["invited_by"]).execute()
+            invites.append({
+                "id": inv["id"],
+                "group_id": inv["group_id"],
+                "group_name": group.data[0]["name"] if group.data else "Unknown",
+                "invited_by": inviter.data[0]["username"] if inviter.data else "Unknown",
+                "created_at": inv["created_at"]
+            })
+
+        return jsonify({"invites": invites}), 200
+
+    except Exception as e:
+        debug_log(f"Get invites error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/groups/invites/<invite_id>/accept", methods=["POST"])
+@supabase_auth_required
+def accept_invite(invite_id):
+    """Accept a group invite."""
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        invite = supabase.table("study_group_invites").select(
+            "id, group_id, invited_user_id, status"
+        ).eq("id", invite_id).execute()
+
+        if not invite.data:
+            return jsonify({"error": "Invite not found"}), 404
+        if invite.data[0]["invited_user_id"] != request.user_id:
+            return jsonify({"error": "Not your invite"}), 403
+        if invite.data[0]["status"] != "pending":
+            return jsonify({"error": "Invite already responded to"}), 400
+
+        group_id = invite.data[0]["group_id"]
+
+        # Add to group
+        supabase.table("study_group_members").insert({
+            "group_id": group_id,
+            "user_id": request.user_id,
+            "role": "member"
+        }).execute()
+
+        # Update invite status
+        supabase.table("study_group_invites").update({
+            "status": "accepted"
+        }).eq("id", invite_id).execute()
+
+        debug_log(f"[Groups] User {request.user_id} accepted invite to group {group_id}")
+        return jsonify({"success": True, "group_id": group_id}), 200
+
+    except Exception as e:
+        debug_log(f"Accept invite error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/groups/invites/<invite_id>/decline", methods=["POST"])
+@supabase_auth_required
+def decline_invite(invite_id):
+    """Decline a group invite."""
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        invite = supabase.table("study_group_invites").select(
+            "id, invited_user_id, status"
+        ).eq("id", invite_id).execute()
+
+        if not invite.data:
+            return jsonify({"error": "Invite not found"}), 404
+        if invite.data[0]["invited_user_id"] != request.user_id:
+            return jsonify({"error": "Not your invite"}), 403
+
+        supabase.table("study_group_invites").update({
+            "status": "declined"
+        }).eq("id", invite_id).execute()
+
+        debug_log(f"[Groups] User {request.user_id} declined invite {invite_id}")
+        return jsonify({"success": True}), 200
+
+    except Exception as e:
+        debug_log(f"Decline invite error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
 
