@@ -8341,8 +8341,8 @@ def review_queue():
 
         # Get notes -- try filtering by reviewed, fallback to fetching all
         notes_resp = supabase.table("notes").select(
-            "id, user_id, original_filename, file_size, university, course_code, file_path, created_at, is_public"
-        ).order("created_at").limit(200).execute()
+            "id, user_id, original_filename, file_size, university, course_code, file_path, uploaded_at, is_public"
+        ).order("uploaded_at").limit(200).execute()
         # Filter unreviewed in Python (works even if PostgREST schema cache hasn't picked up the column)
         all_notes = notes_resp.data or []
         # Try to check reviewed field; if column not visible via API yet, show all
@@ -8370,7 +8370,7 @@ def review_queue():
                 "uploader": uploader,
                 "uploader_id": n["user_id"],
                 "is_public": n.get("is_public", True),
-                "created_at": n.get("created_at")
+                "created_at": n.get("uploaded_at")
             })
 
         return jsonify({"notes": notes, "total": len(notes)}), 200
