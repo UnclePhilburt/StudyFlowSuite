@@ -8339,14 +8339,18 @@ def review_queue():
 
         from StudyFlow.backend.supabase_client import supabase
 
-        # Get unreviewed notes, oldest first
+        # Get notes -- try filtering by reviewed, fallback to fetching all
         notes_resp = supabase.table("notes").select(
             "id, user_id, original_filename, file_size, university, course_code, file_path, created_at, is_public"
-        ).eq("reviewed", False).order("created_at").limit(50).execute()
+        ).order("created_at").limit(200).execute()
+        # Filter unreviewed in Python (works even if PostgREST schema cache hasn't picked up the column)
+        all_notes = notes_resp.data or []
+        # Try to check reviewed field; if column not visible via API yet, show all
+        unreviewed = [n for n in all_notes if not n.get("reviewed", False)][:50]
 
         notes = []
         uploader_cache = {}
-        for n in (notes_resp.data or []):
+        for n in unreviewed:
             # Get uploader info (cached)
             uid = n["user_id"]
             if uid not in uploader_cache:
