@@ -8395,13 +8395,45 @@ def review_note(note_id):
 
         from StudyFlow.backend.supabase_client import supabase
 
+        # Get note info
+        note_resp = supabase.table("notes").select("user_id, original_filename, file_path").eq("id", note_id).execute()
+        if not note_resp.data:
+            return jsonify({"error": "Note not found"}), 404
+
+        note = note_resp.data[0]
+
         if action == "approve":
             supabase.table("notes").update({"reviewed": True}).eq("id", note_id).execute()
             debug_log(f"[Review] Approved note {note_id}")
         else:
-            # Remove from public and mark reviewed
-            supabase.table("notes").update({"reviewed": True, "is_public": False}).eq("id", note_id).execute()
-            debug_log(f"[Review] Rejected note {note_id}")
+            reason = data.get("reason", "Does not meet quality standards")
+            filename = note.get("original_filename", "your note")
+
+            # Delete file from storage
+            if note.get("file_path"):
+                try:
+                    supabase.storage.from_("note-files").remove([note["file_path"]])
+                except Exception:
+                    pass
+
+            # Delete note chunks
+            try:
+                supabase.table("note_chunks").delete().eq("note_id", note_id).execute()
+            except Exception:
+                pass
+
+            # Delete note record
+            supabase.table("notes").delete().eq("id", note_id).execute()
+
+            # Notify the user
+            create_notification(
+                user_id=note["user_id"],
+                notif_type="note_removed",
+                title="Note Removed",
+                message=f"Your note '{filename}' was removed: {reason}",
+            )
+
+            debug_log(f"[Review] Rejected and deleted note {note_id}: {reason}")
 
         return jsonify({"success": True, "action": action}), 200
 
