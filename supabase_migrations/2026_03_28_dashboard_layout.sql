@@ -2,7 +2,7 @@
 -- Stores user's widget preferences as JSON array
 
 ALTER TABLE user_profiles
-ADD COLUMN IF NOT EXISTS dashboard_layout JSONB DEFAULT '["quickLaunch", "recentConversations", "quickStats"]'::jsonb;
+ADD COLUMN IF NOT EXISTS dashboard_layout JSONB DEFAULT '["recentConversations", "upcomingEvents", "studyGroups"]'::jsonb;
 
 -- Add index for faster queries
 CREATE INDEX IF NOT EXISTS idx_user_profiles_dashboard_layout ON user_profiles(id) WHERE dashboard_layout IS NOT NULL;

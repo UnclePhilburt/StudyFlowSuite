@@ -1147,7 +1147,7 @@ def get_dashboard_layout():
             return jsonify({'layout': result[0]}), 200
         else:
             # Return default layout
-            return jsonify({'layout': ['quickLaunch', 'recentConversations', 'quickStats']}), 200
+            return jsonify({'layout': ['recentConversations', 'upcomingEvents', 'studyGroups']}), 200
 
     except Exception as e:
         app.logger.error(f"❌ Get dashboard layout error: {e}\n{traceback.format_exc()}")
