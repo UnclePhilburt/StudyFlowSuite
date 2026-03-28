@@ -8329,6 +8329,88 @@ def delete_group_event(group_id, event_id):
 # Admin: University Stats (Institutional License Prep)
 # ──────────────────────────────────────────────
 
+@app.route("/admin/review-queue", methods=["GET"])
+def review_queue():
+    """ADMIN: Get unreviewed notes for quality control."""
+    try:
+        admin_key = request.args.get("key", "")
+        if admin_key != os.getenv("ADMIN_KEY", "change_me_in_production"):
+            return jsonify({"error": "Unauthorized"}), 403
+
+        from StudyFlow.backend.supabase_client import supabase
+
+        # Get unreviewed notes, oldest first
+        notes_resp = supabase.table("notes").select(
+            "id, user_id, original_filename, file_size, university, course_code, file_path, created_at, is_public"
+        ).eq("reviewed", False).order("created_at").limit(50).execute()
+
+        notes = []
+        for n in (notes_resp.data or []):
+            # Get uploader info
+            profile = supabase.table("user_profiles").select("username, email").eq("id", n["user_id"]).execute()
+            uploader = "Unknown"
+            if profile.data:
+                uploader = profile.data[0].get("username") or profile.data[0].get("email", "Unknown")
+
+            # Generate preview URL
+            preview_url = ""
+            if n.get("file_path"):
+                try:
+                    signed = supabase.storage.from_("note-files").create_signed_url(n["file_path"], 3600)
+                    preview_url = signed.get("signedURL") or signed.get("signedUrl", "")
+                except Exception:
+                    pass
+
+            notes.append({
+                "id": n["id"],
+                "filename": n.get("original_filename", "Unknown"),
+                "file_size": n.get("file_size", 0),
+                "university": n.get("university"),
+                "course_code": n.get("course_code"),
+                "uploader": uploader,
+                "uploader_id": n["user_id"],
+                "is_public": n.get("is_public", True),
+                "preview_url": preview_url,
+                "created_at": n.get("created_at")
+            })
+
+        return jsonify({"notes": notes, "total": len(notes)}), 200
+
+    except Exception as e:
+        debug_log(f"Review queue error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/admin/review/<note_id>", methods=["POST"])
+def review_note(note_id):
+    """ADMIN: Approve or reject a note."""
+    try:
+        data = request.get_json()
+        admin_key = data.get("key", "")
+        if admin_key != os.getenv("ADMIN_KEY", "change_me_in_production"):
+            return jsonify({"error": "Unauthorized"}), 403
+
+        action = data.get("action")
+        if action not in ("approve", "reject"):
+            return jsonify({"error": "Action must be 'approve' or 'reject'"}), 400
+
+        from StudyFlow.backend.supabase_client import supabase
+
+        if action == "approve":
+            supabase.table("notes").update({"reviewed": True}).eq("id", note_id).execute()
+            debug_log(f"[Review] Approved note {note_id}")
+        else:
+            # Remove from public and mark reviewed
+            supabase.table("notes").update({"reviewed": True, "is_public": False}).eq("id", note_id).execute()
+            debug_log(f"[Review] Rejected note {note_id}")
+
+        return jsonify({"success": True, "action": action}), 200
+
+    except Exception as e:
+        debug_log(f"Review note error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/admin/university-stats", methods=["GET"])
 def university_stats():
     """Per-university metrics for institutional license sales pitches."""
