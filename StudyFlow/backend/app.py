@@ -6994,8 +6994,16 @@ def office_editor_config(doc_id):
             return jsonify({"error": "Document not found"}), 404
 
         doc = doc_resp.data[0]
-        if doc["user_id"] != request.user_id:
-            return jsonify({"error": "Not authorized"}), 403
+        is_owner = doc["user_id"] == request.user_id
+        share_permission = "edit"  # owners always get edit
+
+        if not is_owner:
+            share_resp = supabase.table("office_document_shares").select(
+                "permission"
+            ).eq("doc_id", doc_id).eq("shared_with_user_id", request.user_id).execute()
+            if not share_resp.data:
+                return jsonify({"error": "Not authorized"}), 403
+            share_permission = share_resp.data[0]["permission"]
 
         file_type = doc["file_type"]
         title = doc.get("title", "Untitled")
@@ -7018,7 +7026,7 @@ def office_editor_config(doc_id):
                 "title": f"{title}.{file_type}",
                 "url": doc_url,
                 "permissions": {
-                    "edit": True,
+                    "edit": share_permission == "edit",
                     "download": True,
                     "print": True,
                     "chat": False,
@@ -7059,7 +7067,7 @@ def office_editor_config(doc_id):
                         "text": "Back to Office",
                     },
                 },
-                "mode": "edit",
+                "mode": "edit" if share_permission == "edit" else "view",
             },
         }
 
@@ -7262,6 +7270,220 @@ def office_rename(doc_id):
 
     except Exception as e:
         debug_log(f"Office rename error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ──────────────────────────────────────────────
+# Office Document Sharing Endpoints
+# ──────────────────────────────────────────────
+
+@app.route("/api/office/search-users", methods=["GET"])
+@supabase_auth_required
+def office_search_users():
+    """Search users by username for sharing documents."""
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        q = request.args.get("q", "").strip()
+        if len(q) < 2:
+            return jsonify({"users": []}), 200
+
+        # Escape SQL wildcards
+        safe_q = q.replace("%", "").replace("_", "")
+        result = supabase.table("user_profiles").select(
+            "username"
+        ).ilike("username", f"%{safe_q}%").neq("id", request.user_id).not_.is_("username", "null").limit(10).execute()
+
+        users = [{"username": u["username"]} for u in (result.data or [])]
+        return jsonify({"users": users}), 200
+
+    except Exception as e:
+        debug_log(f"Office search-users error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/office/<doc_id>/share", methods=["POST"])
+@supabase_auth_required
+def office_share(doc_id):
+    """Share a document with a user by username. Owner only."""
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        data = request.get_json()
+        if not data or not data.get("username"):
+            return jsonify({"error": "Missing username"}), 400
+
+        username = data["username"].strip()
+        permission = data.get("permission", "view")
+        if permission not in ("view", "edit"):
+            return jsonify({"error": "Permission must be 'view' or 'edit'"}), 400
+
+        # Verify document ownership
+        doc_resp = supabase.table("office_documents").select(
+            "id, user_id"
+        ).eq("id", doc_id).execute()
+
+        if not doc_resp.data:
+            return jsonify({"error": "Document not found"}), 404
+        if doc_resp.data[0]["user_id"] != request.user_id:
+            return jsonify({"error": "Only the document owner can share"}), 403
+
+        # Look up target user
+        user_resp = supabase.table("user_profiles").select(
+            "id, username"
+        ).eq("username", username).execute()
+
+        if not user_resp.data:
+            return jsonify({"error": "User not found"}), 404
+
+        target_user_id = user_resp.data[0]["id"]
+        if target_user_id == request.user_id:
+            return jsonify({"error": "Cannot share with yourself"}), 400
+
+        # Upsert share record
+        supabase.table("office_document_shares").upsert({
+            "doc_id": doc_id,
+            "owner_id": request.user_id,
+            "shared_with_user_id": target_user_id,
+            "permission": permission
+        }, on_conflict="doc_id,shared_with_user_id").execute()
+
+        debug_log(f"[Office] Shared doc {doc_id} with @{username} ({permission})")
+
+        # Notify the target user
+        try:
+            doc_title = doc_resp.data[0].get("title", "Untitled")
+            # Get owner username
+            owner_profile = supabase.table("user_profiles").select("username").eq("id", request.user_id).execute()
+            owner_name = owner_profile.data[0]["username"] if owner_profile.data else "Someone"
+
+            create_notification(
+                user_id=target_user_id,
+                notif_type="doc_shared",
+                title="Document Shared",
+                message=f"@{owner_name} shared '{doc_title}' with you ({permission})",
+            )
+        except Exception:
+            pass  # Non-blocking
+
+        return jsonify({"success": True, "shared_with": {"username": username, "permission": permission}}), 200
+
+    except Exception as e:
+        debug_log(f"Office share error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/office/<doc_id>/shares", methods=["GET"])
+@supabase_auth_required
+def office_list_shares(doc_id):
+    """List all users a document is shared with. Owner only."""
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        # Verify ownership
+        doc_resp = supabase.table("office_documents").select(
+            "id, user_id"
+        ).eq("id", doc_id).execute()
+
+        if not doc_resp.data:
+            return jsonify({"error": "Document not found"}), 404
+        if doc_resp.data[0]["user_id"] != request.user_id:
+            return jsonify({"error": "Not authorized"}), 403
+
+        shares_resp = supabase.table("office_document_shares").select(
+            "shared_with_user_id, permission, created_at"
+        ).eq("doc_id", doc_id).execute()
+
+        shares = []
+        for s in (shares_resp.data or []):
+            profile = supabase.table("user_profiles").select("username").eq("id", s["shared_with_user_id"]).execute()
+            username = profile.data[0]["username"] if profile.data else "Unknown"
+            shares.append({
+                "user_id": s["shared_with_user_id"],
+                "username": username,
+                "permission": s["permission"],
+                "created_at": s["created_at"]
+            })
+
+        return jsonify({"shares": shares}), 200
+
+    except Exception as e:
+        debug_log(f"Office list-shares error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/office/<doc_id>/share/<user_id>", methods=["DELETE"])
+@supabase_auth_required
+def office_revoke_share(doc_id, user_id):
+    """Revoke a share. Owner only."""
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        # Verify ownership
+        doc_resp = supabase.table("office_documents").select(
+            "id, user_id"
+        ).eq("id", doc_id).execute()
+
+        if not doc_resp.data:
+            return jsonify({"error": "Document not found"}), 404
+        if doc_resp.data[0]["user_id"] != request.user_id:
+            return jsonify({"error": "Not authorized"}), 403
+
+        supabase.table("office_document_shares").delete().eq(
+            "doc_id", doc_id
+        ).eq("shared_with_user_id", user_id).execute()
+
+        debug_log(f"[Office] Revoked share for doc {doc_id}, user {user_id}")
+        return jsonify({"success": True}), 200
+
+    except Exception as e:
+        debug_log(f"Office revoke-share error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/office/shared-with-me", methods=["GET"])
+@supabase_auth_required
+def office_shared_with_me():
+    """List documents shared with the current user."""
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        shares_resp = supabase.table("office_document_shares").select(
+            "doc_id, permission, owner_id"
+        ).eq("shared_with_user_id", request.user_id).order("created_at", desc=True).execute()
+
+        if not shares_resp.data:
+            return jsonify({"documents": []}), 200
+
+        documents = []
+        for s in shares_resp.data:
+            doc_resp = supabase.table("office_documents").select(
+                "id, title, file_type, file_size, created_at"
+            ).eq("id", s["doc_id"]).execute()
+
+            if not doc_resp.data:
+                continue
+
+            doc = doc_resp.data[0]
+
+            # Get owner username
+            owner_profile = supabase.table("user_profiles").select("username").eq("id", s["owner_id"]).execute()
+            owner_username = owner_profile.data[0]["username"] if owner_profile.data else "Unknown"
+
+            documents.append({
+                "id": doc["id"],
+                "title": doc.get("title", "Untitled"),
+                "file_type": doc["file_type"],
+                "file_size": doc.get("file_size", 0),
+                "created_at": doc.get("created_at"),
+                "permission": s["permission"],
+                "owner_username": owner_username
+            })
+
+        return jsonify({"documents": documents}), 200
+
+    except Exception as e:
+        debug_log(f"Office shared-with-me error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
 
