@@ -1127,6 +1127,64 @@ def get_user_stats():
         app.logger.error(f"❌ Get stats error: {e}\n{traceback.format_exc()}")
         return jsonify({'error': 'Failed to get stats'}), 500
 
+
+@app.route("/api/user/dashboard-layout", methods=["GET"])
+@supabase_auth_required
+def get_dashboard_layout():
+    """Get user's dashboard widget layout"""
+    try:
+        conn = psycopg2.connect(os.environ["DATABASE_URL"])
+        cur = conn.cursor()
+
+        # Check if dashboard_layout column exists, if not return default
+        cur.execute("""
+            SELECT dashboard_layout FROM user_profiles WHERE id = %s
+        """, (request.user_id,))
+        result = cur.fetchone()
+        conn.close()
+
+        if result and result[0]:
+            return jsonify({'layout': result[0]}), 200
+        else:
+            # Return default layout
+            return jsonify({'layout': ['quickLaunch', 'recentConversations', 'quickStats']}), 200
+
+    except Exception as e:
+        app.logger.error(f"❌ Get dashboard layout error: {e}\n{traceback.format_exc()}")
+        return jsonify({'error': 'Failed to get dashboard layout'}), 500
+
+
+@app.route("/api/user/dashboard-layout", methods=["POST"])
+@supabase_auth_required
+def save_dashboard_layout():
+    """Save user's dashboard widget layout"""
+    try:
+        data = request.get_json()
+        layout = data.get('layout', [])
+
+        if not isinstance(layout, list):
+            return jsonify({'error': 'Layout must be an array'}), 400
+
+        conn = psycopg2.connect(os.environ["DATABASE_URL"])
+        cur = conn.cursor()
+
+        # Update or create dashboard_layout
+        cur.execute("""
+            UPDATE user_profiles
+            SET dashboard_layout = %s
+            WHERE id = %s
+        """, (json.dumps(layout), request.user_id))
+
+        conn.commit()
+        conn.close()
+
+        return jsonify({'success': True}), 200
+
+    except Exception as e:
+        app.logger.error(f"❌ Save dashboard layout error: {e}\n{traceback.format_exc()}")
+        return jsonify({'error': 'Failed to save dashboard layout'}), 500
+
+
 # ============================================================================
 # END USER AUTHENTICATION & SUBSCRIPTION ROUTES
 # ============================================================================
