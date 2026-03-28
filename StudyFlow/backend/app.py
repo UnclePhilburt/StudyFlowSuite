@@ -8264,6 +8264,106 @@ def delete_group_event(group_id, event_id):
         return jsonify({"error": str(e)}), 500
 
 
+# ──────────────────────────────────────────────
+# Admin: University Stats (Institutional License Prep)
+# ──────────────────────────────────────────────
+
+@app.route("/admin/university-stats", methods=["GET"])
+def university_stats():
+    """Per-university metrics for institutional license sales pitches."""
+    try:
+        admin_key = request.args.get("key", "")
+        if admin_key != os.getenv("ADMIN_KEY", "change_me_in_production"):
+            return jsonify({"error": "Unauthorized"}), 403
+
+        from StudyFlow.backend.supabase_client import supabase
+
+        # Get all verified users grouped by university
+        profiles = supabase.table("user_profiles").select(
+            "id, university, edu_verified"
+        ).eq("edu_verified", True).not_.is_("university", "null").execute()
+
+        uni_users = {}
+        all_user_ids = set()
+        for p in (profiles.data or []):
+            uni = p["university"]
+            if uni not in uni_users:
+                uni_users[uni] = []
+            uni_users[uni].append(p["id"])
+            all_user_ids.add(p["id"])
+
+        # Get note counts per university
+        notes = supabase.table("notes").select(
+            "user_id, university, course_code"
+        ).not_.is_("university", "null").execute()
+
+        uni_notes = {}
+        uni_courses = {}
+        for n in (notes.data or []):
+            uni = n.get("university", "Unknown")
+            if uni not in uni_notes:
+                uni_notes[uni] = 0
+                uni_courses[uni] = set()
+            uni_notes[uni] += 1
+            if n.get("course_code"):
+                uni_courses[uni].add(n["course_code"])
+
+        # Get AI query counts from provenance logs
+        uni_queries = {}
+        try:
+            for uni, user_ids in uni_users.items():
+                if not user_ids:
+                    continue
+                count_resp = supabase.table("ai_provenance_logs").select(
+                    "id", count="exact"
+                ).in_("user_id", user_ids[:50]).execute()
+                uni_queries[uni] = count_resp.count or 0
+        except Exception:
+            pass  # Table might not exist yet
+
+        # Get study group counts per university
+        uni_groups = {}
+        try:
+            groups = supabase.table("study_groups").select(
+                "institution"
+            ).not_.is_("institution", "null").execute()
+            for g in (groups.data or []):
+                inst = g["institution"]
+                uni_groups[inst] = uni_groups.get(inst, 0) + 1
+        except Exception:
+            pass
+
+        # Build response
+        universities = []
+        all_unis = set(list(uni_users.keys()) + list(uni_notes.keys()))
+        for uni in sorted(all_unis):
+            universities.append({
+                "university": uni,
+                "verified_users": len(uni_users.get(uni, [])),
+                "notes_uploaded": uni_notes.get(uni, 0),
+                "courses_covered": len(uni_courses.get(uni, set())),
+                "top_courses": sorted(list(uni_courses.get(uni, set())))[:10],
+                "ai_queries": uni_queries.get(uni, 0),
+                "study_groups": uni_groups.get(uni, 0)
+            })
+
+        # Totals
+        totals = {
+            "total_universities": len(all_unis),
+            "total_verified_users": sum(len(v) for v in uni_users.values()),
+            "total_notes": sum(uni_notes.values()),
+            "total_courses": sum(len(v) for v in uni_courses.values()),
+            "total_ai_queries": sum(uni_queries.values()),
+            "total_study_groups": sum(uni_groups.values())
+        }
+
+        return jsonify({"totals": totals, "universities": universities}), 200
+
+    except Exception as e:
+        debug_log(f"University stats error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     try:
         port = int(os.environ.get("PORT", 5000))
