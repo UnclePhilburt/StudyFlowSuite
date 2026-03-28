@@ -8333,8 +8333,8 @@ def university_stats():
 
         # Get all verified users grouped by university
         profiles = supabase.table("user_profiles").select(
-            "id, university, edu_verified"
-        ).eq("edu_verified", True).not_.is_("university", "null").execute()
+            "id, university, edu_email_verified"
+        ).eq("edu_email_verified", True).not_.is_("university", "null").execute()
 
         uni_users = {}
         all_user_ids = set()
