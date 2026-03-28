@@ -8049,7 +8049,7 @@ def get_group_messages(group_id):
             return jsonify({"error": "Not a member"}), 403
 
         messages_resp = supabase.table("study_group_messages").select(
-            "id, user_id, role, content, sources, created_at"
+            "id, user_id, role, content, sources, created_at, pinned"
         ).eq("group_id", group_id).order("created_at").limit(100).execute()
 
         messages = []
@@ -8069,13 +8069,198 @@ def get_group_messages(group_id):
                 "sources": m.get("sources", []),
                 "username": username,
                 "user_id": m["user_id"],
-                "created_at": m["created_at"]
+                "created_at": m["created_at"],
+                "pinned": m.get("pinned", False)
             })
 
         return jsonify({"messages": messages}), 200
 
     except Exception as e:
         debug_log(f"Get group messages error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ──────────────────────────────────────────────
+# Pinned Messages & Study Schedule
+# ──────────────────────────────────────────────
+
+@app.route("/api/groups/<group_id>/messages/<message_id>/pin", methods=["POST"])
+@supabase_auth_required
+def pin_message(group_id, message_id):
+    """Pin or unpin a group message. Owner or message sender only."""
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        member_check = supabase.table("study_group_members").select("role").eq(
+            "group_id", group_id).eq("user_id", request.user_id).execute()
+        if not member_check.data:
+            return jsonify({"error": "Not a member"}), 403
+
+        msg = supabase.table("study_group_messages").select("id, user_id, pinned").eq(
+            "id", message_id).eq("group_id", group_id).execute()
+        if not msg.data:
+            return jsonify({"error": "Message not found"}), 404
+
+        is_owner = member_check.data[0]["role"] == "owner"
+        is_sender = msg.data[0]["user_id"] == request.user_id
+        if not is_owner and not is_sender:
+            return jsonify({"error": "Not authorized"}), 403
+
+        new_pinned = not msg.data[0].get("pinned", False)
+        supabase.table("study_group_messages").update({
+            "pinned": new_pinned,
+            "pinned_by": request.user_id if new_pinned else None
+        }).eq("id", message_id).execute()
+
+        return jsonify({"success": True, "pinned": new_pinned}), 200
+
+    except Exception as e:
+        debug_log(f"Pin message error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/groups/<group_id>/pinned", methods=["GET"])
+@supabase_auth_required
+def get_pinned_messages(group_id):
+    """Get all pinned messages for a group."""
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        member_check = supabase.table("study_group_members").select("id").eq(
+            "group_id", group_id).eq("user_id", request.user_id).execute()
+        if not member_check.data:
+            return jsonify({"error": "Not a member"}), 403
+
+        pinned = supabase.table("study_group_messages").select(
+            "id, user_id, content, created_at"
+        ).eq("group_id", group_id).eq("pinned", True).order("created_at", desc=True).execute()
+
+        messages = []
+        cache = {}
+        for m in (pinned.data or []):
+            if m["user_id"] and m["user_id"] not in cache:
+                p = supabase.table("user_profiles").select("username").eq("id", m["user_id"]).execute()
+                cache[m["user_id"]] = p.data[0]["username"] if p.data else "Unknown"
+            messages.append({
+                "id": m["id"],
+                "content": m["content"],
+                "username": cache.get(m["user_id"], "Unknown"),
+                "created_at": m["created_at"]
+            })
+
+        return jsonify({"pinned": messages}), 200
+
+    except Exception as e:
+        debug_log(f"Get pinned error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/groups/<group_id>/events", methods=["GET"])
+@supabase_auth_required
+def get_group_events(group_id):
+    """Get all events for a group, ordered by date."""
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        member_check = supabase.table("study_group_members").select("id").eq(
+            "group_id", group_id).eq("user_id", request.user_id).execute()
+        if not member_check.data:
+            return jsonify({"error": "Not a member"}), 403
+
+        events_resp = supabase.table("study_group_events").select(
+            "id, title, description, event_date, event_time, created_by, created_at"
+        ).eq("group_id", group_id).order("event_date").execute()
+
+        events = []
+        cache = {}
+        for ev in (events_resp.data or []):
+            if ev["created_by"] not in cache:
+                p = supabase.table("user_profiles").select("username").eq("id", ev["created_by"]).execute()
+                cache[ev["created_by"]] = p.data[0]["username"] if p.data else "Unknown"
+            events.append({
+                "id": ev["id"],
+                "title": ev["title"],
+                "description": ev.get("description"),
+                "event_date": ev["event_date"],
+                "event_time": ev.get("event_time"),
+                "created_by": cache[ev["created_by"]],
+                "created_by_id": ev["created_by"],
+                "created_at": ev["created_at"]
+            })
+
+        return jsonify({"events": events}), 200
+
+    except Exception as e:
+        debug_log(f"Get events error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/groups/<group_id>/events", methods=["POST"])
+@supabase_auth_required
+def create_group_event(group_id):
+    """Create a study event."""
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        member_check = supabase.table("study_group_members").select("id").eq(
+            "group_id", group_id).eq("user_id", request.user_id).execute()
+        if not member_check.data:
+            return jsonify({"error": "Not a member"}), 403
+
+        data = request.get_json()
+        title = data.get("title", "").strip()
+        if not title:
+            return jsonify({"error": "Missing title"}), 400
+        event_date = data.get("event_date")
+        if not event_date:
+            return jsonify({"error": "Missing date"}), 400
+
+        row = {
+            "group_id": group_id,
+            "title": title[:100],
+            "event_date": event_date,
+            "created_by": request.user_id
+        }
+        if data.get("description"):
+            row["description"] = data["description"].strip()[:500]
+        if data.get("event_time"):
+            row["event_time"] = data["event_time"]
+
+        supabase.table("study_group_events").insert(row).execute()
+
+        debug_log(f"[Groups] Created event '{title}' in group {group_id}")
+        return jsonify({"success": True}), 200
+
+    except Exception as e:
+        debug_log(f"Create event error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/groups/<group_id>/events/<event_id>", methods=["DELETE"])
+@supabase_auth_required
+def delete_group_event(group_id, event_id):
+    """Delete a study event. Creator or group owner only."""
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        group = supabase.table("study_groups").select("owner_id").eq("id", group_id).execute()
+        if not group.data:
+            return jsonify({"error": "Group not found"}), 404
+
+        event = supabase.table("study_group_events").select("created_by").eq("id", event_id).eq("group_id", group_id).execute()
+        if not event.data:
+            return jsonify({"error": "Event not found"}), 404
+
+        is_owner = group.data[0]["owner_id"] == request.user_id
+        is_creator = event.data[0]["created_by"] == request.user_id
+        if not is_owner and not is_creator:
+            return jsonify({"error": "Not authorized"}), 403
+
+        supabase.table("study_group_events").delete().eq("id", event_id).execute()
+        return jsonify({"success": True}), 200
+
+    except Exception as e:
+        debug_log(f"Delete event error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
 
