@@ -8345,21 +8345,17 @@ def review_queue():
         ).eq("reviewed", False).order("created_at").limit(50).execute()
 
         notes = []
+        uploader_cache = {}
         for n in (notes_resp.data or []):
-            # Get uploader info
-            profile = supabase.table("user_profiles").select("username, email").eq("id", n["user_id"]).execute()
-            uploader = "Unknown"
-            if profile.data:
-                uploader = profile.data[0].get("username") or profile.data[0].get("email", "Unknown")
-
-            # Generate preview URL
-            preview_url = ""
-            if n.get("file_path"):
+            # Get uploader info (cached)
+            uid = n["user_id"]
+            if uid not in uploader_cache:
                 try:
-                    signed = supabase.storage.from_("note-files").create_signed_url(n["file_path"], 3600)
-                    preview_url = signed.get("signedURL") or signed.get("signedUrl", "")
+                    profile = supabase.table("user_profiles").select("username, email").eq("id", uid).execute()
+                    uploader_cache[uid] = profile.data[0].get("username") or profile.data[0].get("email", "Unknown") if profile.data else "Unknown"
                 except Exception:
-                    pass
+                    uploader_cache[uid] = "Unknown"
+            uploader = uploader_cache[uid]
 
             notes.append({
                 "id": n["id"],
@@ -8370,7 +8366,6 @@ def review_queue():
                 "uploader": uploader,
                 "uploader_id": n["user_id"],
                 "is_public": n.get("is_public", True),
-                "preview_url": preview_url,
                 "created_at": n.get("created_at")
             })
 
