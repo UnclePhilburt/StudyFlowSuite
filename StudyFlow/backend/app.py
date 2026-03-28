@@ -13,6 +13,7 @@ import cv2
 import numpy as np
 import psycopg2
 import traceback
+import uuid
 import requests
 import stripe
 import google.generativeai as genai
@@ -7484,6 +7485,557 @@ def office_shared_with_me():
 
     except Exception as e:
         debug_log(f"Office shared-with-me error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ──────────────────────────────────────────────
+# Study Groups Endpoints
+# ──────────────────────────────────────────────
+
+@app.route("/api/groups", methods=["POST"])
+@supabase_auth_required
+def create_group():
+    """Create a new study group."""
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+        import secrets
+
+        data = request.get_json()
+        if not data or not data.get("name"):
+            return jsonify({"error": "Missing group name"}), 400
+
+        name = data["name"].strip()[:60]
+        invite_code = secrets.token_urlsafe(8)
+        group_id = str(uuid.uuid4())
+
+        supabase.table("study_groups").insert({
+            "id": group_id,
+            "name": name,
+            "owner_id": request.user_id,
+            "invite_code": invite_code
+        }).execute()
+
+        # Add owner as member
+        supabase.table("study_group_members").insert({
+            "group_id": group_id,
+            "user_id": request.user_id,
+            "role": "owner"
+        }).execute()
+
+        debug_log(f"[Groups] Created group '{name}' ({group_id})")
+        return jsonify({"success": True, "group": {"id": group_id, "name": name, "invite_code": invite_code}}), 200
+
+    except Exception as e:
+        debug_log(f"Create group error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/groups", methods=["GET"])
+@supabase_auth_required
+def list_groups():
+    """List all groups the user is a member of."""
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        memberships = supabase.table("study_group_members").select(
+            "group_id, role"
+        ).eq("user_id", request.user_id).execute()
+
+        if not memberships.data:
+            return jsonify({"groups": []}), 200
+
+        groups = []
+        for m in memberships.data:
+            g = supabase.table("study_groups").select("*").eq("id", m["group_id"]).execute()
+            if g.data:
+                group = g.data[0]
+                # Get member count
+                members = supabase.table("study_group_members").select("id", count="exact").eq("group_id", m["group_id"]).execute()
+                group["member_count"] = members.count if members.count else 0
+                group["role"] = m["role"]
+                groups.append(group)
+
+        return jsonify({"groups": groups}), 200
+
+    except Exception as e:
+        debug_log(f"List groups error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/groups/<group_id>", methods=["GET"])
+@supabase_auth_required
+def get_group(group_id):
+    """Get group details including members and notes."""
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        # Verify membership
+        member_check = supabase.table("study_group_members").select("role").eq(
+            "group_id", group_id
+        ).eq("user_id", request.user_id).execute()
+        if not member_check.data:
+            return jsonify({"error": "Not a member"}), 403
+
+        group = supabase.table("study_groups").select("*").eq("id", group_id).execute()
+        if not group.data:
+            return jsonify({"error": "Group not found"}), 404
+
+        # Get members with usernames
+        members_resp = supabase.table("study_group_members").select("user_id, role, joined_at").eq("group_id", group_id).execute()
+        members = []
+        for m in (members_resp.data or []):
+            profile = supabase.table("user_profiles").select("username").eq("id", m["user_id"]).execute()
+            members.append({
+                "user_id": m["user_id"],
+                "username": profile.data[0]["username"] if profile.data else "Unknown",
+                "role": m["role"],
+                "joined_at": m["joined_at"]
+            })
+
+        # Get shared notes
+        notes_resp = supabase.table("study_group_notes").select("note_id, added_by, added_at").eq("group_id", group_id).execute()
+        notes = []
+        for n in (notes_resp.data or []):
+            note = supabase.table("notes").select("id, original_filename, file_size, university, course_code").eq("id", n["note_id"]).execute()
+            if note.data:
+                profile = supabase.table("user_profiles").select("username").eq("id", n["added_by"]).execute()
+                notes.append({
+                    "note_id": note.data[0]["id"],
+                    "filename": note.data[0].get("original_filename", "Unknown"),
+                    "file_size": note.data[0].get("file_size", 0),
+                    "course_code": note.data[0].get("course_code"),
+                    "added_by": profile.data[0]["username"] if profile.data else "Unknown",
+                    "added_at": n["added_at"]
+                })
+
+        result = group.data[0]
+        result["members"] = members
+        result["notes"] = notes
+        result["role"] = member_check.data[0]["role"]
+
+        return jsonify({"group": result}), 200
+
+    except Exception as e:
+        debug_log(f"Get group error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/groups/<group_id>", methods=["DELETE"])
+@supabase_auth_required
+def delete_group(group_id):
+    """Delete a study group. Owner only."""
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        group = supabase.table("study_groups").select("owner_id").eq("id", group_id).execute()
+        if not group.data:
+            return jsonify({"error": "Group not found"}), 404
+        if group.data[0]["owner_id"] != request.user_id:
+            return jsonify({"error": "Only the owner can delete this group"}), 403
+
+        supabase.table("study_groups").delete().eq("id", group_id).execute()
+        debug_log(f"[Groups] Deleted group {group_id}")
+        return jsonify({"success": True}), 200
+
+    except Exception as e:
+        debug_log(f"Delete group error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/groups/<group_id>/invite", methods=["POST"])
+@supabase_auth_required
+def invite_to_group(group_id):
+    """Invite a user to a group by username. Members can invite."""
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        # Verify caller is a member
+        member_check = supabase.table("study_group_members").select("role").eq(
+            "group_id", group_id).eq("user_id", request.user_id).execute()
+        if not member_check.data:
+            return jsonify({"error": "Not a member"}), 403
+
+        data = request.get_json()
+        username = data.get("username", "").strip()
+        if not username:
+            return jsonify({"error": "Missing username"}), 400
+
+        user_resp = supabase.table("user_profiles").select("id, username").eq("username", username).execute()
+        if not user_resp.data:
+            return jsonify({"error": "User not found"}), 404
+
+        target_id = user_resp.data[0]["id"]
+        if target_id == request.user_id:
+            return jsonify({"error": "You are already in this group"}), 400
+
+        # Check not already a member
+        existing = supabase.table("study_group_members").select("id").eq(
+            "group_id", group_id).eq("user_id", target_id).execute()
+        if existing.data:
+            return jsonify({"error": "User is already a member"}), 400
+
+        supabase.table("study_group_members").insert({
+            "group_id": group_id,
+            "user_id": target_id,
+            "role": "member"
+        }).execute()
+
+        # Notify
+        try:
+            group_resp = supabase.table("study_groups").select("name").eq("id", group_id).execute()
+            group_name = group_resp.data[0]["name"] if group_resp.data else "a study group"
+            inviter_profile = supabase.table("user_profiles").select("username").eq("id", request.user_id).execute()
+            inviter_name = inviter_profile.data[0]["username"] if inviter_profile.data else "Someone"
+            create_notification(
+                user_id=target_id,
+                notif_type="group_invite",
+                title="Study Group Invite",
+                message=f"@{inviter_name} added you to '{group_name}'",
+            )
+        except Exception:
+            pass
+
+        debug_log(f"[Groups] Added @{username} to group {group_id}")
+        return jsonify({"success": True}), 200
+
+    except Exception as e:
+        debug_log(f"Invite to group error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/groups/join/<invite_code>", methods=["POST"])
+@supabase_auth_required
+def join_group(invite_code):
+    """Join a group via invite code."""
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        group = supabase.table("study_groups").select("id, name").eq("invite_code", invite_code).execute()
+        if not group.data:
+            return jsonify({"error": "Invalid invite code"}), 404
+
+        group_id = group.data[0]["id"]
+
+        existing = supabase.table("study_group_members").select("id").eq(
+            "group_id", group_id).eq("user_id", request.user_id).execute()
+        if existing.data:
+            return jsonify({"error": "Already a member", "group_id": group_id}), 400
+
+        supabase.table("study_group_members").insert({
+            "group_id": group_id,
+            "user_id": request.user_id,
+            "role": "member"
+        }).execute()
+
+        debug_log(f"[Groups] User {request.user_id} joined group {group_id} via invite")
+        return jsonify({"success": True, "group_id": group_id, "group_name": group.data[0]["name"]}), 200
+
+    except Exception as e:
+        debug_log(f"Join group error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/groups/<group_id>/members/<user_id>", methods=["DELETE"])
+@supabase_auth_required
+def remove_group_member(group_id, user_id):
+    """Remove a member from a group. Owner or self only."""
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        group = supabase.table("study_groups").select("owner_id").eq("id", group_id).execute()
+        if not group.data:
+            return jsonify({"error": "Group not found"}), 404
+
+        is_owner = group.data[0]["owner_id"] == request.user_id
+        is_self = user_id == request.user_id
+
+        if not is_owner and not is_self:
+            return jsonify({"error": "Not authorized"}), 403
+
+        if is_owner and is_self:
+            return jsonify({"error": "Owner cannot leave. Delete the group instead."}), 400
+
+        supabase.table("study_group_members").delete().eq(
+            "group_id", group_id).eq("user_id", user_id).execute()
+
+        debug_log(f"[Groups] Removed user {user_id} from group {group_id}")
+        return jsonify({"success": True}), 200
+
+    except Exception as e:
+        debug_log(f"Remove member error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/groups/<group_id>/notes", methods=["POST"])
+@supabase_auth_required
+def add_group_note(group_id):
+    """Add a note to the group's shared pool."""
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        member_check = supabase.table("study_group_members").select("id").eq(
+            "group_id", group_id).eq("user_id", request.user_id).execute()
+        if not member_check.data:
+            return jsonify({"error": "Not a member"}), 403
+
+        data = request.get_json()
+        note_id = data.get("note_id")
+        if not note_id:
+            return jsonify({"error": "Missing note_id"}), 400
+
+        # Verify user owns the note
+        note = supabase.table("notes").select("id, user_id").eq("id", note_id).execute()
+        if not note.data:
+            return jsonify({"error": "Note not found"}), 404
+        if note.data[0]["user_id"] != request.user_id:
+            return jsonify({"error": "You can only share your own notes"}), 403
+
+        supabase.table("study_group_notes").upsert({
+            "group_id": group_id,
+            "note_id": note_id,
+            "added_by": request.user_id
+        }, on_conflict="group_id,note_id").execute()
+
+        return jsonify({"success": True}), 200
+
+    except Exception as e:
+        debug_log(f"Add group note error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/groups/<group_id>/notes/<note_id>", methods=["DELETE"])
+@supabase_auth_required
+def remove_group_note(group_id, note_id):
+    """Remove a note from the group. Adder or owner only."""
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        group = supabase.table("study_groups").select("owner_id").eq("id", group_id).execute()
+        if not group.data:
+            return jsonify({"error": "Group not found"}), 404
+
+        note_entry = supabase.table("study_group_notes").select("added_by").eq(
+            "group_id", group_id).eq("note_id", note_id).execute()
+        if not note_entry.data:
+            return jsonify({"error": "Note not in group"}), 404
+
+        is_owner = group.data[0]["owner_id"] == request.user_id
+        is_adder = note_entry.data[0]["added_by"] == request.user_id
+
+        if not is_owner and not is_adder:
+            return jsonify({"error": "Not authorized"}), 403
+
+        supabase.table("study_group_notes").delete().eq(
+            "group_id", group_id).eq("note_id", note_id).execute()
+
+        return jsonify({"success": True}), 200
+
+    except Exception as e:
+        debug_log(f"Remove group note error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/groups/<group_id>/chat", methods=["POST"])
+@supabase_auth_required
+@account_not_frozen
+def group_chat(group_id):
+    """Send a message in the group chat. AI responds using pooled group notes."""
+    try:
+        from StudyFlow.backend.supabase_client import supabase, search_notes_vector, log_ai_response
+        from StudyFlow.backend.embedding_client import generate_embedding
+        from StudyFlow.backend.conversational_noteflow import generate_conversational_response
+        import time
+
+        # Verify membership
+        member_check = supabase.table("study_group_members").select("id").eq(
+            "group_id", group_id).eq("user_id", request.user_id).execute()
+        if not member_check.data:
+            return jsonify({"error": "Not a member"}), 403
+
+        data = request.get_json()
+        message = data.get("message", "").strip()
+        if not message:
+            return jsonify({"error": "Missing message"}), 400
+
+        # Get sender username
+        sender_profile = supabase.table("user_profiles").select("username").eq("id", request.user_id).execute()
+        sender_username = sender_profile.data[0]["username"] if sender_profile.data else "User"
+
+        # Save user message
+        supabase.table("study_group_messages").insert({
+            "group_id": group_id,
+            "user_id": request.user_id,
+            "role": "user",
+            "content": message
+        }).execute()
+
+        # Get group note IDs for scoped search
+        group_notes = supabase.table("study_group_notes").select("note_id").eq("group_id", group_id).execute()
+        group_note_ids = [n["note_id"] for n in (group_notes.data or [])]
+
+        # Generate embedding and search
+        query_embedding = generate_embedding(message)
+        search_results = []
+        if query_embedding:
+            all_results = search_notes_vector(
+                query_embedding=query_embedding,
+                user_id=request.user_id,
+                university=None,
+                course_code=None,
+                match_threshold=0.4,
+                match_count=5
+            )
+            # Filter to group notes only
+            if all_results and group_note_ids:
+                search_results = [r for r in all_results if r.get("note_id") in group_note_ids]
+
+        # Build sources
+        sources = []
+        seen = set()
+        for result in search_results[:3]:
+            if result["note_id"] in seen:
+                continue
+            seen.add(result["note_id"])
+            note_data = supabase.table("notes").select("original_filename").eq("id", result["note_id"]).execute()
+            filename = note_data.data[0].get("original_filename", "Unknown") if note_data.data else "Unknown"
+            result["original_filename"] = filename
+            sources.append({
+                "note_id": result["note_id"],
+                "filename": filename,
+                "similarity": round(result["similarity"], 2)
+            })
+
+        # Get recent conversation history from group
+        history_resp = supabase.table("study_group_messages").select(
+            "role, content"
+        ).eq("group_id", group_id).order("created_at", desc=True).limit(10).execute()
+        conversation_history = list(reversed(history_resp.data or []))
+
+        # Generate AI response
+        ai_result = generate_conversational_response(
+            question=message,
+            search_results=search_results,
+            conversation_history=conversation_history
+        )
+
+        ai_response = ai_result["response"]
+
+        # Save AI response
+        supabase.table("study_group_messages").insert({
+            "group_id": group_id,
+            "user_id": None,
+            "role": "assistant",
+            "content": ai_response,
+            "sources": sources
+        }).execute()
+
+        # Provenance logging
+        try:
+            client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+            if client_ip and ',' in client_ip:
+                client_ip = client_ip.split(',')[0].strip()
+            log_ai_response(
+                user_id=request.user_id,
+                conversation_id=group_id,
+                prompt_text=message,
+                response_text=ai_response,
+                sources_used=sources,
+                model_used=ai_result["model_used"],
+                response_time_ms=ai_result["response_time_ms"],
+                ip_address=client_ip
+            )
+        except Exception:
+            pass
+
+        return jsonify({
+            "response": ai_response,
+            "sources": sources,
+            "sender_username": sender_username
+        }), 200
+
+    except Exception as e:
+        debug_log(f"Group chat error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/groups/<group_id>/messages", methods=["GET"])
+@supabase_auth_required
+def get_group_messages(group_id):
+    """Get chat history for a group."""
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        member_check = supabase.table("study_group_members").select("id").eq(
+            "group_id", group_id).eq("user_id", request.user_id).execute()
+        if not member_check.data:
+            return jsonify({"error": "Not a member"}), 403
+
+        messages_resp = supabase.table("study_group_messages").select(
+            "id, user_id, role, content, sources, created_at"
+        ).eq("group_id", group_id).order("created_at").limit(100).execute()
+
+        messages = []
+        username_cache = {}
+        for m in (messages_resp.data or []):
+            username = None
+            if m["user_id"]:
+                if m["user_id"] not in username_cache:
+                    profile = supabase.table("user_profiles").select("username").eq("id", m["user_id"]).execute()
+                    username_cache[m["user_id"]] = profile.data[0]["username"] if profile.data else "Unknown"
+                username = username_cache[m["user_id"]]
+
+            messages.append({
+                "id": m["id"],
+                "role": m["role"],
+                "content": m["content"],
+                "sources": m.get("sources", []),
+                "username": username,
+                "user_id": m["user_id"],
+                "created_at": m["created_at"]
+            })
+
+        return jsonify({"messages": messages}), 200
+
+    except Exception as e:
+        debug_log(f"Get group messages error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/groups/<group_id>/my-notes", methods=["GET"])
+@supabase_auth_required
+def get_my_notes_for_group(group_id):
+    """Get the current user's notes that can be added to this group."""
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        member_check = supabase.table("study_group_members").select("id").eq(
+            "group_id", group_id).eq("user_id", request.user_id).execute()
+        if not member_check.data:
+            return jsonify({"error": "Not a member"}), 403
+
+        # Get user's notes
+        notes_resp = supabase.table("notes").select(
+            "id, original_filename, file_size, course_code"
+        ).eq("user_id", request.user_id).order("created_at", desc=True).limit(50).execute()
+
+        # Get notes already in the group
+        existing = supabase.table("study_group_notes").select("note_id").eq("group_id", group_id).execute()
+        existing_ids = set(n["note_id"] for n in (existing.data or []))
+
+        notes = []
+        for n in (notes_resp.data or []):
+            notes.append({
+                "id": n["id"],
+                "filename": n.get("original_filename", "Unknown"),
+                "file_size": n.get("file_size", 0),
+                "course_code": n.get("course_code"),
+                "already_added": n["id"] in existing_ids
+            })
+
+        return jsonify({"notes": notes}), 200
+
+    except Exception as e:
+        debug_log(f"Get my notes error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
 
