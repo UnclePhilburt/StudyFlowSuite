@@ -7592,21 +7592,21 @@ def get_group(group_id):
                 "joined_at": m["joined_at"]
             })
 
-        # Get shared notes
-        notes_resp = supabase.table("study_group_notes").select("note_id, added_by, added_at").eq("group_id", group_id).execute()
+        # Get shared notes (direct uploads)
+        notes_resp = supabase.table("study_group_notes").select(
+            "id, added_by, added_at, filename, file_path, file_size, file_type"
+        ).eq("group_id", group_id).order("added_at", desc=True).execute()
         notes = []
         for n in (notes_resp.data or []):
-            note = supabase.table("notes").select("id, original_filename, file_size, university, course_code").eq("id", n["note_id"]).execute()
-            if note.data:
-                profile = supabase.table("user_profiles").select("username").eq("id", n["added_by"]).execute()
-                notes.append({
-                    "note_id": note.data[0]["id"],
-                    "filename": note.data[0].get("original_filename", "Unknown"),
-                    "file_size": note.data[0].get("file_size", 0),
-                    "course_code": note.data[0].get("course_code"),
-                    "added_by": profile.data[0]["username"] if profile.data else "Unknown",
-                    "added_at": n["added_at"]
-                })
+            profile = supabase.table("user_profiles").select("username").eq("id", n["added_by"]).execute()
+            notes.append({
+                "id": n["id"],
+                "filename": n.get("filename", "Unknown"),
+                "file_size": n.get("file_size", 0),
+                "file_type": n.get("file_type"),
+                "added_by": profile.data[0]["username"] if profile.data else "Unknown",
+                "added_at": n["added_at"]
+            })
 
         result = group.data[0]
         result["members"] = members
@@ -7766,10 +7766,10 @@ def remove_group_member(group_id, user_id):
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/api/groups/<group_id>/notes", methods=["POST"])
+@app.route("/api/groups/<group_id>/notes/upload", methods=["POST"])
 @supabase_auth_required
-def add_group_note(group_id):
-    """Add a note to the group's shared pool."""
+def upload_group_note(group_id):
+    """Upload a file directly to the group. Does not appear in personal notes or Nexus."""
     try:
         from StudyFlow.backend.supabase_client import supabase
 
@@ -7778,28 +7778,43 @@ def add_group_note(group_id):
         if not member_check.data:
             return jsonify({"error": "Not a member"}), 403
 
-        data = request.get_json()
-        note_id = data.get("note_id")
-        if not note_id:
-            return jsonify({"error": "Missing note_id"}), 400
+        if "file" not in request.files:
+            return jsonify({"error": "No file provided"}), 400
 
-        # Verify user owns the note
-        note = supabase.table("notes").select("id, user_id").eq("id", note_id).execute()
-        if not note.data:
-            return jsonify({"error": "Note not found"}), 404
-        if note.data[0]["user_id"] != request.user_id:
-            return jsonify({"error": "You can only share your own notes"}), 403
+        file = request.files["file"]
+        if not file.filename:
+            return jsonify({"error": "Empty filename"}), 400
 
-        supabase.table("study_group_notes").upsert({
+        filename = file.filename
+        file_bytes = file.read()
+        file_size = len(file_bytes)
+
+        # Determine file type
+        ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "bin"
+        content_type = file.content_type or "application/octet-stream"
+
+        # Upload to Supabase storage under group-notes path
+        storage_path = f"group-notes/{group_id}/{uuid.uuid4()}_{filename}"
+        supabase.storage.from_("note-files").upload(
+            storage_path, file_bytes,
+            file_options={"content-type": content_type}
+        )
+
+        # Save record
+        supabase.table("study_group_notes").insert({
             "group_id": group_id,
-            "note_id": note_id,
-            "added_by": request.user_id
-        }, on_conflict="group_id,note_id").execute()
+            "added_by": request.user_id,
+            "filename": filename,
+            "file_path": storage_path,
+            "file_size": file_size,
+            "file_type": ext
+        }).execute()
 
-        return jsonify({"success": True}), 200
+        debug_log(f"[Groups] Uploaded '{filename}' to group {group_id}")
+        return jsonify({"success": True, "filename": filename}), 200
 
     except Exception as e:
-        debug_log(f"Add group note error: {e}\n{traceback.format_exc()}")
+        debug_log(f"Upload group note error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -7814,8 +7829,8 @@ def remove_group_note(group_id, note_id):
         if not group.data:
             return jsonify({"error": "Group not found"}), 404
 
-        note_entry = supabase.table("study_group_notes").select("added_by").eq(
-            "group_id", group_id).eq("note_id", note_id).execute()
+        note_entry = supabase.table("study_group_notes").select("added_by, file_path").eq(
+            "group_id", group_id).eq("id", note_id).execute()
         if not note_entry.data:
             return jsonify({"error": "Note not in group"}), 404
 
@@ -7825,13 +7840,50 @@ def remove_group_note(group_id, note_id):
         if not is_owner and not is_adder:
             return jsonify({"error": "Not authorized"}), 403
 
+        # Delete file from storage if it has a file_path
+        file_path = note_entry.data[0].get("file_path")
+        if file_path:
+            try:
+                supabase.storage.from_("note-files").remove([file_path])
+            except Exception:
+                pass
+
         supabase.table("study_group_notes").delete().eq(
-            "group_id", group_id).eq("note_id", note_id).execute()
+            "group_id", group_id).eq("id", note_id).execute()
 
         return jsonify({"success": True}), 200
 
     except Exception as e:
         debug_log(f"Remove group note error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/groups/<group_id>/notes/<note_id>/download", methods=["GET"])
+@supabase_auth_required
+def download_group_note(group_id, note_id):
+    """Get a signed download URL for a group note."""
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        member_check = supabase.table("study_group_members").select("id").eq(
+            "group_id", group_id).eq("user_id", request.user_id).execute()
+        if not member_check.data:
+            return jsonify({"error": "Not a member"}), 403
+
+        note = supabase.table("study_group_notes").select("file_path, filename").eq(
+            "group_id", group_id).eq("id", note_id).execute()
+        if not note.data or not note.data[0].get("file_path"):
+            return jsonify({"error": "Note not found"}), 404
+
+        signed = supabase.storage.from_("note-files").create_signed_url(
+            note.data[0]["file_path"], 3600
+        )
+        url = signed.get("signedURL") or signed.get("signedUrl", "")
+
+        return jsonify({"url": url, "filename": note.data[0]["filename"]}), 200
+
+    except Exception as e:
+        debug_log(f"Download group note error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -7915,44 +7967,6 @@ def get_group_messages(group_id):
 
     except Exception as e:
         debug_log(f"Get group messages error: {e}\n{traceback.format_exc()}")
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route("/api/groups/<group_id>/my-notes", methods=["GET"])
-@supabase_auth_required
-def get_my_notes_for_group(group_id):
-    """Get the current user's notes that can be added to this group."""
-    try:
-        from StudyFlow.backend.supabase_client import supabase
-
-        member_check = supabase.table("study_group_members").select("id").eq(
-            "group_id", group_id).eq("user_id", request.user_id).execute()
-        if not member_check.data:
-            return jsonify({"error": "Not a member"}), 403
-
-        # Get user's notes
-        notes_resp = supabase.table("notes").select(
-            "id, original_filename, file_size, course_code"
-        ).eq("user_id", request.user_id).order("created_at", desc=True).limit(50).execute()
-
-        # Get notes already in the group
-        existing = supabase.table("study_group_notes").select("note_id").eq("group_id", group_id).execute()
-        existing_ids = set(n["note_id"] for n in (existing.data or []))
-
-        notes = []
-        for n in (notes_resp.data or []):
-            notes.append({
-                "id": n["id"],
-                "filename": n.get("original_filename", "Unknown"),
-                "file_size": n.get("file_size", 0),
-                "course_code": n.get("course_code"),
-                "already_added": n["id"] in existing_ids
-            })
-
-        return jsonify({"notes": notes}), 200
-
-    except Exception as e:
-        debug_log(f"Get my notes error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
 
