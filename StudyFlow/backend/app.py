@@ -7837,14 +7837,10 @@ def remove_group_note(group_id, note_id):
 
 @app.route("/api/groups/<group_id>/chat", methods=["POST"])
 @supabase_auth_required
-@account_not_frozen
 def group_chat(group_id):
-    """Send a message in the group chat. AI responds using pooled group notes."""
+    """Send a message in the group chat. Users only, no AI."""
     try:
-        from StudyFlow.backend.supabase_client import supabase, search_notes_vector, log_ai_response
-        from StudyFlow.backend.embedding_client import generate_embedding
-        from StudyFlow.backend.conversational_noteflow import generate_conversational_response
-        import time
+        from StudyFlow.backend.supabase_client import supabase
 
         # Verify membership
         member_check = supabase.table("study_group_members").select("id").eq(
@@ -7869,87 +7865,8 @@ def group_chat(group_id):
             "content": message
         }).execute()
 
-        # Get group note IDs for scoped search
-        group_notes = supabase.table("study_group_notes").select("note_id").eq("group_id", group_id).execute()
-        group_note_ids = [n["note_id"] for n in (group_notes.data or [])]
-
-        # Generate embedding and search
-        query_embedding = generate_embedding(message)
-        search_results = []
-        if query_embedding:
-            all_results = search_notes_vector(
-                query_embedding=query_embedding,
-                user_id=request.user_id,
-                university=None,
-                course_code=None,
-                match_threshold=0.4,
-                match_count=5
-            )
-            # Filter to group notes only
-            if all_results and group_note_ids:
-                search_results = [r for r in all_results if r.get("note_id") in group_note_ids]
-
-        # Build sources
-        sources = []
-        seen = set()
-        for result in search_results[:3]:
-            if result["note_id"] in seen:
-                continue
-            seen.add(result["note_id"])
-            note_data = supabase.table("notes").select("original_filename").eq("id", result["note_id"]).execute()
-            filename = note_data.data[0].get("original_filename", "Unknown") if note_data.data else "Unknown"
-            result["original_filename"] = filename
-            sources.append({
-                "note_id": result["note_id"],
-                "filename": filename,
-                "similarity": round(result["similarity"], 2)
-            })
-
-        # Get recent conversation history from group
-        history_resp = supabase.table("study_group_messages").select(
-            "role, content"
-        ).eq("group_id", group_id).order("created_at", desc=True).limit(10).execute()
-        conversation_history = list(reversed(history_resp.data or []))
-
-        # Generate AI response
-        ai_result = generate_conversational_response(
-            question=message,
-            search_results=search_results,
-            conversation_history=conversation_history
-        )
-
-        ai_response = ai_result["response"]
-
-        # Save AI response
-        supabase.table("study_group_messages").insert({
-            "group_id": group_id,
-            "user_id": None,
-            "role": "assistant",
-            "content": ai_response,
-            "sources": sources
-        }).execute()
-
-        # Provenance logging
-        try:
-            client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
-            if client_ip and ',' in client_ip:
-                client_ip = client_ip.split(',')[0].strip()
-            log_ai_response(
-                user_id=request.user_id,
-                conversation_id=group_id,
-                prompt_text=message,
-                response_text=ai_response,
-                sources_used=sources,
-                model_used=ai_result["model_used"],
-                response_time_ms=ai_result["response_time_ms"],
-                ip_address=client_ip
-            )
-        except Exception:
-            pass
-
         return jsonify({
-            "response": ai_response,
-            "sources": sources,
+            "success": True,
             "sender_username": sender_username
         }), 200
 
