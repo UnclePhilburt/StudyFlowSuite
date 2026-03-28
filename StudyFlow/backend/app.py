@@ -26,6 +26,7 @@ from StudyFlow.backend.submit_button_storage import register_submit_button_uploa
 from StudyFlow.backend.tasks import process_question_async, celery_app
 from StudyFlow.backend import tasks  # registers the Celery task
 from StudyFlow.backend.supabase_auth import supabase_auth_required, account_not_frozen  # Supabase Auth decorators
+from StudyFlow.backend.supabase_client import supabase  # Supabase client for database operations
 
 BACKEND_URL = os.environ.get("BACKEND_URL", "https://studyflowsuite.onrender.com")
 
