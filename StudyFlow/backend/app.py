@@ -1131,30 +1131,32 @@ def get_user_stats():
 @app.route("/api/user/dashboard-layout", methods=["GET"])
 @supabase_auth_required
 def get_dashboard_layout():
-    """Get user's dashboard widget layout"""
+    """Get user's dashboard widget layout and canvas pan position"""
     try:
-        conn = psycopg2.connect(os.environ["DATABASE_URL"])
-        cur = conn.cursor()
+        # Use Supabase to get dashboard_layout
+        result = supabase.table("user_profiles").select("dashboard_layout").eq("id", request.user_id).execute()
 
-        # Check if dashboard_layout column exists, if not return default
-        try:
-            cur.execute("""
-                SELECT dashboard_layout FROM user_profiles WHERE id = %s
-            """, (request.user_id,))
-            result = cur.fetchone()
-            conn.close()
-
-            if result and result[0]:
-                return jsonify({'layout': result[0]}), 200
+        if result.data and len(result.data) > 0 and result.data[0].get('dashboard_layout'):
+            data = result.data[0]['dashboard_layout']
+            # Handle both old format (array) and new format (object with layout + canvasPan)
+            if isinstance(data, list):
+                # Old format - just array of widgets
+                return jsonify({'layout': data, 'canvasPan': {'x': 0, 'y': 0}}), 200
+            elif isinstance(data, dict):
+                # New format - object with layout and canvasPan
+                return jsonify(data), 200
             else:
-                # Return default layout
-                return jsonify({'layout': ['recentConversations', 'upcomingEvents', 'studyGroups']}), 200
-
-        except psycopg2.errors.UndefinedColumn:
-            conn.close()
-            # Column doesn't exist yet, return default
-            debug_log("⚠️ dashboard_layout column doesn't exist yet, returning default")
-            return jsonify({'layout': ['recentConversations', 'upcomingEvents', 'studyGroups']}), 200
+                # Return default
+                return jsonify({
+                    'layout': ['recentConversations', 'upcomingEvents', 'studyGroups'],
+                    'canvasPan': {'x': 0, 'y': 0}
+                }), 200
+        else:
+            # Return default layout
+            return jsonify({
+                'layout': ['recentConversations', 'upcomingEvents', 'studyGroups'],
+                'canvasPan': {'x': 0, 'y': 0}
+            }), 200
 
     except Exception as e:
         debug_log(f"❌ Get dashboard layout error: {e}\n{traceback.format_exc()}")
@@ -1164,43 +1166,25 @@ def get_dashboard_layout():
 @app.route("/api/user/dashboard-layout", methods=["POST"])
 @supabase_auth_required
 def save_dashboard_layout():
-    """Save user's dashboard widget layout"""
+    """Save user's dashboard widget layout and canvas pan position"""
     try:
         data = request.get_json()
         layout = data.get('layout', [])
+        canvas_pan = data.get('canvasPan', {'x': 0, 'y': 0})
 
         if not isinstance(layout, list):
             return jsonify({'error': 'Layout must be an array'}), 400
 
-        conn = psycopg2.connect(os.environ["DATABASE_URL"])
-        cur = conn.cursor()
+        # Store as a single JSON object with both layout and canvasPan
+        dashboard_data = {
+            'layout': layout,
+            'canvasPan': canvas_pan
+        }
 
-        # Try to update dashboard_layout, if column doesn't exist yet, catch the error
-        try:
-            cur.execute("""
-                UPDATE user_profiles
-                SET dashboard_layout = %s::jsonb
-                WHERE id = %s
-            """, (json.dumps(layout), request.user_id))
-            conn.commit()
-        except psycopg2.errors.UndefinedColumn as col_error:
-            conn.rollback()
-            # Column doesn't exist yet - create it
-            debug_log(f"⚠️ dashboard_layout column doesn't exist, creating it...")
-            cur.execute("""
-                ALTER TABLE user_profiles
-                ADD COLUMN IF NOT EXISTS dashboard_layout JSONB DEFAULT '["recentConversations", "upcomingEvents", "studyGroups"]'::jsonb
-            """)
-            conn.commit()
-            # Now retry the update
-            cur.execute("""
-                UPDATE user_profiles
-                SET dashboard_layout = %s::jsonb
-                WHERE id = %s
-            """, (json.dumps(layout), request.user_id))
-            conn.commit()
-
-        conn.close()
+        # Use Supabase to update dashboard_layout
+        supabase.table("user_profiles").update({
+            "dashboard_layout": dashboard_data
+        }).eq("id", request.user_id).execute()
 
         return jsonify({'success': True}), 200
 
