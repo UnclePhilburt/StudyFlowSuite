@@ -90,6 +90,14 @@ CORS(app,
          "http://www.studyflowsuite.com",
          "http://localhost:*",
          "http://127.0.0.1:*"
+     ]}, r"/admin/*": {"origins": [
+         "https://unclephilburt.github.io",
+         "https://studyflowsuite.com",
+         "https://www.studyflowsuite.com",
+         "http://studyflowsuite.com",
+         "http://www.studyflowsuite.com",
+         "http://localhost:*",
+         "http://127.0.0.1:*"
      ]}},
      allow_headers=["Content-Type", "Authorization"],
      methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
