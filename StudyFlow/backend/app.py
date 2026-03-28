@@ -1137,21 +1137,28 @@ def get_dashboard_layout():
         cur = conn.cursor()
 
         # Check if dashboard_layout column exists, if not return default
-        cur.execute("""
-            SELECT dashboard_layout FROM user_profiles WHERE id = %s
-        """, (request.user_id,))
-        result = cur.fetchone()
-        conn.close()
+        try:
+            cur.execute("""
+                SELECT dashboard_layout FROM user_profiles WHERE id = %s
+            """, (request.user_id,))
+            result = cur.fetchone()
+            conn.close()
 
-        if result and result[0]:
-            return jsonify({'layout': result[0]}), 200
-        else:
-            # Return default layout
+            if result and result[0]:
+                return jsonify({'layout': result[0]}), 200
+            else:
+                # Return default layout
+                return jsonify({'layout': ['recentConversations', 'upcomingEvents', 'studyGroups']}), 200
+
+        except psycopg2.errors.UndefinedColumn:
+            conn.close()
+            # Column doesn't exist yet, return default
+            debug_log("⚠️ dashboard_layout column doesn't exist yet, returning default")
             return jsonify({'layout': ['recentConversations', 'upcomingEvents', 'studyGroups']}), 200
 
     except Exception as e:
-        app.logger.error(f"❌ Get dashboard layout error: {e}\n{traceback.format_exc()}")
-        return jsonify({'error': 'Failed to get dashboard layout'}), 500
+        debug_log(f"❌ Get dashboard layout error: {e}\n{traceback.format_exc()}")
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route("/api/user/dashboard-layout", methods=["POST"])
@@ -1168,21 +1175,38 @@ def save_dashboard_layout():
         conn = psycopg2.connect(os.environ["DATABASE_URL"])
         cur = conn.cursor()
 
-        # Update or create dashboard_layout
-        cur.execute("""
-            UPDATE user_profiles
-            SET dashboard_layout = %s
-            WHERE id = %s
-        """, (json.dumps(layout), request.user_id))
+        # Try to update dashboard_layout, if column doesn't exist yet, catch the error
+        try:
+            cur.execute("""
+                UPDATE user_profiles
+                SET dashboard_layout = %s::jsonb
+                WHERE id = %s
+            """, (json.dumps(layout), request.user_id))
+            conn.commit()
+        except psycopg2.errors.UndefinedColumn as col_error:
+            conn.rollback()
+            # Column doesn't exist yet - create it
+            debug_log(f"⚠️ dashboard_layout column doesn't exist, creating it...")
+            cur.execute("""
+                ALTER TABLE user_profiles
+                ADD COLUMN IF NOT EXISTS dashboard_layout JSONB DEFAULT '["recentConversations", "upcomingEvents", "studyGroups"]'::jsonb
+            """)
+            conn.commit()
+            # Now retry the update
+            cur.execute("""
+                UPDATE user_profiles
+                SET dashboard_layout = %s::jsonb
+                WHERE id = %s
+            """, (json.dumps(layout), request.user_id))
+            conn.commit()
 
-        conn.commit()
         conn.close()
 
         return jsonify({'success': True}), 200
 
     except Exception as e:
-        app.logger.error(f"❌ Save dashboard layout error: {e}\n{traceback.format_exc()}")
-        return jsonify({'error': 'Failed to save dashboard layout'}), 500
+        debug_log(f"❌ Save dashboard layout error: {e}\n{traceback.format_exc()}")
+        return jsonify({'error': str(e)}), 500
 
 
 # ============================================================================
