@@ -8403,7 +8403,12 @@ def review_note(note_id):
         note = note_resp.data[0]
 
         if action == "approve":
-            supabase.table("notes").update({"reviewed": True}).eq("id", note_id).execute()
+            # Use RPC to bypass PostgREST schema cache issues
+            try:
+                supabase.rpc("mark_note_reviewed", {"note_uuid": note_id}).execute()
+            except Exception:
+                # Fallback to direct update
+                supabase.table("notes").update({"reviewed": True}).eq("id", note_id).execute()
             debug_log(f"[Review] Approved note {note_id}")
         else:
             reason = data.get("reason", "Does not meet quality standards")
