@@ -6063,6 +6063,59 @@ def submit_dmca_report():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/dmca/reports", methods=["GET"])
+def list_dmca_reports():
+    """ADMIN ONLY: List all DMCA reports."""
+    try:
+        admin_key = request.args.get("key", "")
+        if admin_key != os.getenv("ADMIN_KEY", "change_me_in_production"):
+            return jsonify({"error": "Unauthorized"}), 403
+
+        from StudyFlow.backend.supabase_client import supabase
+
+        reports = supabase.table("dmca_takedowns").select("*").order("created_at", desc=True).execute()
+
+        results = []
+        for r in (reports.data or []):
+            # Get note info
+            note_info = {}
+            if r.get("note_id"):
+                note_resp = supabase.table("notes").select(
+                    "original_filename, university, course_code, is_public"
+                ).eq("id", r["note_id"]).execute()
+                if note_resp.data:
+                    note_info = note_resp.data[0]
+
+            # Get uploader username
+            uploader_name = "Unknown"
+            if r.get("uploader_id"):
+                profile = supabase.table("user_profiles").select("username, email").eq("id", r["uploader_id"]).execute()
+                if profile.data:
+                    uploader_name = profile.data[0].get("username") or profile.data[0].get("email", "Unknown")
+
+            results.append({
+                "id": r["id"],
+                "note_id": r.get("note_id"),
+                "note_filename": note_info.get("original_filename", "Unknown"),
+                "note_university": note_info.get("university"),
+                "note_course": note_info.get("course_code"),
+                "note_is_public": note_info.get("is_public", True),
+                "uploader_id": r.get("uploader_id"),
+                "uploader_name": uploader_name,
+                "reporter_email": r.get("reporter_email"),
+                "reporter_name": r.get("reporter_name"),
+                "reason": r.get("takedown_reason"),
+                "status": r.get("status", "pending"),
+                "created_at": r.get("created_at")
+            })
+
+        return jsonify({"reports": results}), 200
+
+    except Exception as e:
+        debug_log(f"List DMCA reports error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/dmca/process/<takedown_id>", methods=["POST"])
 def process_dmca_takedown(takedown_id):
     """
