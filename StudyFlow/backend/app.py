@@ -8339,14 +8339,17 @@ def review_queue():
 
         from StudyFlow.backend.supabase_client import supabase
 
-        # Get notes -- try filtering by reviewed, fallback to fetching all
+        # Get IDs of already-reviewed notes
+        reviewed_resp = supabase.table("reviewed_notes").select("note_id").execute()
+        reviewed_ids = set(r["note_id"] for r in (reviewed_resp.data or []))
+
+        # Get all notes
         notes_resp = supabase.table("notes").select(
             "id, user_id, original_filename, file_size, university, course_code, file_path, uploaded_at, is_public"
         ).order("uploaded_at").limit(200).execute()
-        # Filter unreviewed in Python (works even if PostgREST schema cache hasn't picked up the column)
-        all_notes = notes_resp.data or []
-        # Try to check reviewed field; if column not visible via API yet, show all
-        unreviewed = [n for n in all_notes if not n.get("reviewed", False)][:50]
+
+        # Filter out already reviewed
+        unreviewed = [n for n in (notes_resp.data or []) if n["id"] not in reviewed_ids][:50]
 
         notes = []
         uploader_cache = {}
@@ -8403,12 +8406,10 @@ def review_note(note_id):
         note = note_resp.data[0]
 
         if action == "approve":
-            # Use RPC to bypass PostgREST schema cache issues
-            try:
-                supabase.rpc("mark_note_reviewed", {"note_uuid": note_id}).execute()
-            except Exception:
-                # Fallback to direct update
-                supabase.table("notes").update({"reviewed": True}).eq("id", note_id).execute()
+            supabase.table("reviewed_notes").upsert({
+                "note_id": note_id,
+                "action": "approved"
+            }).execute()
             debug_log(f"[Review] Approved note {note_id}")
         else:
             reason = data.get("reason", "Does not meet quality standards")
