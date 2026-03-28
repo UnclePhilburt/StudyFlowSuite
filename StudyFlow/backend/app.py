@@ -8410,6 +8410,30 @@ def review_note(note_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/admin/note-preview/<note_id>", methods=["GET"])
+def admin_note_preview(note_id):
+    """ADMIN: Get a signed URL for previewing a note."""
+    try:
+        admin_key = request.args.get("key", "")
+        if admin_key != os.getenv("ADMIN_KEY", "change_me_in_production"):
+            return jsonify({"error": "Unauthorized"}), 403
+
+        from StudyFlow.backend.supabase_client import supabase
+
+        note = supabase.table("notes").select("file_path, original_filename").eq("id", note_id).execute()
+        if not note.data or not note.data[0].get("file_path"):
+            return jsonify({"error": "Note not found"}), 404
+
+        signed = supabase.storage.from_("note-files").create_signed_url(note.data[0]["file_path"], 3600)
+        url = signed.get("signedURL") or signed.get("signedUrl", "")
+
+        return jsonify({"url": url, "filename": note.data[0].get("original_filename")}), 200
+
+    except Exception as e:
+        debug_log(f"Admin note preview error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/admin/university-stats", methods=["GET"])
 def university_stats():
     """Per-university metrics for institutional license sales pitches."""
