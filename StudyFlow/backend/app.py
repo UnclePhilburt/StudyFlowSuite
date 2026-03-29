@@ -1254,6 +1254,55 @@ def update_user_preferences():
         return jsonify({'success': True, 'preferences': {}}), 200
 
 
+@app.route("/api/leaderboard", methods=["GET"])
+@supabase_auth_required
+def get_leaderboard():
+    """Get top contributors to the Nexus (leaderboard)"""
+    try:
+        # Get top contributors by total pages uploaded
+        # Join user_profiles with aggregated note data
+        result = supabase.rpc("get_nexus_leaderboard", {
+            "limit_count": 20
+        }).execute()
+
+        if result.data:
+            return jsonify(result.data), 200
+        else:
+            # Fallback: manually aggregate if RPC doesn't exist
+            from collections import defaultdict
+
+            # Get all notes with user info
+            notes = supabase.table("notes").select("user_id, page_count").eq("is_public", True).execute()
+
+            # Aggregate pages by user
+            user_pages = defaultdict(int)
+            for note in notes.data:
+                user_pages[note['user_id']] += note.get('page_count', 0)
+
+            # Get user profiles for top contributors
+            top_users = sorted(user_pages.items(), key=lambda x: x[1], reverse=True)[:20]
+
+            leaderboard = []
+            for user_id, pages in top_users:
+                try:
+                    profile = supabase.table("user_profiles").select("username, university").eq("id", user_id).single().execute()
+                    if profile.data:
+                        leaderboard.append({
+                            "user_id": user_id,
+                            "username": profile.data.get('username'),
+                            "university": profile.data.get('university'),
+                            "pages_contributed": pages
+                        })
+                except:
+                    pass
+
+            return jsonify(leaderboard), 200
+
+    except Exception as e:
+        debug_log(f"❌ Leaderboard error: {e}\n{traceback.format_exc()}")
+        return jsonify([]), 200
+
+
 # ============================================================================
 # END USER AUTHENTICATION & SUBSCRIPTION ROUTES
 # ============================================================================
