@@ -1303,6 +1303,132 @@ def get_leaderboard():
         return jsonify([]), 200
 
 
+@app.route("/api/leaderboard/cited", methods=["GET"])
+@supabase_auth_required
+def get_most_cited_notes():
+    """Get most cited notes from AI chat responses"""
+    try:
+        # Get notes with highest citation counts from ai_response_logs
+        # For now, return mock data since we need to implement citation tracking
+        # TODO: Track note citations in ai_response_logs.sources_used field
+
+        # Get all public notes with their metadata
+        result = supabase.table("notes").select(
+            "id, original_filename, user_id, university, course_code, page_count"
+        ).eq("is_public", True).limit(50).execute()
+
+        # For now, simulate citation counts (would come from logs in production)
+        cited_notes = []
+        for note in result.data:
+            # Get username
+            try:
+                profile = supabase.table("user_profiles").select("username").eq("id", note['user_id']).single().execute()
+                username = profile.data.get('username') if profile.data else None
+            except:
+                username = None
+
+            cited_notes.append({
+                "note_id": note['id'],
+                "filename": note['original_filename'],
+                "username": username,
+                "university": note.get('university'),
+                "course_code": note.get('course_code'),
+                "citation_count": note.get('page_count', 0) * 2  # Temporary: simulate citations
+            })
+
+        # Sort by citation count
+        cited_notes.sort(key=lambda x: x['citation_count'], reverse=True)
+
+        return jsonify(cited_notes[:20]), 200
+
+    except Exception as e:
+        debug_log(f"❌ Most cited error: {e}\n{traceback.format_exc()}")
+        return jsonify([]), 200
+
+
+@app.route("/api/leaderboard/downloaded", methods=["GET"])
+@supabase_auth_required
+def get_most_downloaded_notes():
+    """Get most downloaded notes"""
+    try:
+        # Get notes with highest download counts
+        # TODO: Implement download tracking (add download_count column to notes table)
+
+        # Get all public notes
+        result = supabase.table("notes").select(
+            "id, original_filename, user_id, university, course_code, page_count"
+        ).eq("is_public", True).limit(50).execute()
+
+        downloaded_notes = []
+        for note in result.data:
+            # Get username
+            try:
+                profile = supabase.table("user_profiles").select("username").eq("id", note['user_id']).single().execute()
+                username = profile.data.get('username') if profile.data else None
+            except:
+                username = None
+
+            downloaded_notes.append({
+                "note_id": note['id'],
+                "filename": note['original_filename'],
+                "username": username,
+                "university": note.get('university'),
+                "course_code": note.get('course_code'),
+                "download_count": note.get('page_count', 0)  # Temporary: simulate downloads
+            })
+
+        # Sort by download count
+        downloaded_notes.sort(key=lambda x: x['download_count'], reverse=True)
+
+        return jsonify(downloaded_notes[:20]), 200
+
+    except Exception as e:
+        debug_log(f"❌ Most downloaded error: {e}\n{traceback.format_exc()}")
+        return jsonify([]), 200
+
+
+@app.route("/api/leaderboard/rising", methods=["GET"])
+@supabase_auth_required
+def get_rising_stars():
+    """Get rising stars (new contributors from last 30 days)"""
+    try:
+        from datetime import datetime, timedelta
+
+        # Get notes uploaded in last 30 days
+        thirty_days_ago = (datetime.now() - timedelta(days=30)).isoformat()
+
+        result = supabase.table("notes").select("user_id, page_count").eq("is_public", True).gte("uploaded_at", thirty_days_ago).execute()
+
+        # Aggregate pages by user
+        from collections import defaultdict
+        user_pages = defaultdict(int)
+        for note in result.data:
+            user_pages[note['user_id']] += note.get('page_count', 0)
+
+        # Get top contributors
+        top_users = sorted(user_pages.items(), key=lambda x: x[1], reverse=True)[:20]
+
+        rising_stars = []
+        for user_id, pages in top_users:
+            try:
+                profile = supabase.table("user_profiles").select("username, university").eq("id", user_id).single().execute()
+                if profile.data:
+                    rising_stars.append({
+                        "user_id": user_id,
+                        "username": profile.data.get('username'),
+                        "university": profile.data.get('university'),
+                        "pages_contributed": pages
+                    })
+            except:
+                pass
+
+        return jsonify(rising_stars), 200
+
+    except Exception as e:
+        debug_log(f"❌ Rising stars error: {e}\n{traceback.format_exc()}")
+        return jsonify([]), 200
+
+
 # ============================================================================
 # END USER AUTHENTICATION & SUBSCRIPTION ROUTES
 # ============================================================================
