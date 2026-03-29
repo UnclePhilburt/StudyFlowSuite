@@ -207,23 +207,29 @@ def generate_conversational_response(
         wikipedia_articles = []  # Track Wikipedia articles for attribution
         student_note_count = 0  # Count student notes without usernames
 
-        for result in search_results[:3]:  # Use top 3 results
-            text = result.get('content_summary') or result.get('chunk_text', '')
-            context_chunks.append(text)
+        # Use top 3 results for context, but collect ALL contributors for consensus citation
+        for i, result in enumerate(search_results):
+            # Only use first 3 for actual context
+            if i < 3:
+                text = result.get('content_summary') or result.get('chunk_text', '')
+                context_chunks.append(text)
 
+            # Collect ALL contributors (not just first 3) for consensus attribution
             # Check if this is a Wikipedia source
             if result.get('university') == 'Wikipedia':
                 # Extract article title from original_filename (stored in result during search)
                 if result.get('original_filename'):
                     article_title = result['original_filename'].replace('.txt', '')
-                    wikipedia_articles.append(article_title)
+                    if article_title not in wikipedia_articles:  # Avoid duplicates
+                        wikipedia_articles.append(article_title)
             else:
                 # Collect username if available (for student notes)
                 if result.get('username'):
                     contributors.add(result.get('username'))
                 else:
                     # Count anonymous student notes
-                    student_note_count += 1
+                    if i < 3:  # Only count anonymous notes in context
+                        student_note_count += 1
 
         context = "\n\n".join(context_chunks)
 
