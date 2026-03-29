@@ -1457,6 +1457,46 @@ def get_rising_stars():
         return jsonify([]), 200
 
 
+@app.route("/api/leaderboard/universities", methods=["GET"])
+@supabase_auth_required
+def get_university_leaderboard():
+    """Get university leaderboard - Springfield Showdown style"""
+    try:
+        from collections import defaultdict
+
+        # Get all public notes with university info
+        result = supabase.table("notes").select("university, page_count, user_id").eq("is_public", True).execute()
+
+        # Aggregate stats by university
+        university_stats = defaultdict(lambda: {"total_pages": 0, "total_notes": 0, "contributors": set()})
+
+        for note in result.data:
+            university = note.get('university')
+            if university:
+                university_stats[university]["total_pages"] += note.get('page_count', 0)
+                university_stats[university]["total_notes"] += 1
+                university_stats[university]["contributors"].add(note['user_id'])
+
+        # Convert to list and sort by total pages
+        leaderboard = []
+        for university, stats in university_stats.items():
+            leaderboard.append({
+                "university": university,
+                "total_pages": stats["total_pages"],
+                "total_notes": stats["total_notes"],
+                "contributor_count": len(stats["contributors"])
+            })
+
+        # Sort by total pages contributed
+        leaderboard.sort(key=lambda x: x['total_pages'], reverse=True)
+
+        return jsonify(leaderboard), 200
+
+    except Exception as e:
+        debug_log(f"❌ University leaderboard error: {e}\n{traceback.format_exc()}")
+        return jsonify([]), 200
+
+
 # ============================================================================
 # END USER AUTHENTICATION & SUBSCRIPTION ROUTES
 # ============================================================================
