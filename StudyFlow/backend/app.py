@@ -1464,16 +1464,26 @@ def get_university_leaderboard():
     try:
         from collections import defaultdict
 
+        # Get list of valid universities from user_profiles (universities users have selected from dropdown)
+        profiles = supabase.table("user_profiles").select("university").execute()
+        valid_universities = set()
+        for profile in profiles.data:
+            uni = profile.get('university')
+            if uni and 'wikipedia' not in uni.lower():
+                valid_universities.add(uni)
+
+        debug_log(f"[*] Valid universities from user profiles: {len(valid_universities)}")
+
         # Get all public notes with university info
         result = supabase.table("notes").select("university, page_count, user_id").eq("is_public", True).execute()
 
-        # Aggregate stats by university
+        # Aggregate stats by university (only valid ones)
         university_stats = defaultdict(lambda: {"total_pages": 0, "total_notes": 0, "contributors": set()})
 
         for note in result.data:
             university = note.get('university')
-            # Filter out Wikipedia and other non-university sources
-            if university and 'wikipedia' not in university.lower():
+            # Only include universities that exist in user_profiles (from official dropdown)
+            if university and university in valid_universities:
                 university_stats[university]["total_pages"] += note.get('page_count', 0)
                 university_stats[university]["total_notes"] += 1
                 university_stats[university]["contributors"].add(note['user_id'])
