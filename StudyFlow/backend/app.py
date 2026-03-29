@@ -4083,17 +4083,25 @@ def chat_with_notes():
 
         debug_log(f"💬 Chat message in conversation {conv_id}: '{message[:50]}...'")
 
-        # Get user's primary university (most common from their notes) for priority search
+        # Get user's university from their account settings (MSU Lane prioritization)
         user_university = None
         try:
-            user_notes = supabase.table("notes").select("university").eq("user_id", request.user_id).execute()
-            if user_notes.data:
-                # Find most common university
-                from collections import Counter
-                universities = [n.get('university') for n in user_notes.data if n.get('university')]
-                if universities:
-                    user_university = Counter(universities).most_common(1)[0][0]
-                    debug_log(f"🎓 User's primary university: {user_university}")
+            # First, try to get university from user profile (account settings)
+            from StudyFlow.backend.supabase_client import get_user_profile
+            user_profile = get_user_profile(request.user_id)
+
+            if user_profile and user_profile.get('university'):
+                user_university = user_profile.get('university')
+                debug_log(f"🎓 User's university from profile: {user_university}")
+            else:
+                # Fallback: Infer from their most common note university
+                user_notes = supabase.table("notes").select("university").eq("user_id", request.user_id).execute()
+                if user_notes.data:
+                    from collections import Counter
+                    universities = [n.get('university') for n in user_notes.data if n.get('university')]
+                    if universities:
+                        user_university = Counter(universities).most_common(1)[0][0]
+                        debug_log(f"🎓 User's university inferred from notes: {user_university}")
         except Exception as e:
             debug_log(f"⚠️ Could not determine user university: {e}")
 
