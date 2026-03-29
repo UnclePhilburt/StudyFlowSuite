@@ -3,7 +3,7 @@
 
 CREATE TABLE IF NOT EXISTS ai_response_ratings (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    message_id UUID NOT NULL,  -- Links to conversation_messages table
+    message_id TEXT NOT NULL,  -- Unique message identifier (not a UUID)
     conversation_id UUID NOT NULL,  -- Links to conversations table
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     vote SMALLINT NOT NULL CHECK (vote IN (-1, 1)),  -- -1 = downvote, 1 = upvote
