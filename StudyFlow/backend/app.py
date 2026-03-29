@@ -1508,6 +1508,130 @@ def get_university_leaderboard():
         return jsonify([]), 200
 
 
+@app.route("/api/my-stats/citation-rank", methods=["GET"])
+@supabase_auth_required
+def get_my_citation_rank():
+    """Get current user's rank by citation count"""
+    try:
+        from collections import defaultdict
+
+        # Get all AI response logs with sources
+        logs = supabase.table("ai_response_logs").select("sources_used").execute()
+
+        # Count citations per note_id (and track which user owns each note)
+        note_citations = defaultdict(int)
+        note_owners = {}
+
+        for log in logs.data:
+            sources = log.get('sources_used') or []
+            for source in sources:
+                note_id = source.get('note_id')
+                if note_id:
+                    note_citations[note_id] += 1
+
+        # Get note owners
+        if note_citations:
+            note_ids = list(note_citations.keys())
+            notes = supabase.table("notes").select("id, user_id").in_("id", note_ids).execute()
+            for note in notes.data:
+                note_owners[note['id']] = note['user_id']
+
+        # Aggregate citations by user
+        user_citations = defaultdict(int)
+        for note_id, count in note_citations.items():
+            user_id = note_owners.get(note_id)
+            if user_id:
+                user_citations[user_id] += count
+
+        # Sort users by citation count
+        sorted_users = sorted(user_citations.items(), key=lambda x: x[1], reverse=True)
+
+        # Find current user's rank
+        my_rank = None
+        my_citations = user_citations.get(request.user_id, 0)
+        total_ranked_users = len(sorted_users)
+
+        for index, (user_id, count) in enumerate(sorted_users):
+            if user_id == request.user_id:
+                my_rank = index + 1
+                break
+
+        # If user has no citations, they're unranked
+        if my_rank is None:
+            my_rank = total_ranked_users + 1 if total_ranked_users > 0 else 1
+
+        return jsonify({
+            "rank": my_rank,
+            "citation_count": my_citations,
+            "total_users": max(total_ranked_users, my_rank)
+        }), 200
+
+    except Exception as e:
+        debug_log(f"❌ Citation rank error: {e}\n{traceback.format_exc()}")
+        return jsonify({"rank": 0, "citation_count": 0, "total_users": 0}), 200
+
+
+@app.route("/api/my-stats/university-rank", methods=["GET"])
+@supabase_auth_required
+def get_my_university_rank():
+    """Get current user's university rank"""
+    try:
+        from collections import defaultdict
+
+        # Get user's university
+        profile = supabase.table("user_profiles").select("university").eq("id", request.user_id).single().execute()
+        my_university = profile.data.get('university') if profile.data else None
+
+        if not my_university:
+            return jsonify({"rank": 0, "university": None, "total_pages": 0, "total_universities": 0}), 200
+
+        # Get list of valid universities
+        profiles = supabase.table("user_profiles").select("university").execute()
+        valid_universities = set()
+        for p in profiles.data:
+            uni = p.get('university')
+            if uni and 'wikipedia' not in uni.lower():
+                valid_universities.add(uni)
+
+        # Get all public notes with university info
+        result = supabase.table("notes").select("university, page_count").eq("is_public", True).execute()
+
+        # Aggregate stats by university
+        university_pages = defaultdict(int)
+        for note in result.data:
+            university = note.get('university')
+            if university and university in valid_universities:
+                university_pages[university] += note.get('page_count', 0)
+
+        # Sort universities by total pages
+        sorted_universities = sorted(university_pages.items(), key=lambda x: x[1], reverse=True)
+
+        # Find my university's rank
+        my_rank = None
+        my_pages = university_pages.get(my_university, 0)
+        total_universities = len(sorted_universities)
+
+        for index, (university, pages) in enumerate(sorted_universities):
+            if university == my_university:
+                my_rank = index + 1
+                break
+
+        # If university has no pages, it's unranked
+        if my_rank is None:
+            my_rank = total_universities + 1 if total_universities > 0 else 1
+
+        return jsonify({
+            "rank": my_rank,
+            "university": my_university,
+            "total_pages": my_pages,
+            "total_universities": max(total_universities, my_rank)
+        }), 200
+
+    except Exception as e:
+        debug_log(f"❌ University rank error: {e}\n{traceback.format_exc()}")
+        return jsonify({"rank": 0, "university": None, "total_pages": 0, "total_universities": 0}), 200
+
+
 # ============================================================================
 # END USER AUTHENTICATION & SUBSCRIPTION ROUTES
 # ============================================================================
