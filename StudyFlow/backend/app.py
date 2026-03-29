@@ -1194,6 +1194,53 @@ def save_dashboard_layout():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route("/api/user/preferences", methods=["GET"])
+@supabase_auth_required
+def get_user_preferences():
+    """Get user's preferences (theme, etc.)"""
+    try:
+        result = supabase.table("user_profiles").select("preferences").eq("id", request.user_id).execute()
+
+        if result.data and len(result.data) > 0:
+            preferences = result.data[0].get('preferences') or {}
+            return jsonify(preferences), 200
+        else:
+            # Return default preferences
+            return jsonify({'theme': 'default'}), 200
+
+    except Exception as e:
+        debug_log(f"❌ Get preferences error: {e}\n{traceback.format_exc()}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route("/api/user/preferences", methods=["PATCH"])
+@supabase_auth_required
+def update_user_preferences():
+    """Update user's preferences (theme, etc.)"""
+    try:
+        updates = request.get_json()
+
+        # Get current preferences
+        result = supabase.table("user_profiles").select("preferences").eq("id", request.user_id).execute()
+        current_prefs = {}
+        if result.data and len(result.data) > 0:
+            current_prefs = result.data[0].get('preferences') or {}
+
+        # Merge updates with current preferences
+        current_prefs.update(updates)
+
+        # Save back to database
+        supabase.table("user_profiles").update({
+            "preferences": current_prefs
+        }).eq("id", request.user_id).execute()
+
+        return jsonify({'success': True, 'preferences': current_prefs}), 200
+
+    except Exception as e:
+        debug_log(f"❌ Update preferences error: {e}\n{traceback.format_exc()}")
+        return jsonify({'error': str(e)}), 500
+
+
 # ============================================================================
 # END USER AUTHENTICATION & SUBSCRIPTION ROUTES
 # ============================================================================
