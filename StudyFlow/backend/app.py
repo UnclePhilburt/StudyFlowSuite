@@ -4023,22 +4023,43 @@ def chat_with_notes():
 
         debug_log(f"💬 Chat message in conversation {conv_id}: '{message[:50]}...'")
 
+        # Get user's primary university (most common from their notes) for priority search
+        user_university = None
+        try:
+            user_notes = supabase.table("notes").select("university").eq("user_id", request.user_id).execute()
+            if user_notes.data:
+                # Find most common university
+                from collections import Counter
+                universities = [n.get('university') for n in user_notes.data if n.get('university')]
+                if universities:
+                    user_university = Counter(universities).most_common(1)[0][0]
+                    debug_log(f"🎓 User's primary university: {user_university}")
+        except Exception as e:
+            debug_log(f"⚠️ Could not determine user university: {e}")
+
         # Generate embedding for the question
         query_embedding = generate_embedding(message)
         if not query_embedding:
             return jsonify({"error": "Failed to generate query embedding"}), 500
 
-        # Search database for relevant content
+        # Search database for relevant content (increased count for consensus)
         search_results = search_notes_vector(
             query_embedding=query_embedding,
             user_id=request.user_id,
-            university=None,
+            university=None,  # Not filtering, just using for prioritization
             course_code=None,
             match_threshold=0.4,
-            match_count=5
+            match_count=15  # Increased from 5 to show more sources for consensus
         )
 
         debug_log(f"🔍 Found {len(search_results) if search_results else 0} relevant chunks")
+
+        # Prioritize results from same university (MSU Lane)
+        if user_university and search_results:
+            same_uni = [r for r in search_results if r.get('university') == user_university]
+            diff_uni = [r for r in search_results if r.get('university') != user_university]
+            search_results = same_uni + diff_uni
+            debug_log(f"🎯 Prioritized {len(same_uni)} results from {user_university}")
 
         # Filter to personal notes only if requested
         if search_scope == 'personal' and search_results:
@@ -4048,16 +4069,15 @@ def chat_with_notes():
             search_results = [r for r in search_results if r['note_id'] in personal_note_ids]
             debug_log(f"Filtered to {len(search_results)} personal chunks")
 
-        # Add search result metadata and enrich with missing fields
+        # Add search result metadata and enrich with missing fields (CONSENSUS: show all sources)
         sources = []
         seen_note_ids = set()
         if search_results:
-            for result in search_results:  # Deduplicate by note_id, up to 3 unique notes
+            for result in search_results:  # Deduplicate by note_id, show ALL for consensus
                 if result['note_id'] in seen_note_ids:
                     continue
                 seen_note_ids.add(result['note_id'])
-                if len(sources) >= 3:
-                    break
+                # REMOVED 3-source limit to show consensus from multiple students
                 note_result = supabase.table("notes").select("original_filename, user_id, university, course_code").eq("id", result['note_id']).execute()
                 note_data = note_result.data[0] if note_result.data else {}
                 filename = note_data.get('original_filename', 'Unknown')
