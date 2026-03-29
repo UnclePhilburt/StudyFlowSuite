@@ -6,14 +6,13 @@ MEDIA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "Media")
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QPushButton, QVBoxLayout, QLabel,
-    QHBoxLayout, QGraphicsDropShadowEffect, QSplashScreen, QTabBar,
-    QStackedWidget, QMenu
+    QHBoxLayout, QGraphicsDropShadowEffect, QSplashScreen, QGridLayout, QFrame
 )
 from PySide6.QtGui import (
-    QFont, QPixmap, QColor, QPainter, QLinearGradient, QBrush, QAction
+    QFont, QPixmap, QColor, QPainter
 )
 from PySide6.QtCore import (
-    Qt, QPoint, QRect, QPropertyAnimation, QEasingCurve, QTimer
+    Qt, QPropertyAnimation, QEasingCurve, QTimer, QRect
 )
 
 # Attempt to import your quiz GUI, or use a placeholder.
@@ -27,402 +26,339 @@ except ImportError as e:
             self.setWindowTitle("Quiz Window Placeholder")
 
 ###############################################################################
-# GradientWidget: Pastel background with rounded corners
+# ZenCard: Minimal card with subtle hover effect
 ###############################################################################
-class GradientWidget(QWidget):
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-        rect = self.rect()
-        gradient = QLinearGradient(rect.topLeft(), rect.bottomLeft())
-        gradient.setColorAt(0, QColor(220, 239, 255))  # Light pastel at top
-        gradient.setColorAt(1, QColor(174, 201, 245))  # Slightly darker pastel
-        painter.setBrush(QBrush(gradient))
-        corner_radius = 16
-        painter.setPen(Qt.NoPen)
-        painter.drawRoundedRect(rect, corner_radius, corner_radius)
-        super().paintEvent(event)
-
-###############################################################################
-# GlowButton: Red glow on hover, more rounded corners
-###############################################################################
-class GlowButton(QPushButton):
-    def __init__(self, text="", parent=None):
-        super().__init__(text, parent)
+class ZenCard(QFrame):
+    def __init__(self, title, description, icon_path, button_text, parent=None):
+        super().__init__(parent)
         self.setStyleSheet("""
-            QPushButton {
-                background-color: #ff5f5f;
-                color: white;
-                font-size: 16px;
-                font-weight: 600;
-                border-radius: 30px;
-                padding: 6px 12px;
+            QFrame {
+                background-color: #FFFFFF;
+                border-radius: 12px;
+                border: 1px solid #E8E5E1;
             }
-            QPushButton:hover {
-                background-color: #ff2f2f;
+            QFrame:hover {
+                border: 1px solid #8B9D83;
             }
         """)
-        self.setFixedHeight(40)
 
-    def enterEvent(self, event):
+        # Add subtle shadow
         shadow = QGraphicsDropShadowEffect(self)
         shadow.setBlurRadius(20)
-        shadow.setColor(QColor(255, 47, 47, 150))
-        shadow.setOffset(0, 0)
+        shadow.setColor(QColor(0, 0, 0, 20))
+        shadow.setOffset(0, 4)
         self.setGraphicsEffect(shadow)
+
+        # Layout
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(32, 32, 32, 32)
+        layout.setSpacing(20)
+
+        # Icon
+        icon_label = QLabel(self)
+        pixmap = QPixmap(icon_path)
+        pixmap = pixmap.scaled(80, 80, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        icon_label.setPixmap(pixmap)
+        icon_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(icon_label)
+
+        # Title
+        title_label = QLabel(title, self)
+        title_label.setAlignment(Qt.AlignCenter)
+        title_label.setStyleSheet("""
+            font-size: 24px;
+            font-weight: 500;
+            color: #2C2C2C;
+            letter-spacing: -0.5px;
+        """)
+        layout.addWidget(title_label)
+
+        # Description
+        desc_label = QLabel(description, self)
+        desc_label.setAlignment(Qt.AlignCenter)
+        desc_label.setWordWrap(True)
+        desc_label.setStyleSheet("""
+            font-size: 14px;
+            font-weight: 400;
+            color: #6B6B6B;
+            line-height: 1.7;
+        """)
+        layout.addWidget(desc_label)
+
+        layout.addStretch()
+
+        # Button
+        self.action_button = QPushButton(button_text, self)
+        self.action_button.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                color: #8B9D83;
+                font-size: 15px;
+                font-weight: 500;
+                border: 2px solid #8B9D83;
+                border-radius: 8px;
+                padding: 12px 24px;
+            }
+            QPushButton:hover {
+                background-color: #8B9D83;
+                color: white;
+            }
+        """)
+        layout.addWidget(self.action_button, alignment=Qt.AlignCenter)
+
+        # Animation properties
+        self._hover_anim = None
+        self._original_geometry = None
+
+    def enterEvent(self, event):
+        """Subtle lift on hover"""
+        self._original_geometry = self.geometry()
+        self._hover_anim = QPropertyAnimation(self, b"geometry")
+        self._hover_anim.setDuration(200)
+        self._hover_anim.setEasingCurve(QEasingCurve.OutCubic)
+        geo = self.geometry()
+        self._hover_anim.setStartValue(geo)
+        self._hover_anim.setEndValue(QRect(geo.x(), geo.y() - 4, geo.width(), geo.height()))
+        self._hover_anim.start()
         super().enterEvent(event)
 
     def leaveEvent(self, event):
-        self.setGraphicsEffect(None)
+        """Return to original position"""
+        if self._original_geometry:
+            self._hover_anim = QPropertyAnimation(self, b"geometry")
+            self._hover_anim.setDuration(200)
+            self._hover_anim.setEasingCurve(QEasingCurve.OutCubic)
+            self._hover_anim.setStartValue(self.geometry())
+            self._hover_anim.setEndValue(self._original_geometry)
+            self._hover_anim.start()
         super().leaveEvent(event)
 
 ###############################################################################
-# ModernMenu QMainWindow (Main Application Window)
+# ZenDashboard: Complete redesign with dashboard tiles
 ###############################################################################
-class ModernMenu(QMainWindow):
+class ZenDashboard(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("StudyFlow")
         self.setWindowFlags(Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_TranslucentBackground, True)
-        self.resize(600, 400)
+        self.resize(1100, 720)
 
         # Fade-in animation
         self.setWindowOpacity(0)
         self.fade_anim = QPropertyAnimation(self, b"windowOpacity")
-        self.fade_anim.setDuration(800)
+        self.fade_anim.setDuration(600)
         self.fade_anim.setStartValue(0)
         self.fade_anim.setEndValue(1)
-        self.fade_anim.setEasingCurve(QEasingCurve.InOutQuad)
+        self.fade_anim.setEasingCurve(QEasingCurve.OutCubic)
         self.fade_anim.start()
 
-        # Drop shadow
+        # Main container
+        self.main_widget = QWidget(self)
+        self.main_widget.setStyleSheet("""
+            QWidget {
+                background-color: #FAF8F5;
+                border-radius: 16px;
+            }
+        """)
+        self.setCentralWidget(self.main_widget)
+
+        # Drop shadow on window
         shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(40)
-        shadow.setOffset(0, 0)
-        shadow.setColor(QColor(0, 0, 0, 180))
+        shadow.setBlurRadius(60)
+        shadow.setOffset(0, 10)
+        shadow.setColor(QColor(0, 0, 0, 40))
         self.setGraphicsEffect(shadow)
 
-        # Main gradient background
-        self.gradient_widget = GradientWidget(self)
-        self.setCentralWidget(self.gradient_widget)
-
-        # Main vertical layout
-        self.main_layout = QVBoxLayout(self.gradient_widget)
-        self.main_layout.setContentsMargins(16, 16, 16, 16)
-        self.main_layout.setSpacing(10)
+        # Main layout
+        main_layout = QVBoxLayout(self.main_widget)
+        main_layout.setContentsMargins(48, 48, 48, 48)
+        main_layout.setSpacing(40)
 
         # ---------------------------
-        # Top Bar
+        # Header Section
         # ---------------------------
-        self.top_bar = QWidget(self.gradient_widget)
-        self.top_bar_layout = QHBoxLayout(self.top_bar)
-        self.top_bar_layout.setContentsMargins(0, 0, 0, 0)
-        self.top_bar_layout.setSpacing(10)
+        header_layout = QHBoxLayout()
 
-        # "StudyFlow" label
-        self.title_label = QLabel("StudyFlow", self.top_bar)
-        self.title_label.setStyleSheet("color: #333333; font-size: 18px; font-weight: bold;")
-        self.top_bar_layout.addWidget(self.title_label)
+        # Logo and title
+        logo_title_layout = QVBoxLayout()
+        logo_title_layout.setSpacing(12)
 
-        # Spacer
-        spacer = QWidget()
-        spacer.setFixedWidth(20)
-        self.top_bar_layout.addWidget(spacer)
+        # Small logo
+        logo_label = QLabel(self)
+        logo_pixmap = QPixmap(os.path.join(MEDIA_DIR, "StudyFlow.png"))
+        logo_pixmap = logo_pixmap.scaled(48, 48, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        logo_label.setPixmap(logo_pixmap)
+        logo_title_layout.addWidget(logo_label)
 
-        # Tab bar - now with four tabs: Home, FreeFlow, FocusFlow, DeepFlow
-        self.tab_bar = QTabBar(self.top_bar)
-        self.tab_bar.setStyleSheet("""
-            QTabBar::tab {
-                background: transparent;
-                border: none;
-                font-weight: bold;
-                color: #333333;
-                font-size: 14px;
-                padding: 4px 8px;
-            }
-            QTabBar::tab:hover {
-                background-color: rgba(255, 95, 95, 0.1);
-                border-radius: 4px;
-            }
-            QTabBar::tab:selected {
-                background: transparent;
-                border: none;
-                color: #ff5f5f;
-            }
+        # Title
+        title_label = QLabel("StudyFlow", self)
+        title_label.setStyleSheet("""
+            font-size: 28px;
+            font-weight: 300;
+            color: #2C2C2C;
+            letter-spacing: -0.5px;
         """)
-        self.tab_bar.addTab("Home")       # index 0
-        self.tab_bar.addTab("FreeFlow")     # index 1
-        self.tab_bar.addTab("FocusFlow")    # index 2
-        self.tab_bar.addTab("DeepFlow")     # index 3
-        self.tab_bar.setCurrentIndex(0)
-        self.tab_bar.currentChanged.connect(self.slide_to_index)
-        self.top_bar_layout.addWidget(self.tab_bar)
-        self.top_bar_layout.addStretch()
+        logo_title_layout.addWidget(title_label)
 
-        # Beta button
-        self.beta_button = QPushButton("Beta", self.top_bar)
-        self.beta_button.setFixedHeight(25)
-        self.beta_button.setStyleSheet("""
-            QPushButton {
-                color: white;
-                font-size: 12px;
-                font-weight: 600;
-                background-color: #7c9885;
-                border: none;
-                border-radius: 4px;
-                padding: 4px 12px;
-            }
-            QPushButton:hover {
-                background-color: #6b8575;
-            }
-        """)
-        self.beta_button.clicked.connect(self.show_beta_menu)
-        self.top_bar_layout.addWidget(self.beta_button)
+        header_layout.addLayout(logo_title_layout)
+        header_layout.addStretch()
 
-        # Close button
-        self.close_button = QPushButton("×", self.top_bar)
-        self.close_button.setFixedSize(25, 25)
-        self.close_button.setStyleSheet("""
+        # Close button (minimal)
+        close_button = QPushButton("×", self)
+        close_button.setFixedSize(32, 32)
+        close_button.setStyleSheet("""
             QPushButton {
-                color: #333333;
-                font-size: 20px;
-                font-weight: bold;
+                color: #6B6B6B;
+                font-size: 24px;
+                font-weight: 300;
                 background-color: transparent;
                 border: none;
+                border-radius: 16px;
             }
             QPushButton:hover {
-                color: #ffdddd;
+                background-color: #E8E5E1;
+                color: #2C2C2C;
             }
         """)
-        self.close_button.clicked.connect(self.close)
-        self.top_bar_layout.addWidget(self.close_button)
+        close_button.clicked.connect(self.close)
+        header_layout.addWidget(close_button, alignment=Qt.AlignTop)
 
-        self.main_layout.addWidget(self.top_bar, 0, Qt.AlignTop)
+        main_layout.addLayout(header_layout)
 
         # ---------------------------
-        # Stacked Widget (Pages)
+        # Subtitle
         # ---------------------------
-        self.stacked_widget = QStackedWidget(self.gradient_widget)
-        self.main_layout.addWidget(self.stacked_widget, 1)
-
-        # -- (0) Home Page
-        self.home_page = QWidget()
-        home_layout = QVBoxLayout(self.home_page)
-        home_layout.setContentsMargins(20, 20, 20, 20)
-        home_layout.setSpacing(20)
-
-        self.image_label = QLabel(self.home_page)
-        pixmap = QPixmap(os.path.join(MEDIA_DIR, "StudyFlow.png"))
-        pixmap = pixmap.scaled(400, 400, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        self.image_label.setPixmap(pixmap)
-        self.image_label.setAlignment(Qt.AlignCenter)
-        home_layout.addWidget(self.image_label)
-
-        self.subtitle_label = QLabel("Simplifying Studying, Amplifying Success.", self.home_page)
-        self.subtitle_label.setAlignment(Qt.AlignCenter)
-        self.subtitle_label.setStyleSheet("color: #333333; font-size: 20px; font-weight: bold;")
-        home_layout.addWidget(self.subtitle_label)
-
-        self.home_page.setLayout(home_layout)
-        self.stacked_widget.addWidget(self.home_page)  # index 0
-
-        # -- (1) FreeFlow Page
-        self.freeflow_page = QWidget()
-        freeflow_layout = QVBoxLayout(self.freeflow_page)
-        freeflow_layout.setContentsMargins(20, 20, 20, 20)
-        freeflow_layout.setSpacing(20)
-
-        self.flowfree_image_label = QLabel(self.freeflow_page)
-        flowfree_pixmap = QPixmap(os.path.join(MEDIA_DIR, "FreeFlow.png"))
-        flowfree_pixmap = flowfree_pixmap.scaled(300, 300, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        self.flowfree_image_label.setPixmap(flowfree_pixmap)
-        self.flowfree_image_label.setAlignment(Qt.AlignCenter)
-        freeflow_layout.addWidget(self.flowfree_image_label)
-
-        self.flowfree_desc = QLabel(
-            "FreeFlow is your advanced study companion, streamlining repetitive tasks "
-            "so you can stay fully focused on learning.",
-            self.freeflow_page)
-        self.flowfree_desc.setAlignment(Qt.AlignCenter)
-        self.flowfree_desc.setWordWrap(True)
-        self.flowfree_desc.setStyleSheet("""
-            font-size: 18px;
-            color: #333333;
-            font-weight: bold;
-            padding: 10px;
+        subtitle = QLabel("Choose your path to mindful learning", self)
+        subtitle.setStyleSheet("""
+            font-size: 16px;
+            font-weight: 400;
+            color: #6B6B6B;
+            margin-bottom: 20px;
         """)
-        freeflow_layout.addWidget(self.flowfree_desc)
+        main_layout.addWidget(subtitle)
 
-        # Buttons layout for FreeFlow options
-        freeflow_buttons = QHBoxLayout()
-        freeflow_buttons.setSpacing(20)
+        # ---------------------------
+        # Dashboard Grid
+        # ---------------------------
+        grid_layout = QGridLayout()
+        grid_layout.setSpacing(24)
+        grid_layout.setContentsMargins(0, 0, 0, 0)
 
-        self.flowfree_button = GlowButton("Classic Mode", self.freeflow_page)
-        self.flowfree_button.clicked.connect(self.open_quiz_gui)
-        freeflow_buttons.addWidget(self.flowfree_button)
+        # FreeFlow Card
+        self.freeflow_card = ZenCard(
+            "FreeFlow",
+            "Automate repetitive study tasks and stay focused on what matters most",
+            os.path.join(MEDIA_DIR, "FreeFlow.png"),
+            "Start FreeFlow",
+            self
+        )
+        self.freeflow_card.action_button.clicked.connect(self.show_freeflow_options)
+        grid_layout.addWidget(self.freeflow_card, 0, 0)
 
-        self.vision_button = GlowButton("Vision Mode ✨", self.freeflow_page)
-        self.vision_button.setStyleSheet("""
-            QPushButton {
-                background-color: #5f7fff;
-                color: white;
-                font-size: 16px;
-                font-weight: 600;
-                border-radius: 30px;
-                padding: 6px 12px;
-            }
-            QPushButton:hover {
-                background-color: #3f5fff;
-            }
-        """)
-        self.vision_button.clicked.connect(self.start_vision_mode)
-        freeflow_buttons.addWidget(self.vision_button)
+        # FocusFlow Card
+        self.focusflow_card = ZenCard(
+            "FocusFlow",
+            "Real-time guidance that helps you understand as you learn",
+            os.path.join(MEDIA_DIR, "FocusFlow.png"),
+            "Start FocusFlow",
+            self
+        )
+        self.focusflow_card.action_button.clicked.connect(self.start_focus_flow)
+        grid_layout.addWidget(self.focusflow_card, 0, 1)
 
-        freeflow_layout.addLayout(freeflow_buttons)
+        # DeepFlow Card
+        self.deepflow_card = ZenCard(
+            "DeepFlow",
+            "Transform any topic into interactive practice questions",
+            os.path.join(MEDIA_DIR, "DeepFlow.png"),
+            "Start DeepFlow",
+            self
+        )
+        self.deepflow_card.action_button.clicked.connect(self.open_deepflow)
+        grid_layout.addWidget(self.deepflow_card, 0, 2)
 
-        self.freeflow_page.setLayout(freeflow_layout)
-        self.stacked_widget.addWidget(self.freeflow_page)  # index 1
+        main_layout.addLayout(grid_layout)
+        main_layout.addStretch()
 
-        # -- (2) FocusFlow Page
-        self.focusflow_page = QWidget()
-        focus_layout = QVBoxLayout(self.focusflow_page)
-        focus_layout.setContentsMargins(20, 20, 20, 20)
-        focus_layout.setSpacing(20)
-
-        self.focusflow_image_label = QLabel(self.focusflow_page)
-        focusflow_pixmap = QPixmap(os.path.join(MEDIA_DIR, "FocusFlow.png"))
-        focusflow_pixmap = focusflow_pixmap.scaled(300, 300, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        self.focusflow_image_label.setPixmap(focusflow_pixmap)
-        self.focusflow_image_label.setAlignment(Qt.AlignCenter)
-        focus_layout.addWidget(self.focusflow_image_label)
-
-        self.focusflow_desc = QLabel(
-            "FocusFlow puts understanding front and center — so you're not just studying, you're truly getting it.",
-            self.focusflow_page)
-        self.focusflow_desc.setAlignment(Qt.AlignCenter)
-        self.focusflow_desc.setWordWrap(True)
-        self.focusflow_desc.setStyleSheet("""
-            font-size: 18px;
-            color: #333333;
-            font-weight: bold;
-            padding: 10px;
-        """)
-        focus_layout.addWidget(self.focusflow_desc)
-
-        self.focusflow_button = GlowButton("Open FocusFlow", self.focusflow_page)
-        self.focusflow_button.clicked.connect(self.start_focus_flow)
-        focus_layout.addWidget(self.focusflow_button, alignment=Qt.AlignCenter)
-
-        self.focusflow_page.setLayout(focus_layout)
-        self.stacked_widget.addWidget(self.focusflow_page)  # index 2
-
-        # -- (3) DeepFlow Page
-        self.deepflow_page = QWidget()
-        deep_layout = QVBoxLayout(self.deepflow_page)
-        deep_layout.setContentsMargins(20, 20, 20, 20)
-        deep_layout.setSpacing(20)
-
-        self.deepflow_image_label = QLabel(self.deepflow_page)
-        deepflow_pixmap = QPixmap(os.path.join(MEDIA_DIR, "DeepFlow.png"))
-        deepflow_pixmap = deepflow_pixmap.scaled(300, 300, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        self.deepflow_image_label.setPixmap(deepflow_pixmap)
-        self.deepflow_image_label.setAlignment(Qt.AlignCenter)
-        deep_layout.addWidget(self.deepflow_image_label)
-
-        self.deepflow_desc = QLabel(
-            "DeepFlow takes your understanding to the next level by breaking down complex topics into interactive quizzes.",
-            self.deepflow_page)
-        self.deepflow_desc.setAlignment(Qt.AlignCenter)
-        self.deepflow_desc.setWordWrap(True)
-        self.deepflow_desc.setStyleSheet("""
-            font-size: 18px;
-            color: #333333;
-            font-weight: bold;
-            padding: 10px;
-        """)
-        deep_layout.addWidget(self.deepflow_desc)
-
-        self.deepflow_button = GlowButton("Open DeepFlow", self.deepflow_page)
-        # Import DeepFlowWindow from deepflow_gui.py when the button is clicked
-        self.deepflow_button.clicked.connect(self.open_deepflow)
-        deep_layout.addWidget(self.deepflow_button, alignment=Qt.AlignCenter)
-
-        self.deepflow_page.setLayout(deep_layout)
-        self.stacked_widget.addWidget(self.deepflow_page)  # index 3
-
-        # For window dragging in the main window
+        # For window dragging
         self._drag_pos = None
 
-    def slide_to_index(self, index):
-        """Flicker-Free Sliding Transition (inverted direction)."""
-        current_index = self.stacked_widget.currentIndex()
-        if index == current_index:
-            return
-        current_widget = self.stacked_widget.currentWidget()
-        next_widget = self.stacked_widget.widget(index)
-        if not next_widget:
-            return
-        w = self.stacked_widget.width()
-        h = self.stacked_widget.height()
-        direction = 1 if index > current_index else -1
-        next_widget.setVisible(False)
-        next_widget.setGeometry(QRect(direction * w, 0, w, h))
-        self.anim_current = QPropertyAnimation(current_widget, b"geometry")
-        self.anim_current.setDuration(400)
-        self.anim_current.setEasingCurve(QEasingCurve.InOutQuad)
-        self.anim_current.setStartValue(QRect(0, 0, w, h))
-        self.anim_current.setEndValue(QRect(-direction * w, 0, w, h))
-        self.anim_next = QPropertyAnimation(next_widget, b"geometry")
-        self.anim_next.setDuration(400)
-        self.anim_next.setEasingCurve(QEasingCurve.InOutQuad)
-        self.anim_next.setStartValue(QRect(direction * w, 0, w, h))
-        self.anim_next.setEndValue(QRect(0, 0, w, h))
-        def finalize_switch():
-            self.stacked_widget.setCurrentIndex(index)
-            current_widget.setGeometry(QRect(0, 0, w, h))
-            next_widget.setGeometry(QRect(0, 0, w, h))
-            next_widget.setVisible(True)
-        next_widget.setVisible(True)
-        self.anim_next.finished.connect(finalize_switch)
-        self.anim_current.start()
-        self.anim_next.start()
+    def show_freeflow_options(self):
+        """Show options for FreeFlow (Classic or Vision Mode)"""
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton
 
-    def show_beta_menu(self):
-        """Shows the Beta features menu."""
-        menu = QMenu(self)
-        menu.setStyleSheet("""
-            QMenu {
-                background-color: white;
-                border: 2px solid #7c9885;
-                border-radius: 8px;
-                padding: 8px;
-            }
-            QMenu::item {
-                padding: 8px 20px;
-                color: #333333;
-                font-size: 14px;
-            }
-            QMenu::item:selected {
-                background-color: #e8f5e9;
-                border-radius: 4px;
+        dialog = QDialog(self)
+        dialog.setWindowTitle("FreeFlow Options")
+        dialog.setFixedSize(400, 280)
+        dialog.setStyleSheet("""
+            QDialog {
+                background-color: #FAF8F5;
             }
         """)
 
-        # Quiz Maker action
-        quiz_maker_action = QAction("Quiz Maker", self)
-        quiz_maker_action.triggered.connect(self.open_quiz_maker)
-        menu.addAction(quiz_maker_action)
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(32, 32, 32, 32)
+        layout.setSpacing(20)
 
-        # Show menu below the Beta button
-        menu.exec(self.beta_button.mapToGlobal(self.beta_button.rect().bottomLeft()))
+        title = QLabel("Choose your mode", dialog)
+        title.setStyleSheet("""
+            font-size: 20px;
+            font-weight: 500;
+            color: #2C2C2C;
+        """)
+        layout.addWidget(title)
 
-    def open_quiz_maker(self):
-        """Opens the Quiz Maker feature."""
-        # Placeholder for now - you'll implement this later
-        print("Quiz Maker clicked!")
+        desc = QLabel("Select between classic OCR or AI-powered vision", dialog)
+        desc.setStyleSheet("""
+            font-size: 14px;
+            color: #6B6B6B;
+        """)
+        desc.setWordWrap(True)
+        layout.addWidget(desc)
 
-    # ~~~~~~~~~~~~~~ MOUSE DRAG TO MOVE WINDOW (Main Window) ~~~~~~~~~~~~~~
+        # Classic button
+        classic_btn = QPushButton("Classic Mode", dialog)
+        classic_btn.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                color: #8B9D83;
+                font-size: 15px;
+                font-weight: 500;
+                border: 2px solid #8B9D83;
+                border-radius: 8px;
+                padding: 12px 24px;
+            }
+            QPushButton:hover {
+                background-color: #8B9D83;
+                color: white;
+            }
+        """)
+        classic_btn.clicked.connect(lambda: (dialog.accept(), self.open_quiz_gui()))
+        layout.addWidget(classic_btn)
+
+        # Vision button
+        vision_btn = QPushButton("Vision Mode", dialog)
+        vision_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #8B9D83;
+                color: white;
+                font-size: 15px;
+                font-weight: 500;
+                border: 2px solid #8B9D83;
+                border-radius: 8px;
+                padding: 12px 24px;
+            }
+            QPushButton:hover {
+                background-color: #7A8C73;
+            }
+        """)
+        vision_btn.clicked.connect(lambda: (dialog.accept(), self.start_vision_mode()))
+        layout.addWidget(vision_btn)
+
+        dialog.exec()
+
+    # ~~~~~~~~~~~~~~ MOUSE DRAG TO MOVE WINDOW ~~~~~~~~~~~~~~
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             self._drag_pos = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
@@ -438,27 +374,26 @@ class ModernMenu(QMainWindow):
         event.accept()
 
     def open_quiz_gui(self):
-        """Opens your quiz GUI."""
+        """Opens the classic quiz GUI."""
         self.quiz_window = QuizMainWindow()
         self.quiz_window.show()
-    
+
     def start_focus_flow(self):
-        """Starts FocusFlow mode by displaying a separate floating overlay with the full answer and explanation."""
+        """Starts FocusFlow mode with real-time overlay."""
         from StudyFlow.frontend.focusflow import FocusFlowOverlay
         full_answer = "FocusFlow"
-        explanation = "Because sometimes, all you need is the right nudge in the right moment — FocusFlow delivers clarity when it matters most."
+        explanation = "Real-time guidance that helps you understand as you learn."
         self.focusflow_overlay = FocusFlowOverlay(full_answer, explanation)
         self.focusflow_overlay.show()
-    
+
     def open_deepflow(self):
-        """Opens the DeepFlow GUI in a separate movable window."""
-        # Import the DeepFlowWindow class from deepflow_gui.py
+        """Opens the DeepFlow practice quiz generator."""
         from .deepflow_gui import DeepFlowWindow
         self.deepflow_window = DeepFlowWindow()
         self.deepflow_window.show()
 
     def start_vision_mode(self):
-        """Starts Vision Mode - AI-powered full-screen quiz solving."""
+        """Starts Vision Mode - AI-powered quiz solving."""
         from PySide6.QtWidgets import QMessageBox
         from StudyFlow.frontend.button_capture import capture_button_template
 
@@ -530,20 +465,18 @@ main_window = None
 
 def show_main_window(splash):
     global main_window
-    main_window = ModernMenu()
+    main_window = ZenDashboard()
     main_window.show()
     splash.finish(main_window)
 
 def main():
     app = QApplication(sys.argv)
     splash_pix = QPixmap(os.path.join(MEDIA_DIR, "StudyFlow.png"))
-    splash_pix = splash_pix.scaled(splash_pix.width() * 0.1,
-                                   splash_pix.height() * 0.1,
-                                   Qt.KeepAspectRatio,
-                                   Qt.SmoothTransformation)
+    splash_pix = splash_pix.scaled(120, 120, Qt.KeepAspectRatio, Qt.SmoothTransformation)
     splash = QSplashScreen(splash_pix)
+    splash.setStyleSheet("background-color: #FAF8F5;")
     splash.show()
-    QTimer.singleShot(2000, lambda: show_main_window(splash))
+    QTimer.singleShot(1500, lambda: show_main_window(splash))
     sys.exit(app.exec())
 
 if __name__ == "__main__":

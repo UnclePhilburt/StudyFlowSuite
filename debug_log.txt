@@ -23379,3 +23379,5 @@ Based on the above, which answer option is correct? Return only the number corre
 [18:03:54] ✅ Extension bridge server started on port 5555
 [02:38:24] [+] Supabase client initialized: https://mxddgbpxjoltaimftpmn.supabase.co
 [02:40:10] [+] Supabase client initialized: https://mxddgbpxjoltaimftpmn.supabase.co
+[14:01:44] StudyFlow starting up...
+[14:01:44] Could not start extension bridge: 'charmap' codec can't encode character '\U0001f310' in position 11: character maps to <undefined>

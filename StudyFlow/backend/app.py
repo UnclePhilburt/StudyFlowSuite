@@ -4873,8 +4873,7 @@ def rate_chat_response():
         if existing.data:
             # Update existing vote
             supabase.table("ai_response_ratings").update({
-                "vote": vote,
-                "updated_at": "now()"
+                "vote": vote
             }).eq("id", existing.data[0]['id']).execute()
 
             debug_log(f"[+] Updated response rating: message={message_id}, user={request.user_id}, vote={vote}")
