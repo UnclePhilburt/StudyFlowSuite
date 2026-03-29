@@ -1389,6 +1389,11 @@ def get_most_downloaded_notes():
 
         downloaded_notes = []
         for note in result.data:
+            # Skip Wikipedia entries
+            university = note.get('university', '')
+            if university and 'wikipedia' in university.lower():
+                continue
+
             # Get username
             try:
                 profile = supabase.table("user_profiles").select("username").eq("id", note['user_id']).single().execute()
