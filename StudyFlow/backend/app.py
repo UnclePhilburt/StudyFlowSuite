@@ -1311,36 +1311,61 @@ def get_leaderboard():
 def get_most_cited_notes():
     """Get most cited notes from AI chat responses"""
     try:
-        # Get notes with highest citation counts from ai_response_logs
-        # For now, return mock data since we need to implement citation tracking
-        # TODO: Track note citations in ai_response_logs.sources_used field
+        from collections import defaultdict
 
-        # Get all public notes with their metadata
-        result = supabase.table("notes").select(
-            "id, original_filename, user_id, university, course_code, page_count"
-        ).eq("is_public", True).limit(50).execute()
+        # Get all AI response logs with sources
+        logs = supabase.table("ai_response_logs").select("sources_used").execute()
 
-        # For now, simulate citation counts (would come from logs in production)
+        # Count citations per note_id
+        citation_counts = defaultdict(int)
+        note_details = {}  # Store first occurrence details
+
+        for log in logs.data:
+            sources = log.get('sources_used') or []
+            for source in sources:
+                # Each source in the array counts as one citation
+                note_id = source.get('note_id')
+                if note_id:
+                    citation_counts[note_id] += 1
+                    # Store details from first occurrence
+                    if note_id not in note_details:
+                        note_details[note_id] = {
+                            'filename': source.get('filename'),
+                            'username': source.get('contributor_username'),
+                        }
+
+        # Get full note metadata for top cited notes
+        top_note_ids = sorted(citation_counts.items(), key=lambda x: x[1], reverse=True)[:50]
+
         cited_notes = []
-        for note in result.data:
-            # Get username
+        for note_id, count in top_note_ids:
             try:
-                profile = supabase.table("user_profiles").select("username").eq("id", note['user_id']).single().execute()
-                username = profile.data.get('username') if profile.data else None
+                # Get note metadata
+                note = supabase.table("notes").select(
+                    "id, original_filename, user_id, university, course_code"
+                ).eq("id", note_id).single().execute()
+
+                if note.data:
+                    # Get username if not already in note_details
+                    username = note_details[note_id].get('username')
+                    if not username:
+                        try:
+                            profile = supabase.table("user_profiles").select("username").eq("id", note.data['user_id']).single().execute()
+                            username = profile.data.get('username') if profile.data else None
+                        except:
+                            username = None
+
+                    cited_notes.append({
+                        "note_id": note_id,
+                        "filename": note.data.get('original_filename') or note_details[note_id].get('filename'),
+                        "username": username,
+                        "university": note.data.get('university'),
+                        "course_code": note.data.get('course_code'),
+                        "citation_count": count
+                    })
             except:
-                username = None
-
-            cited_notes.append({
-                "note_id": note['id'],
-                "filename": note['original_filename'],
-                "username": username,
-                "university": note.get('university'),
-                "course_code": note.get('course_code'),
-                "citation_count": note.get('page_count', 0) * 2  # Temporary: simulate citations
-            })
-
-        # Sort by citation count
-        cited_notes.sort(key=lambda x: x['citation_count'], reverse=True)
+                # Note might have been deleted, skip it
+                pass
 
         return jsonify(cited_notes[:20]), 200
 
