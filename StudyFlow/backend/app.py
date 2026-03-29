@@ -1457,6 +1457,71 @@ def get_rising_stars():
         return jsonify([]), 200
 
 
+@app.route("/api/leaderboard/most-helpful", methods=["GET", "OPTIONS"])
+@supabase_auth_required
+def get_most_helpful_notes():
+    """Get notes ranked by helpfulness votes"""
+    # Handle OPTIONS preflight
+    if request.method == 'OPTIONS':
+        return '', 200
+
+    try:
+        from collections import defaultdict
+
+        # Get all response ratings
+        ratings = supabase.table("ai_response_ratings").select("cited_note_ids, vote").execute()
+
+        # Calculate score for each note (upvotes - downvotes)
+        note_scores = defaultdict(lambda: {"upvotes": 0, "downvotes": 0, "score": 0})
+
+        for rating in ratings.data:
+            cited_note_ids = rating.get('cited_note_ids', [])
+            vote = rating.get('vote', 0)
+
+            # Apply vote to all notes cited in that response
+            for note_id in cited_note_ids:
+                if vote == 1:
+                    note_scores[note_id]["upvotes"] += 1
+                elif vote == -1:
+                    note_scores[note_id]["downvotes"] += 1
+                note_scores[note_id]["score"] = note_scores[note_id]["upvotes"] - note_scores[note_id]["downvotes"]
+
+        # Get top notes by score
+        sorted_notes = sorted(note_scores.items(), key=lambda x: x[1]['score'], reverse=True)[:20]
+
+        # Fetch note details
+        helpful_notes = []
+        for note_id, scores in sorted_notes:
+            try:
+                note = supabase.table("notes").select(
+                    "id, original_filename, user_id, university, course_code"
+                ).eq("id", note_id).single().execute()
+
+                if note.data:
+                    # Get username
+                    profile = supabase.table("user_profiles").select("username").eq("id", note.data['user_id']).single().execute()
+                    username = profile.data.get('username') if profile.data else None
+
+                    helpful_notes.append({
+                        "note_id": note_id,
+                        "filename": note.data.get('original_filename'),
+                        "username": username,
+                        "university": note.data.get('university'),
+                        "course_code": note.data.get('course_code'),
+                        "helpfulness_score": scores['score'],
+                        "upvotes": scores['upvotes'],
+                        "downvotes": scores['downvotes']
+                    })
+            except:
+                pass
+
+        return jsonify(helpful_notes), 200
+
+    except Exception as e:
+        debug_log(f"❌ Most helpful notes error: {e}\n{traceback.format_exc()}")
+        return jsonify([]), 200
+
+
 @app.route("/api/leaderboard/universities", methods=["GET"])
 @supabase_auth_required
 def get_university_leaderboard():
@@ -4766,6 +4831,104 @@ def delete_conversation_endpoint(conversation_id):
     except Exception as e:
         debug_log(f"❌ Error deleting conversation: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/chat/rate-response", methods=["POST", "OPTIONS"])
+@supabase_auth_required
+def rate_chat_response():
+    """
+    Rate the helpfulness of sources cited in an AI response
+
+    Expects:
+    {
+        "message_id": "uuid",
+        "conversation_id": "uuid",
+        "vote": 1 or -1,  # 1 = helpful (upvote), -1 = not helpful (downvote)
+        "cited_note_ids": ["note_id1", "note_id2", ...]  # Notes that were cited
+    }
+
+    Returns:
+    {
+        "success": true,
+        "vote": 1
+    }
+    """
+    # Handle OPTIONS preflight
+    if request.method == 'OPTIONS':
+        return '', 200
+
+    try:
+        data = request.get_json()
+        message_id = data.get('message_id')
+        conversation_id = data.get('conversation_id')
+        vote = data.get('vote')  # 1 or -1
+        cited_note_ids = data.get('cited_note_ids', [])
+
+        if not all([message_id, conversation_id, vote in [1, -1]]):
+            return jsonify({"error": "Missing required fields"}), 400
+
+        # Check if user already voted on this response
+        existing = supabase.table("ai_response_ratings").select("id, vote").eq("message_id", message_id).eq("user_id", request.user_id).execute()
+
+        if existing.data:
+            # Update existing vote
+            supabase.table("ai_response_ratings").update({
+                "vote": vote,
+                "updated_at": "now()"
+            }).eq("id", existing.data[0]['id']).execute()
+
+            debug_log(f"[+] Updated response rating: message={message_id}, user={request.user_id}, vote={vote}")
+        else:
+            # Create new vote
+            supabase.table("ai_response_ratings").insert({
+                "message_id": message_id,
+                "conversation_id": conversation_id,
+                "user_id": request.user_id,
+                "vote": vote,
+                "cited_note_ids": cited_note_ids
+            }).execute()
+
+            debug_log(f"[+] Created response rating: message={message_id}, user={request.user_id}, vote={vote}")
+
+        return jsonify({"success": True, "vote": vote}), 200
+
+    except Exception as e:
+        debug_log(f"❌ Error rating response: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/chat/get-my-vote", methods=["GET", "OPTIONS"])
+@supabase_auth_required
+def get_my_response_vote():
+    """
+    Get user's existing vote for a message
+
+    Query params: message_id
+
+    Returns:
+    {
+        "vote": 1 or -1 or null
+    }
+    """
+    # Handle OPTIONS preflight
+    if request.method == 'OPTIONS':
+        return '', 200
+
+    try:
+        message_id = request.args.get('message_id')
+        if not message_id:
+            return jsonify({"error": "Missing message_id"}), 400
+
+        result = supabase.table("ai_response_ratings").select("vote").eq("message_id", message_id).eq("user_id", request.user_id).execute()
+
+        if result.data:
+            return jsonify({"vote": result.data[0]['vote']}), 200
+        else:
+            return jsonify({"vote": None}), 200
+
+    except Exception as e:
+        debug_log(f"❌ Error getting vote: {e}\n{traceback.format_exc()}")
+        return jsonify({"vote": None}), 200
 
 
 @app.route("/api/settings/collective-brain", methods=["GET"])
