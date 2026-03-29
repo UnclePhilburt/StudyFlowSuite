@@ -4585,6 +4585,62 @@ def chat_with_notes():
             search_results = [r for r in search_results if r['note_id'] in personal_note_ids]
             debug_log(f"Filtered to {len(search_results)} personal chunks")
 
+        # Apply voting-based ranking to boost helpful notes and demote unhelpful ones
+        if search_results:
+            from collections import defaultdict
+
+            # Get all unique note IDs from search results
+            note_ids_in_results = list(set(r['note_id'] for r in search_results))
+
+            # Fetch all ratings for these notes
+            ratings = supabase.table("ai_response_ratings").select("cited_note_ids, vote").execute()
+
+            # Calculate helpfulness score for each note
+            note_votes = defaultdict(lambda: {"upvotes": 0, "downvotes": 0})
+            for rating in ratings.data:
+                cited_note_ids = rating.get('cited_note_ids', [])
+                vote = rating.get('vote', 0)
+
+                for note_id in cited_note_ids:
+                    if note_id in note_ids_in_results:
+                        if vote == 1:
+                            note_votes[note_id]["upvotes"] += 1
+                        elif vote == -1:
+                            note_votes[note_id]["downvotes"] += 1
+
+            # Apply weighted ranking: Similarity (70%) + Helpfulness (30%)
+            for result in search_results:
+                note_id = result['note_id']
+                votes = note_votes[note_id]
+                upvotes = votes["upvotes"]
+                downvotes = votes["downvotes"]
+
+                # Helpfulness score: (upvotes - downvotes) / (total_votes + 5)
+                # The +5 prevents new notes from being over-penalized
+                total_votes = upvotes + downvotes
+                if total_votes > 0:
+                    helpfulness_score = (upvotes - downvotes) / (total_votes + 5)
+                else:
+                    helpfulness_score = 0  # Neutral for unvoted notes
+
+                # Normalize helpfulness to 0-1 range (assuming score will be between -1 and 1)
+                normalized_helpfulness = (helpfulness_score + 1) / 2
+
+                # Combined score: 70% similarity + 30% helpfulness
+                similarity = result.get('similarity', 0)
+                combined_score = (similarity * 0.7) + (normalized_helpfulness * 0.3)
+
+                result['combined_score'] = combined_score
+                result['helpfulness_score'] = helpfulness_score
+                result['vote_data'] = {"upvotes": upvotes, "downvotes": downvotes}
+
+            # Re-sort by combined score
+            search_results.sort(key=lambda x: x.get('combined_score', 0), reverse=True)
+
+            debug_log(f"🎯 Applied voting-based ranking to {len(search_results)} results")
+            for i, r in enumerate(search_results[:5]):
+                debug_log(f"  #{i+1}: similarity={r.get('similarity', 0):.2f}, helpfulness={r.get('helpfulness_score', 0):.2f}, combined={r.get('combined_score', 0):.2f}, votes={r.get('vote_data')}")
+
         # Add search result metadata and enrich with missing fields (CONSENSUS: show all sources)
         sources = []
         seen_note_ids = set()
