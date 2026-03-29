@@ -1472,7 +1472,8 @@ def get_university_leaderboard():
 
         for note in result.data:
             university = note.get('university')
-            if university:
+            # Filter out Wikipedia and other non-university sources
+            if university and 'wikipedia' not in university.lower():
                 university_stats[university]["total_pages"] += note.get('page_count', 0)
                 university_stats[university]["total_notes"] += 1
                 university_stats[university]["contributors"].add(note['user_id'])
