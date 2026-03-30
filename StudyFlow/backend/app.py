@@ -9722,11 +9722,15 @@ def admin_user_detail(user_id):
         ).eq("user_id", user_id).order("uploaded_at", desc=True).limit(20).execute()
         notes = notes_resp.data or []
 
-        # Get DMCA history
-        dmca_resp = supabase.table("dmca_takedowns").select(
-            "id, note_filename, reason, status, created_at"
-        ).eq("uploader_id", user_id).order("created_at", desc=True).execute()
-        dmca_history = dmca_resp.data or []
+        # Get DMCA history (table may not exist yet)
+        dmca_history = []
+        try:
+            dmca_resp = supabase.table("dmca_takedowns").select(
+                "id, note_filename, reason, status, created_at"
+            ).eq("uploader_id", user_id).order("created_at", desc=True).execute()
+            dmca_history = dmca_resp.data or []
+        except:
+            pass
 
         # Get total note count
         total_notes_resp = supabase.table("notes").select("id", count="exact").eq("user_id", user_id).execute()
