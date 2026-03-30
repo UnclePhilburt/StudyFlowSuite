@@ -4867,6 +4867,13 @@ def chat_with_notes():
 
         debug_log(f"[+] Generated conversational response ({len(ai_response)} chars, {response_time_ms}ms)")
 
+        # Track chat search
+        try:
+            from StudyFlow.backend.search_tracker import track_search
+            track_search(message, len(sources), source="chat")
+        except:
+            pass
+
         return jsonify({
             "conversation_id": conv_id,
             "response": ai_response,
@@ -5706,17 +5713,24 @@ def semantic_browse_notes():
             "total": len(formatted_results)
         }
 
+        # Track search query
+        try:
+            from StudyFlow.backend.search_tracker import track_search
+            track_search(question, len(paginated_results), source="browse")
+        except:
+            pass
+
         # Cache result in Redis for 5 minutes
         if redis_cache:
             try:
                 redis_cache.setex(cache_key, 300, json.dumps(response_data))
             except:
-                pass  # Non-critical, skip cache write
+                pass
 
         return jsonify(response_data), 200
 
     except Exception as e:
-        debug_log(f"❌ Semantic browse error: {e}\n{traceback.format_exc()}")
+        debug_log(f"Semantic browse error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -9617,6 +9631,33 @@ def flagged_notes():
 
     except Exception as e:
         debug_log(f"Flagged notes error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/admin/search-analytics", methods=["GET"])
+def admin_search_analytics():
+    """ADMIN: Search analytics -- top queries, zero-result queries, volume."""
+    try:
+        admin_key = request.args.get("key", "")
+        if admin_key != os.getenv("ADMIN_KEY", "change_me_in_production"):
+            return jsonify({"error": "Unauthorized"}), 403
+
+        from StudyFlow.backend.search_tracker import get_search_analytics
+        data = get_search_analytics(days=30)
+
+        if not data:
+            return jsonify({
+                "dates": [], "daily_volume": [],
+                "top_searches": [], "zero_results": [],
+                "today_top": [], "today_zero": [],
+                "summary": {"total_30d": 0, "total_today": 0, "total_7d": 0, "avg_daily": 0},
+                "message": "No search data yet. Tracking starts from now."
+            }), 200
+
+        return jsonify(data), 200
+
+    except Exception as e:
+        debug_log(f"Admin search analytics error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
 
