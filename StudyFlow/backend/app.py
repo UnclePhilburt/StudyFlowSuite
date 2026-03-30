@@ -4888,6 +4888,104 @@ def list_conversations():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/folders", methods=["GET"])
+@supabase_auth_required
+def list_folders():
+    """List user's chat folders."""
+    try:
+        resp = supabase.table("chat_folders").select("*").eq("user_id", request.user_id).order("created_at").execute()
+        return jsonify({"folders": resp.data or []}), 200
+    except Exception as e:
+        return jsonify({"folders": []}), 200
+
+
+@app.route("/api/folders", methods=["POST"])
+@supabase_auth_required
+def create_folder():
+    """Create a new chat folder."""
+    try:
+        data = request.get_json()
+        folder = supabase.table("chat_folders").insert({
+            "user_id": request.user_id,
+            "name": data.get("name", "New Folder"),
+            "color": data.get("color", "#7c9885"),
+            "position_x": data.get("position_x", 0),
+            "position_y": data.get("position_y", 0)
+        }).execute()
+        return jsonify(folder.data[0] if folder.data else {}), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/folders/<folder_id>", methods=["PUT"])
+@supabase_auth_required
+def update_folder(folder_id):
+    """Update a folder (name, color, position)."""
+    try:
+        data = request.get_json()
+        update = {}
+        if "name" in data: update["name"] = data["name"]
+        if "color" in data: update["color"] = data["color"]
+        if "position_x" in data: update["position_x"] = data["position_x"]
+        if "position_y" in data: update["position_y"] = data["position_y"]
+        supabase.table("chat_folders").update(update).eq("id", folder_id).eq("user_id", request.user_id).execute()
+        return jsonify({"success": True}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/folders/<folder_id>", methods=["DELETE"])
+@supabase_auth_required
+def delete_folder(folder_id):
+    """Delete a folder (conversations become unfiled)."""
+    try:
+        # Unfiled all conversations in this folder
+        supabase.table("conversations").update({"folder_id": None}).eq("folder_id", folder_id).eq("user_id", request.user_id).execute()
+        supabase.table("chat_folders").delete().eq("id", folder_id).eq("user_id", request.user_id).execute()
+        return jsonify({"success": True}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/conversations/<conversation_id>/move", methods=["PUT"])
+@supabase_auth_required
+def move_conversation(conversation_id):
+    """Move a conversation to a folder (or null to unfiled)."""
+    try:
+        data = request.get_json()
+        folder_id = data.get("folder_id")  # null = unfiled
+        supabase.table("conversations").update({"folder_id": folder_id}).eq("id", conversation_id).eq("user_id", request.user_id).execute()
+        return jsonify({"success": True}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/folders/<folder_id>/conversations", methods=["GET"])
+@supabase_auth_required
+def list_folder_conversations(folder_id):
+    """List conversations in a folder."""
+    try:
+        resp = supabase.table("conversations").select(
+            "id, title, updated_at, canvas_layout"
+        ).eq("user_id", request.user_id).eq("folder_id", folder_id).is_("deleted_at", "null").order("updated_at", desc=True).execute()
+        return jsonify({"conversations": resp.data or []}), 200
+    except Exception as e:
+        return jsonify({"conversations": []}), 200
+
+
+@app.route("/api/conversations/unfiled", methods=["GET"])
+@supabase_auth_required
+def list_unfiled_conversations():
+    """List conversations not in any folder."""
+    try:
+        resp = supabase.table("conversations").select(
+            "id, title, updated_at, canvas_layout"
+        ).eq("user_id", request.user_id).is_("folder_id", "null").is_("deleted_at", "null").order("updated_at", desc=True).execute()
+        return jsonify({"conversations": resp.data or []}), 200
+    except Exception as e:
+        return jsonify({"conversations": []}), 200
+
+
 @app.route("/api/conversations/<conversation_id>/layout", methods=["GET"])
 @supabase_auth_required
 def get_canvas_layout(conversation_id):
