@@ -4888,9 +4888,9 @@ def list_conversations():
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/api/folders", methods=["GET"])
+@app.route("/api/chat-folders", methods=["GET"])
 @supabase_auth_required
-def list_folders():
+def list_chat_folders():
     """List user's chat folders."""
     try:
         resp = supabase.table("chat_folders").select("*").eq("user_id", request.user_id).order("created_at").execute()
@@ -4899,9 +4899,9 @@ def list_folders():
         return jsonify({"folders": []}), 200
 
 
-@app.route("/api/folders", methods=["POST"])
+@app.route("/api/chat-folders", methods=["POST"])
 @supabase_auth_required
-def create_folder():
+def create_chat_folder():
     """Create a new chat folder."""
     try:
         data = request.get_json()
@@ -4917,10 +4917,10 @@ def create_folder():
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/api/folders/<folder_id>", methods=["PUT"])
+@app.route("/api/chat-folders/<folder_id>", methods=["PUT"])
 @supabase_auth_required
-def update_folder(folder_id):
-    """Update a folder (name, color, position)."""
+def update_chat_folder(folder_id):
+    """Update a chat folder (name, color, position)."""
     try:
         data = request.get_json()
         update = {}
@@ -4934,10 +4934,10 @@ def update_folder(folder_id):
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/api/folders/<folder_id>", methods=["DELETE"])
+@app.route("/api/chat-folders/<folder_id>", methods=["DELETE"])
 @supabase_auth_required
-def delete_folder(folder_id):
-    """Delete a folder (conversations become unfiled)."""
+def delete_chat_folder(folder_id):
+    """Delete a chat folder (conversations become unfiled)."""
     try:
         # Unfiled all conversations in this folder
         supabase.table("conversations").update({"folder_id": None}).eq("folder_id", folder_id).eq("user_id", request.user_id).execute()
@@ -4960,9 +4960,9 @@ def move_conversation(conversation_id):
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/api/folders/<folder_id>/conversations", methods=["GET"])
+@app.route("/api/chat-folders/<folder_id>/conversations", methods=["GET"])
 @supabase_auth_required
-def list_folder_conversations(folder_id):
+def list_chat_folder_conversations(folder_id):
     """List conversations in a folder."""
     try:
         resp = supabase.table("conversations").select(
