@@ -9596,6 +9596,100 @@ def flagged_notes():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/admin/announcements", methods=["GET"])
+def list_announcements():
+    """ADMIN: List past announcements."""
+    try:
+        admin_key = request.args.get("key", "")
+        if admin_key != os.getenv("ADMIN_KEY", "change_me_in_production"):
+            return jsonify({"error": "Unauthorized"}), 403
+
+        from StudyFlow.backend.supabase_client import supabase
+
+        # Get announcements (notifications with type 'announcement')
+        resp = supabase.table("notifications").select(
+            "id, title, message, actor_username, created_at"
+        ).eq("type", "announcement").order("created_at", desc=True).limit(50).execute()
+
+        # Dedupe by title+message+timestamp (since we bulk insert one per user)
+        seen = set()
+        announcements = []
+        for row in (resp.data or []):
+            key = f"{row['title']}|{row['message']}|{row['created_at'][:16]}"
+            if key not in seen:
+                seen.add(key)
+                announcements.append({
+                    "title": row['title'],
+                    "message": row['message'],
+                    "audience": row.get('actor_username', 'all'),
+                    "sent_at": row['created_at']
+                })
+
+        return jsonify({"announcements": announcements}), 200
+
+    except Exception as e:
+        debug_log(f"List announcements error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/admin/announcements", methods=["POST"])
+def send_announcement():
+    """ADMIN: Send announcement to users (bulk insert into notifications)."""
+    try:
+        data = request.get_json()
+        admin_key = data.get("key", "")
+        if admin_key != os.getenv("ADMIN_KEY", "change_me_in_production"):
+            return jsonify({"error": "Unauthorized"}), 403
+
+        from StudyFlow.backend.supabase_client import supabase
+
+        title = data.get("title", "").strip()
+        message = data.get("message", "").strip()
+        audience = data.get("audience", "all")  # 'all', 'pro', or a university name
+
+        if not title or not message:
+            return jsonify({"error": "Title and message are required"}), 400
+
+        # Get target user IDs based on audience
+        if audience == "all":
+            resp = supabase.table("user_profiles").select("id").execute()
+        elif audience == "pro":
+            resp = supabase.table("user_profiles").select("id").neq("subscription_tier", "free").execute()
+        else:
+            # Audience is a university name
+            resp = supabase.table("user_profiles").select("id").eq("university", audience).execute()
+
+        user_ids = [row['id'] for row in (resp.data or [])]
+
+        if not user_ids:
+            return jsonify({"error": "No users match this audience"}), 400
+
+        # Bulk insert notifications (batch in groups of 100 for Supabase limits)
+        batch_size = 100
+        total_sent = 0
+
+        for i in range(0, len(user_ids), batch_size):
+            batch = user_ids[i:i + batch_size]
+            rows = [{
+                "user_id": uid,
+                "type": "announcement",
+                "title": title,
+                "message": message,
+                "actor_username": audience,
+                "is_read": False
+            } for uid in batch]
+
+            supabase.table("notifications").insert(rows).execute()
+            total_sent += len(batch)
+
+        debug_log(f"[Admin] Sent announcement to {total_sent} users: {title}")
+        return jsonify({"success": True, "sent_to": total_sent, "audience": audience}), 200
+
+    except Exception as e:
+        debug_log(f"Send announcement error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/admin/analytics", methods=["GET"])
 def admin_analytics():
     """ADMIN: Analytics overview -- signups, uploads, conversations, downloads over last 30 days."""
