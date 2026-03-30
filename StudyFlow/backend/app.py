@@ -9620,6 +9620,170 @@ def flagged_notes():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/admin/content-stats", methods=["GET"])
+def admin_content_stats():
+    """ADMIN: Content stats -- top notes by views, downloads, citations. Top uploaders."""
+    try:
+        admin_key = request.args.get("key", "")
+        if admin_key != os.getenv("ADMIN_KEY", "change_me_in_production"):
+            return jsonify({"error": "Unauthorized"}), 403
+
+        # Check Redis cache (10 min TTL)
+        cache_key = "admin:content_stats"
+        if redis_cache:
+            try:
+                cached = redis_cache.get(cache_key)
+                if cached:
+                    return jsonify(json.loads(cached)), 200
+            except:
+                pass
+
+        from StudyFlow.backend.supabase_client import supabase
+
+        # --- Most viewed notes ---
+        most_viewed = []
+        try:
+            # Get view counts grouped by note
+            views_resp = supabase.table("note_views").select("note_id").execute()
+            view_counts = {}
+            for v in (views_resp.data or []):
+                nid = v['note_id']
+                view_counts[nid] = view_counts.get(nid, 0) + 1
+
+            # Get top 15 by views
+            top_viewed_ids = sorted(view_counts.keys(), key=lambda x: -view_counts[x])[:15]
+            if top_viewed_ids:
+                notes_resp = supabase.table("notes").select("id, original_filename, university, course_code, user_id").in_("id", top_viewed_ids).execute()
+                notes_map = {n['id']: n for n in (notes_resp.data or [])}
+
+                # Get usernames
+                user_ids = list(set(n['user_id'] for n in (notes_resp.data or [])))
+                profiles_resp = supabase.table("user_profiles").select("id, username").in_("id", user_ids).execute()
+                username_map = {p['id']: p.get('username', 'Anonymous') for p in (profiles_resp.data or [])}
+
+                for nid in top_viewed_ids:
+                    note = notes_map.get(nid)
+                    if note:
+                        most_viewed.append({
+                            "id": nid,
+                            "filename": note.get('original_filename', 'Untitled'),
+                            "university": note.get('university', ''),
+                            "course_code": note.get('course_code', ''),
+                            "uploader": username_map.get(note['user_id'], 'Anonymous'),
+                            "views": view_counts[nid]
+                        })
+        except:
+            pass
+
+        # --- Most downloaded notes ---
+        most_downloaded = []
+        try:
+            dl_resp = supabase.table("download_transactions").select("note_id").execute()
+            dl_counts = {}
+            for d in (dl_resp.data or []):
+                nid = d['note_id']
+                dl_counts[nid] = dl_counts.get(nid, 0) + 1
+
+            top_dl_ids = sorted(dl_counts.keys(), key=lambda x: -dl_counts[x])[:15]
+            if top_dl_ids:
+                notes_resp = supabase.table("notes").select("id, original_filename, university, course_code, user_id").in_("id", top_dl_ids).execute()
+                notes_map = {n['id']: n for n in (notes_resp.data or [])}
+
+                user_ids = list(set(n['user_id'] for n in (notes_resp.data or [])))
+                profiles_resp = supabase.table("user_profiles").select("id, username").in_("id", user_ids).execute()
+                username_map = {p['id']: p.get('username', 'Anonymous') for p in (profiles_resp.data or [])}
+
+                for nid in top_dl_ids:
+                    note = notes_map.get(nid)
+                    if note:
+                        most_downloaded.append({
+                            "id": nid,
+                            "filename": note.get('original_filename', 'Untitled'),
+                            "university": note.get('university', ''),
+                            "course_code": note.get('course_code', ''),
+                            "uploader": username_map.get(note['user_id'], 'Anonymous'),
+                            "downloads": dl_counts[nid]
+                        })
+        except:
+            pass
+
+        # --- Most cited in AI chat (highest net_votes) ---
+        most_cited = []
+        try:
+            cited_resp = supabase.table("notes").select(
+                "id, original_filename, university, course_code, user_id, net_votes"
+            ).not_.is_("net_votes", "null").neq("net_votes", 0).order("net_votes", desc=True).limit(15).execute()
+
+            if cited_resp.data:
+                user_ids = list(set(n['user_id'] for n in cited_resp.data))
+                profiles_resp = supabase.table("user_profiles").select("id, username").in_("id", user_ids).execute()
+                username_map = {p['id']: p.get('username', 'Anonymous') for p in (profiles_resp.data or [])}
+
+                for n in cited_resp.data:
+                    most_cited.append({
+                        "id": n['id'],
+                        "filename": n.get('original_filename', 'Untitled'),
+                        "university": n.get('university', ''),
+                        "course_code": n.get('course_code', ''),
+                        "uploader": username_map.get(n['user_id'], 'Anonymous'),
+                        "net_votes": n.get('net_votes', 0)
+                    })
+        except:
+            pass
+
+        # --- Top uploaders ---
+        top_uploaders = []
+        try:
+            notes_resp = supabase.table("notes").select("user_id").execute()
+            upload_counts = {}
+            for n in (notes_resp.data or []):
+                uid = n['user_id']
+                upload_counts[uid] = upload_counts.get(uid, 0) + 1
+
+            top_uploader_ids = sorted(upload_counts.keys(), key=lambda x: -upload_counts[x])[:15]
+            if top_uploader_ids:
+                profiles_resp = supabase.table("user_profiles").select("id, username, university").in_("id", top_uploader_ids).execute()
+                profile_map = {p['id']: p for p in (profiles_resp.data or [])}
+
+                for uid in top_uploader_ids:
+                    p = profile_map.get(uid, {})
+                    top_uploaders.append({
+                        "username": p.get('username', 'Anonymous'),
+                        "university": p.get('university', ''),
+                        "note_count": upload_counts[uid]
+                    })
+        except:
+            pass
+
+        # --- Summary ---
+        total_views = sum(v['views'] for v in most_viewed) if most_viewed else 0
+        total_downloads = sum(d['downloads'] for d in most_downloaded) if most_downloaded else 0
+
+        result = {
+            "most_viewed": most_viewed,
+            "most_downloaded": most_downloaded,
+            "most_cited": most_cited,
+            "top_uploaders": top_uploaders,
+            "summary": {
+                "total_views_tracked": total_views,
+                "total_downloads_tracked": total_downloads
+            }
+        }
+
+        # Cache for 10 minutes
+        if redis_cache:
+            try:
+                redis_cache.setex(cache_key, 600, json.dumps(result))
+            except:
+                pass
+
+        return jsonify(result), 200
+
+    except Exception as e:
+        debug_log(f"Admin content stats error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/admin/ai-costs", methods=["GET"])
 def admin_ai_costs():
     """ADMIN: Get AI API cost data for dashboard."""
