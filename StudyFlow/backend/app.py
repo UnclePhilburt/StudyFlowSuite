@@ -4888,6 +4888,34 @@ def list_conversations():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/conversations/<conversation_id>/layout", methods=["GET"])
+@supabase_auth_required
+def get_canvas_layout(conversation_id):
+    """Get saved canvas layout for a conversation."""
+    try:
+        resp = supabase.table("conversations").select("canvas_layout").eq("id", conversation_id).eq("user_id", request.user_id).single().execute()
+        if resp.data and resp.data.get('canvas_layout'):
+            return jsonify(resp.data['canvas_layout']), 200
+        return jsonify(None), 200
+    except Exception as e:
+        return jsonify(None), 200
+
+
+@app.route("/api/conversations/<conversation_id>/layout", methods=["PUT"])
+@supabase_auth_required
+def save_canvas_layout(conversation_id):
+    """Save canvas layout for a conversation."""
+    try:
+        data = request.get_json()
+        supabase.table("conversations").update({
+            "canvas_layout": data
+        }).eq("id", conversation_id).eq("user_id", request.user_id).execute()
+        return jsonify({"success": True}), 200
+    except Exception as e:
+        debug_log(f"Save layout error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/conversations/<conversation_id>/messages", methods=["GET"])
 @supabase_auth_required
 def get_conversation_history(conversation_id):
