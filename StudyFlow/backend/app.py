@@ -4965,6 +4965,70 @@ def move_conversation(conversation_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/sticky-notes", methods=["GET"])
+@supabase_auth_required
+def list_sticky_notes():
+    """List sticky notes for a folder (or home if no folder_id)."""
+    try:
+        folder_id = request.args.get("folder_id")
+        query = supabase.table("canvas_sticky_notes").select("*").eq("user_id", request.user_id)
+        if folder_id:
+            query = query.eq("folder_id", folder_id)
+        else:
+            query = query.is_("folder_id", "null")
+        resp = query.execute()
+        return jsonify({"notes": resp.data or []}), 200
+    except Exception as e:
+        return jsonify({"notes": []}), 200
+
+
+@app.route("/api/sticky-notes", methods=["POST"])
+@supabase_auth_required
+def create_sticky_note():
+    """Create a sticky note."""
+    try:
+        data = request.get_json()
+        row = {
+            "user_id": request.user_id,
+            "content": data.get("content", ""),
+            "position_x": data.get("position_x", 0),
+            "position_y": data.get("position_y", 0)
+        }
+        if data.get("folder_id"):
+            row["folder_id"] = data["folder_id"]
+        resp = supabase.table("canvas_sticky_notes").insert(row).execute()
+        return jsonify(resp.data[0] if resp.data else {}), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/sticky-notes/<note_id>", methods=["PUT"])
+@supabase_auth_required
+def update_sticky_note(note_id):
+    """Update a sticky note (content, position)."""
+    try:
+        data = request.get_json()
+        update = {}
+        if "content" in data: update["content"] = data["content"]
+        if "position_x" in data: update["position_x"] = data["position_x"]
+        if "position_y" in data: update["position_y"] = data["position_y"]
+        supabase.table("canvas_sticky_notes").update(update).eq("id", note_id).eq("user_id", request.user_id).execute()
+        return jsonify({"success": True}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/sticky-notes/<note_id>", methods=["DELETE"])
+@supabase_auth_required
+def delete_sticky_note(note_id):
+    """Delete a sticky note."""
+    try:
+        supabase.table("canvas_sticky_notes").delete().eq("id", note_id).eq("user_id", request.user_id).execute()
+        return jsonify({"success": True}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/chat-folders/<folder_id>/conversations", methods=["GET"])
 @supabase_auth_required
 def list_chat_folder_conversations(folder_id):
