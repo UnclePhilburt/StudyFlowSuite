@@ -1,13 +1,32 @@
 """
 Supabase Auth for StudyFlow
-Replaces custom JWT system with Supabase Auth
+Replaces custom JWT system with Supabase Auth.
+Sessions cached in Redis to avoid Supabase network call on every request.
 """
 
 import os
+import json
+import hashlib
 from functools import wraps
 from flask import request, jsonify
 from StudyFlow.backend.supabase_client import supabase
 from StudyFlow.logging_utils import debug_log
+
+# Redis session cache
+_session_redis = None
+SESSION_CACHE_TTL = 300  # 5 minutes -- short enough for security, long enough to help
+
+def _get_session_redis():
+    global _session_redis
+    if _session_redis is None:
+        try:
+            import redis
+            url = os.getenv("CELERY_BROKER_URL", os.getenv("REDIS_URL", "redis://localhost:6379/0"))
+            _session_redis = redis.from_url(url, decode_responses=True)
+            _session_redis.ping()
+        except:
+            _session_redis = False
+    return _session_redis if _session_redis else None
 
 
 def supabase_auth_required(f):
@@ -17,6 +36,9 @@ def supabase_auth_required(f):
     Expects Authorization header: "Bearer <supabase_jwt>"
 
     Sets request.user_id and request.user_email for use in route handlers.
+
+    Sessions are cached in Redis for 5 minutes to avoid hitting Supabase
+    on every request. Token hash is used as key (not the token itself).
     """
     @wraps(f)
     def decorated_function(*args, **kwargs):
@@ -37,8 +59,24 @@ def supabase_auth_required(f):
 
         token = parts[1]
 
+        # Check Redis session cache first
+        token_hash = hashlib.sha256(token.encode()).hexdigest()[:32]
+        cache_key = f"session:{token_hash}"
+        r = _get_session_redis()
+
+        if r:
+            try:
+                cached = r.get(cache_key)
+                if cached:
+                    session_data = json.loads(cached)
+                    request.user_id = session_data["user_id"]
+                    request.user_email = session_data["user_email"]
+                    return f(*args, **kwargs)
+            except:
+                pass
+
         try:
-            # Verify token with Supabase
+            # Verify token with Supabase (network call)
             user = supabase.auth.get_user(token)
 
             if not user or not user.user:
@@ -48,7 +86,15 @@ def supabase_auth_required(f):
             request.user_id = user.user.id
             request.user_email = user.user.email
 
-            debug_log(f"[+] Authenticated user: {request.user_email} ({request.user_id})")
+            # Cache in Redis
+            if r:
+                try:
+                    r.setex(cache_key, SESSION_CACHE_TTL, json.dumps({
+                        "user_id": user.user.id,
+                        "user_email": user.user.email
+                    }))
+                except:
+                    pass
 
             return f(*args, **kwargs)
 

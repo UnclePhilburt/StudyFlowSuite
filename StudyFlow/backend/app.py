@@ -4638,6 +4638,34 @@ def chat_with_notes():
         if not query_embedding:
             return jsonify({"error": "Failed to generate query embedding"}), 500
 
+        # Semantic cache check -- if a very similar question was asked before, return cached response
+        from StudyFlow.backend.semantic_cache import check_semantic_cache, store_semantic_cache
+        sem_cached = check_semantic_cache(request.user_id, query_embedding)
+        if sem_cached:
+            debug_log(f"[+] Semantic cache HIT ({sem_cached['similarity']}) for: '{message[:50]}...'")
+
+            # Still need a conversation ID
+            if not conv_id:
+                conv_id = create_conversation(request.user_id, source=source)
+
+            # Add messages to conversation
+            add_message(conv_id, 'user', message)
+            add_message(conv_id, 'assistant', sem_cached['response'], sem_cached['sources'])
+
+            # Track search
+            try:
+                from StudyFlow.backend.search_tracker import track_search
+                track_search(message, len(sem_cached['sources']), source="chat")
+            except:
+                pass
+
+            return jsonify({
+                "conversation_id": conv_id,
+                "response": sem_cached['response'],
+                "sources": sem_cached['sources'],
+                "followup_suggestions": []
+            }), 200
+
         # Search database for relevant content (cached for 2 min for similar queries)
         rag_cache_key = f"rag:{hashlib.md5(message.encode()).hexdigest()}:{request.user_id}:{search_scope}"
         search_results = None
@@ -4838,6 +4866,12 @@ def chat_with_notes():
                 debug_log(f"[!] Failed to generate title: {title_error}")
 
         debug_log(f"[+] Generated conversational response ({len(ai_response)} chars, {response_time_ms}ms)")
+
+        # Store in semantic cache for future similar questions
+        try:
+            store_semantic_cache(request.user_id, message, query_embedding, ai_response, sources)
+        except:
+            pass
 
         # Track chat search
         try:
