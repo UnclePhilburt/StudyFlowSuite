@@ -5388,7 +5388,7 @@ def semantic_browse_notes():
             user_id=request.user_id,
             university=university_filter,
             course_code=None,
-            match_threshold=0.4,
+            match_threshold=0.6,  # Raised from 0.4 to 0.6 for more relevant results
             match_count=50
         )
 
@@ -5406,12 +5406,13 @@ def semantic_browse_notes():
                 # Get all public notes
                 all_notes = query_builder.execute()
 
-                # Filter by filename matching any query keyword
+                # Filter by filename matching ALL query keywords (more strict)
                 for note_data in all_notes.data:
                     filename_lower = note_data['original_filename'].lower()
-                    # Check if any keyword is in the filename
+                    # Check if ALL keywords are in the filename
                     matches = sum(1 for keyword in query_keywords if keyword in filename_lower)
-                    if matches > 0:
+                    # Only include if ALL keywords are present
+                    if matches == len(query_keywords):
                         # Check if user has Nexus enabled
                         try:
                             user_profile = supabase.table("user_profiles").select("username, is_public").eq("id", note_data['user_id']).single().execute()
@@ -5589,7 +5590,10 @@ def semantic_browse_notes():
             # Re-sort by combined score
             formatted_results.sort(key=lambda x: x.get('combined_score', 0), reverse=True)
 
-            debug_log(f"📊 Top 5 ranked notes:")
+            # Filter out low relevance results (combined score below 0.45)
+            formatted_results = [note for note in formatted_results if note.get('combined_score', 0) >= 0.45]
+
+            debug_log(f"📊 Top 5 ranked notes (after filtering):")
             for i, note in enumerate(formatted_results[:5], 1):
                 debug_log(f"  {i}. {note['filename'][:40]} - Combined: {note['combined_score']:.3f} (Sim: {note['similarity']:.2f}, Upvotes: {note['upvotes']}, Title: {note['title_match_score']:.2f})")
 
