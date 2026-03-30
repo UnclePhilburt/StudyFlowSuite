@@ -5377,23 +5377,64 @@ def semantic_browse_notes():
 
         debug_log(f"🔍 Semantic browse search for: '{question}'" + (f" (university: {university_filter})" if university_filter else "") + f" (offset: {offset})")
 
-        # Search using pgvector - fetch more results for pagination
+        # Extract query keywords for filename search
+        query_words = set(question.lower().split())
+        stopwords = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'from', 'is', 'are', 'was', 'were', 'what', 'how', 'where', 'when', 'why', 'which', 'who'}
+        query_keywords = query_words - stopwords
+
+        # PART 1: Search using pgvector (content similarity)
         search_results = search_notes_vector(
             query_embedding=query_embedding,
             user_id=request.user_id,
-            university=university_filter,  # Apply university filter if provided
+            university=university_filter,
             course_code=None,
             match_threshold=0.4,
-            match_count=50  # Fetch up to 50 results for pagination
+            match_count=50
         )
 
-        if not search_results:
-            return jsonify({"notes": [], "has_more": False}), 200
+        # PART 2: Search by filename (title matching)
+        filename_results = []
+        if query_keywords:
+            try:
+                # Build query to search filenames
+                query_builder = supabase.table("notes").select("id, original_filename, university, course_code, user_id, uploaded_at")
+
+                # Apply university filter if provided
+                if university_filter:
+                    query_builder = query_builder.eq("university", university_filter)
+
+                # Get all public notes
+                all_notes = query_builder.execute()
+
+                # Filter by filename matching any query keyword
+                for note_data in all_notes.data:
+                    filename_lower = note_data['original_filename'].lower()
+                    # Check if any keyword is in the filename
+                    matches = sum(1 for keyword in query_keywords if keyword in filename_lower)
+                    if matches > 0:
+                        # Check if user has Nexus enabled
+                        try:
+                            user_profile = supabase.table("user_profiles").select("username, is_public").eq("id", note_data['user_id']).single().execute()
+                            if user_profile.data and user_profile.data.get('is_public', True):
+                                filename_results.append({
+                                    'note_id': note_data['id'],
+                                    'note_data': note_data,
+                                    'username': user_profile.data.get('username') or 'Anonymous',
+                                    'keyword_matches': matches
+                                })
+                        except:
+                            continue
+
+                debug_log(f"📁 Filename search: Found {len(filename_results)} notes with matching titles")
+            except Exception as e:
+                debug_log(f"⚠️ Filename search error: {e}")
+                filename_results = []
 
         # Format results with note metadata
         formatted_results = []
         seen_notes = set()  # Track unique notes
 
+        # Add vector search results
         for result in search_results:
             note_id = result['note_id']
 
@@ -5458,14 +5499,57 @@ def semantic_browse_notes():
                 "raw_downvotes": downvotes
             })
 
-        debug_log(f"✅ Semantic browse: Found {len(formatted_results)} unique notes")
+        # Add filename search results (not already in vector results)
+        for filename_result in filename_results:
+            note_id = filename_result['note_id']
+
+            if note_id in seen_notes:
+                continue  # Already got this note from vector search
+            seen_notes.add(note_id)
+
+            note_data = filename_result['note_data']
+
+            # Get upvote count
+            try:
+                ratings = supabase.table("ai_response_ratings").select("vote, cited_note_ids").execute()
+                upvotes = 0
+                downvotes = 0
+
+                if ratings.data:
+                    for rating in ratings.data:
+                        cited_note_ids = rating.get('cited_note_ids', [])
+                        if note_id in cited_note_ids:
+                            vote = rating.get('vote', 0)
+                            if vote == 1:
+                                upvotes += 1
+                            elif vote == -1:
+                                downvotes += 1
+
+                net_upvotes = upvotes - downvotes
+            except:
+                net_upvotes = 0
+                upvotes = 0
+                downvotes = 0
+
+            # Add to results with low similarity (since it didn't match content)
+            formatted_results.append({
+                "note_id": note_id,
+                "filename": note_data['original_filename'],
+                "username": filename_result['username'],
+                "university": note_data.get('university', 'Unknown'),
+                "course_code": note_data.get('course_code', ''),
+                "created_at": note_data.get('uploaded_at', ''),
+                "content": f"File matches your search: {note_data['original_filename']}",
+                "similarity": 0.3,  # Low base similarity for title-only matches
+                "upvotes": net_upvotes,
+                "raw_upvotes": upvotes,
+                "raw_downvotes": downvotes
+            })
+
+        debug_log(f"✅ Semantic browse: Found {len(formatted_results)} unique notes ({len(search_results)} from content, {len(filename_results)} from titles)")
 
         # Apply weighted ranking: similarity + upvote helpfulness + title match boost
         if formatted_results:
-            # Extract query keywords (remove common words)
-            query_words = set(question.lower().split())
-            stopwords = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'from', 'is', 'are', 'was', 'were', 'what', 'how'}
-            query_keywords = query_words - stopwords
 
             for note in formatted_results:
                 similarity = note['similarity']
