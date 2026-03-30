@@ -5915,6 +5915,101 @@ def log_consent():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/notes/<note_id>/related", methods=["GET"])
+@supabase_auth_required
+def get_related_notes(note_id):
+    """Get up to 5 notes similar to this one using vector similarity."""
+    try:
+        from StudyFlow.backend.supabase_client import supabase, search_notes_vector
+
+        # Check Redis cache
+        cache_key = f"related:{note_id}"
+        if redis_cache:
+            try:
+                cached = redis_cache.get(cache_key)
+                if cached:
+                    return jsonify(json.loads(cached)), 200
+            except:
+                pass
+
+        # Get the first chunk's embedding for this note
+        chunk_resp = supabase.table("note_chunks").select(
+            "embedding"
+        ).eq("note_id", note_id).eq("chunk_index", 0).limit(1).execute()
+
+        if not chunk_resp.data or not chunk_resp.data[0].get('embedding'):
+            return jsonify({"related": []}), 200
+
+        embedding = chunk_resp.data[0]['embedding']
+
+        # Search for similar notes
+        results = search_notes_vector(
+            query_embedding=embedding,
+            user_id=request.user_id,
+            match_threshold=0.5,
+            match_count=20
+        )
+
+        if not results:
+            return jsonify({"related": []}), 200
+
+        # Collect unique note IDs (excluding current note)
+        seen = set()
+        unique_note_ids = []
+        for r in results:
+            nid = r['note_id']
+            if nid != note_id and nid not in seen:
+                seen.add(nid)
+                unique_note_ids.append(nid)
+            if len(unique_note_ids) >= 5:
+                break
+
+        if not unique_note_ids:
+            return jsonify({"related": []}), 200
+
+        # Batch fetch note metadata
+        notes_resp = supabase.table("notes").select(
+            "id, original_filename, university, course_code, user_id, net_votes"
+        ).in_("id", unique_note_ids).eq("is_public", True).execute()
+
+        if not notes_resp.data:
+            return jsonify({"related": []}), 200
+
+        # Batch fetch usernames
+        user_ids = list(set(n['user_id'] for n in notes_resp.data))
+        profiles_resp = supabase.table("user_profiles").select("id, username, is_public").in_("id", user_ids).execute()
+        profile_map = {p['id']: p for p in (profiles_resp.data or [])}
+
+        related = []
+        for n in notes_resp.data:
+            profile = profile_map.get(n['user_id'])
+            if not profile or not profile.get('is_public', True):
+                continue
+            related.append({
+                "id": n['id'],
+                "filename": n.get('original_filename', 'Untitled'),
+                "university": n.get('university', ''),
+                "course_code": n.get('course_code', ''),
+                "username": profile.get('username', 'Anonymous'),
+                "net_votes": n.get('net_votes', 0)
+            })
+
+        result = {"related": related[:5]}
+
+        # Cache for 30 minutes
+        if redis_cache:
+            try:
+                redis_cache.setex(cache_key, 1800, json.dumps(result))
+            except:
+                pass
+
+        return jsonify(result), 200
+
+    except Exception as e:
+        debug_log(f"Related notes error: {e}\n{traceback.format_exc()}")
+        return jsonify({"related": []}), 200
+
+
 @app.route("/api/notes/<note_id>/metadata", methods=["GET"])
 @supabase_auth_required
 def get_note_metadata(note_id):
