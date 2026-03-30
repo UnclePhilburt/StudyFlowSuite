@@ -5358,19 +5358,20 @@ def semantic_browse_notes():
             return jsonify({"error": "Missing question"}), 400
 
         question = data.get('question')
+        university_filter = data.get('university')  # Optional university filter
 
         # Generate embedding for the question
         query_embedding = generate_embedding(question)
         if not query_embedding:
             return jsonify({"error": "Failed to generate query embedding"}), 500
 
-        debug_log(f"🔍 Semantic browse search for: '{question}'")
+        debug_log(f"🔍 Semantic browse search for: '{question}'" + (f" (university: {university_filter})" if university_filter else ""))
 
         # Search using pgvector
         search_results = search_notes_vector(
             query_embedding=query_embedding,
             user_id=request.user_id,
-            university=None,
+            university=university_filter,  # Apply university filter if provided
             course_code=None,
             match_threshold=0.4,
             match_count=10  # Return top 10 for browse
