@@ -9453,6 +9453,85 @@ def review_queue():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/admin/flagged-notes", methods=["GET"])
+def flagged_notes():
+    """ADMIN: Get notes with net -5 or worse downvotes from chat ratings."""
+    try:
+        admin_key = request.args.get("key", "")
+        if admin_key != os.getenv("ADMIN_KEY", "change_me_in_production"):
+            return jsonify({"error": "Unauthorized"}), 403
+
+        from StudyFlow.backend.supabase_client import supabase
+
+        # Fetch all ratings
+        ratings_resp = supabase.table("ai_response_ratings").select("vote, cited_note_ids").execute()
+        ratings = ratings_resp.data or []
+
+        # Aggregate votes per note
+        vote_map = {}  # note_id -> {up, down}
+        for rating in ratings:
+            for note_id in (rating.get("cited_note_ids") or []):
+                if note_id not in vote_map:
+                    vote_map[note_id] = {"up": 0, "down": 0}
+                if rating["vote"] == 1:
+                    vote_map[note_id]["up"] += 1
+                elif rating["vote"] == -1:
+                    vote_map[note_id]["down"] += 1
+
+        # Find notes with net -5 or worse
+        flagged_ids = []
+        flagged_votes = {}
+        for note_id, votes in vote_map.items():
+            net = votes["up"] - votes["down"]
+            if net <= -5:
+                flagged_ids.append(note_id)
+                flagged_votes[note_id] = votes
+
+        if not flagged_ids:
+            return jsonify({"notes": [], "total": 0}), 200
+
+        # Fetch note metadata
+        notes_resp = supabase.table("notes").select(
+            "id, original_filename, university, course_code, user_id, file_size, uploaded_at"
+        ).in_("id", flagged_ids).execute()
+        notes_data = notes_resp.data or []
+
+        # Batch fetch uploader usernames
+        user_ids = list(set(n["user_id"] for n in notes_data))
+        uploader_cache = {}
+        if user_ids:
+            profiles_resp = supabase.table("user_profiles").select("id, username").in_("id", user_ids).execute()
+            for p in (profiles_resp.data or []):
+                uploader_cache[p["id"]] = p.get("username") or "Unknown"
+
+        # Build response
+        result = []
+        for n in notes_data:
+            votes = flagged_votes.get(n["id"], {"up": 0, "down": 0})
+            result.append({
+                "id": n["id"],
+                "filename": n.get("original_filename", "Untitled"),
+                "university": n.get("university"),
+                "course_code": n.get("course_code"),
+                "uploader": uploader_cache.get(n["user_id"], "Unknown"),
+                "file_size": n.get("file_size", 0),
+                "uploaded_at": n.get("uploaded_at"),
+                "upvotes": votes["up"],
+                "downvotes": votes["down"],
+                "net": votes["up"] - votes["down"]
+            })
+
+        # Sort worst first
+        result.sort(key=lambda x: x["net"])
+
+        debug_log(f"[Admin] Flagged notes: {len(result)} notes with net -5 or worse")
+        return jsonify({"notes": result, "total": len(result)}), 200
+
+    except Exception as e:
+        debug_log(f"Flagged notes error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/admin/review/<note_id>", methods=["POST"])
 def review_note(note_id):
     """ADMIN: Approve or reject a note."""
