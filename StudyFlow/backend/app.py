@@ -5690,6 +5690,152 @@ def browse_notes():
         }), 500
 
 
+def cache_top_upvoted_notes():
+    """
+    Calculate and cache the top 10 most upvoted notes in Redis
+    Called periodically or when cache expires
+
+    Returns: list of top 10 note dicts
+    """
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        debug_log("🔄 Calculating top 10 upvoted notes...")
+
+        # Get all ratings and count net votes per note
+        ratings = supabase.table("ai_response_ratings").select("vote, cited_note_ids").execute()
+
+        vote_counts = {}  # note_id -> net upvotes
+        if ratings.data:
+            for rating in ratings.data:
+                cited_note_ids = rating.get('cited_note_ids', [])
+                vote = rating.get('vote', 0)
+                for note_id in cited_note_ids:
+                    if note_id not in vote_counts:
+                        vote_counts[note_id] = 0
+                    vote_counts[note_id] += vote
+
+        # Sort by net upvotes and get top 10
+        sorted_notes = sorted(vote_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+
+        if not sorted_notes:
+            debug_log("⚠️ No upvoted notes found, using fallback")
+            # Fallback: Get 10 most recent public notes
+            recent_notes = supabase.table("notes").select(
+                "id, original_filename, university, course_code, user_id, uploaded_at"
+            ).eq("is_public", True).not_("user_id", "is", None).order("uploaded_at", desc=True).limit(10).execute()
+
+            if recent_notes.data:
+                sorted_notes = [(note['id'], 0) for note in recent_notes.data]
+
+        # Fetch full note data for top notes
+        top_notes = []
+        for note_id, net_upvotes in sorted_notes:
+            note_data = supabase.table("notes").select(
+                "id, original_filename, university, course_code, user_id, uploaded_at"
+            ).eq("id", note_id).single().execute()
+
+            if not note_data.data:
+                continue
+
+            note = note_data.data
+
+            # Get username and check if Nexus is enabled
+            try:
+                user_profile = supabase.table("user_profiles").select("username, is_public").eq("id", note['user_id']).single().execute()
+                if not user_profile.data or not user_profile.data.get('is_public', True):
+                    continue  # Skip if user has Nexus disabled
+                username = user_profile.data.get('username') or 'Anonymous'
+            except:
+                continue
+
+            # Get content preview from first chunk
+            content_preview = "Study notes and materials"
+            try:
+                chunks = supabase.table("note_chunks").select("chunk_text, content_summary").eq("note_id", note_id).limit(1).execute()
+                if chunks.data and len(chunks.data) > 0:
+                    chunk = chunks.data[0]
+                    content_preview = chunk.get('content_summary') or chunk.get('chunk_text', '')
+            except:
+                pass
+
+            top_notes.append({
+                "note_id": note_id,
+                "filename": note['original_filename'],
+                "username": username,
+                "university": note.get('university', 'Unknown'),
+                "course_code": note.get('course_code', ''),
+                "created_at": note.get('uploaded_at', ''),
+                "content": content_preview,
+                "upvotes": net_upvotes,
+                "similarity": 0.8  # High similarity for popular notes
+            })
+
+        # Cache in Redis for 30 minutes
+        if redis_cache and top_notes:
+            redis_cache.setex(
+                "browse:top_notes",
+                BROWSE_CACHE_TTL,
+                json.dumps(top_notes)
+            )
+            debug_log(f"✅ Cached {len(top_notes)} top upvoted notes in Redis")
+
+        return top_notes
+
+    except Exception as e:
+        debug_log(f"❌ Error caching top notes: {e}\n{traceback.format_exc()}")
+        return []
+
+
+@app.route("/api/notes/top-browse", methods=["GET"])
+@supabase_auth_required
+def get_top_browse_notes():
+    """
+    Get top 10 most upvoted notes for browse page initial load
+    Uses Redis cache for fast response
+
+    Returns same format as semantic-browse
+    """
+    try:
+        # Check .edu email verification requirement
+        user_profile = supabase.table("user_profiles").select("edu_email_verified").eq("id", request.user_id).single().execute()
+        if user_profile.data:
+            edu_verified = user_profile.data.get('edu_email_verified', False)
+            if not edu_verified:
+                return jsonify({"error": "Browse requires a verified .edu email address"}), 403
+        else:
+            return jsonify({"error": "User profile not found"}), 404
+
+        # Try to get from Redis cache first
+        top_notes = None
+        if redis_cache:
+            try:
+                cached_data = redis_cache.get("browse:top_notes")
+                if cached_data:
+                    top_notes = json.loads(cached_data)
+                    debug_log(f"✅ Retrieved {len(top_notes)} top notes from Redis cache")
+            except Exception as e:
+                debug_log(f"⚠️ Redis cache read error: {e}")
+
+        # If not in cache or cache miss, calculate and cache
+        if not top_notes:
+            debug_log("📊 Cache miss, calculating top upvoted notes...")
+            top_notes = cache_top_upvoted_notes()
+
+        if not top_notes:
+            return jsonify({"notes": [], "has_more": False, "total": 0}), 200
+
+        return jsonify({
+            "notes": top_notes,
+            "has_more": False,
+            "total": len(top_notes)
+        }), 200
+
+    except Exception as e:
+        debug_log(f"❌ Get top browse notes error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/notes/semantic-browse", methods=["POST"])
 @supabase_auth_required
 def semantic_browse_notes():
