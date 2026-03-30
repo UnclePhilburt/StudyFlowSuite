@@ -5368,26 +5368,27 @@ def semantic_browse_notes():
 
         question = data.get('question')
         university_filter = data.get('university')  # Optional university filter
+        offset = data.get('offset', 0)  # Pagination offset
 
         # Generate embedding for the question
         query_embedding = generate_embedding(question)
         if not query_embedding:
             return jsonify({"error": "Failed to generate query embedding"}), 500
 
-        debug_log(f"🔍 Semantic browse search for: '{question}'" + (f" (university: {university_filter})" if university_filter else ""))
+        debug_log(f"🔍 Semantic browse search for: '{question}'" + (f" (university: {university_filter})" if university_filter else "") + f" (offset: {offset})")
 
-        # Search using pgvector
+        # Search using pgvector - fetch more results for pagination
         search_results = search_notes_vector(
             query_embedding=query_embedding,
             user_id=request.user_id,
             university=university_filter,  # Apply university filter if provided
             course_code=None,
             match_threshold=0.4,
-            match_count=10  # Return top 10 for browse
+            match_count=50  # Fetch up to 50 results for pagination
         )
 
         if not search_results:
-            return jsonify([]), 200
+            return jsonify({"notes": [], "has_more": False}), 200
 
         # Format results with note metadata
         formatted_results = []
@@ -5457,7 +5458,19 @@ def semantic_browse_notes():
 
         debug_log(f"✅ Semantic browse: Found {len(formatted_results)} unique notes")
 
-        return jsonify(formatted_results), 200
+        # Apply pagination
+        page_size = 10
+        start_idx = offset
+        end_idx = offset + page_size
+
+        paginated_results = formatted_results[start_idx:end_idx]
+        has_more = len(formatted_results) > end_idx
+
+        return jsonify({
+            "notes": paginated_results,
+            "has_more": has_more,
+            "total": len(formatted_results)
+        }), 200
 
     except Exception as e:
         debug_log(f"❌ Semantic browse error: {e}\n{traceback.format_exc()}")
