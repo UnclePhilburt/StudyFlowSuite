@@ -4888,6 +4888,81 @@ def list_conversations():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/canvas/preload", methods=["GET"])
+@supabase_auth_required
+def canvas_preload():
+    """Preload entire canvas state: folders, conversations with messages, sticky notes. Cached in Redis per user."""
+    try:
+        user_id = request.user_id
+        cache_key = f"canvas_preload:{user_id}"
+
+        # Check Redis cache (2 min TTL)
+        if redis_cache:
+            try:
+                cached = redis_cache.get(cache_key)
+                if cached:
+                    return jsonify(json.loads(cached)), 200
+            except:
+                pass
+
+        # Fetch everything in parallel-ish
+        folders_resp = supabase.table("chat_folders").select("*").eq("user_id", user_id).order("created_at").execute()
+        convos_resp = supabase.table("conversations").select(
+            "id, title, folder_id, updated_at, canvas_layout"
+        ).eq("user_id", user_id).is_("deleted_at", "null").order("updated_at", desc=True).execute()
+
+        stickies_resp = supabase.table("canvas_sticky_notes").select("*").eq("user_id", user_id).execute()
+
+        # Fetch messages for all conversations
+        convos = convos_resp.data or []
+        conversations_with_messages = []
+
+        for conv in convos:
+            msgs_resp = supabase.table("conversation_messages").select(
+                "content, role, sources, created_at"
+            ).eq("conversation_id", conv["id"]).order("created_at").execute()
+
+            conversations_with_messages.append({
+                "id": conv["id"],
+                "title": conv.get("title"),
+                "folder_id": conv.get("folder_id"),
+                "updated_at": conv.get("updated_at"),
+                "canvas_layout": conv.get("canvas_layout"),
+                "messages": msgs_resp.data or []
+            })
+
+        result = {
+            "folders": folders_resp.data or [],
+            "conversations": conversations_with_messages,
+            "sticky_notes": stickies_resp.data or []
+        }
+
+        # Cache for 2 minutes
+        if redis_cache:
+            try:
+                redis_cache.setex(cache_key, 120, json.dumps(result))
+            except:
+                pass
+
+        return jsonify(result), 200
+
+    except Exception as e:
+        debug_log(f"Canvas preload error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/canvas/invalidate", methods=["POST"])
+@supabase_auth_required
+def canvas_invalidate():
+    """Invalidate the canvas preload cache for current user."""
+    try:
+        if redis_cache:
+            redis_cache.delete(f"canvas_preload:{request.user_id}")
+        return jsonify({"success": True}), 200
+    except:
+        return jsonify({"success": True}), 200
+
+
 @app.route("/api/chat-folders", methods=["GET"])
 @supabase_auth_required
 def list_chat_folders():
