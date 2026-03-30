@@ -372,10 +372,36 @@ No relevant context found. Politely let them know you don't have information abo
 
         debug_log(f"[+] Generated {len(answer)} character response with Gemini in {response_time_ms}ms")
 
+        # Generate 2 smart follow-up suggestions
+        followup_suggestions = []
+        try:
+            followup_prompt = f"""Based on this Q&A, suggest exactly 2 short follow-up questions the student might ask next. Make them specific to the topic, not generic.
+
+Question: {question}
+Answer: {answer[:500]}
+
+Return ONLY a JSON array of 2 strings, nothing else:
+["follow-up question 1", "follow-up question 2"]"""
+
+            followup_resp = model.generate_content(
+                followup_prompt,
+                generation_config=genai.GenerationConfig(temperature=0.8, max_output_tokens=150)
+            )
+            import json as _json
+            ft = followup_resp.text.strip()
+            if ft.startswith('```'): ft = ft.split('\n', 1)[1] if '\n' in ft else ft[3:]
+            if ft.endswith('```'): ft = ft[:-3]
+            followup_suggestions = _json.loads(ft.strip())[:2]
+
+            track_ai_call("gemini", "flash-lite", "followup_gen")
+        except:
+            followup_suggestions = []
+
         return {
             "response": answer,
             "model_used": model_name,
-            "response_time_ms": response_time_ms
+            "response_time_ms": response_time_ms,
+            "followup_suggestions": followup_suggestions
         }
 
     except Exception as e:

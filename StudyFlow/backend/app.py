@@ -4786,6 +4786,7 @@ def chat_with_notes():
         ai_response = ai_result["response"]
         model_used = ai_result["model_used"]
         response_time_ms = ai_result["response_time_ms"]
+        followup_suggestions = ai_result.get("followup_suggestions", [])
 
         # Add AI response to conversation
         add_message(conv_id, 'assistant', ai_response, sources)
@@ -4848,7 +4849,8 @@ def chat_with_notes():
         return jsonify({
             "conversation_id": conv_id,
             "response": ai_response,
-            "sources": sources
+            "sources": sources,
+            "followup_suggestions": followup_suggestions
         }), 200
 
     except Exception as e:
