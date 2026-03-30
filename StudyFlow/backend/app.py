@@ -4305,12 +4305,14 @@ def download_note_endpoint(note_id):
         # Generate transaction code
         transaction_code = "DL-" + uuid.uuid4().hex[:8]
 
-        # Get username for watermark
-        username = "user"
+        # Get UPLOADER's username for watermark (not downloader's)
+        username = "Anonymous"
         try:
-            profile_result = supabase.table("user_profiles").select("username").eq("id", request.user_id).execute()
-            if profile_result.data and profile_result.data[0].get("username"):
-                username = profile_result.data[0]["username"]
+            uploader_id = note_data.get('user_id')
+            if uploader_id:
+                profile_result = supabase.table("user_profiles").select("username").eq("id", uploader_id).execute()
+                if profile_result.data and profile_result.data[0].get("username"):
+                    username = profile_result.data[0]["username"]
         except Exception:
             pass
 
