@@ -390,7 +390,7 @@ def prewarm_cache():
                         "username": p.get("username") or "Anonymous",
                         "is_public": p.get("is_public", True)
                     })
-                    r.setex(f"profile:{p['id']}", 600, profile_data)
+                    r.setex(f"profile:{p['id']}", 3600, profile_data)
                     cached += 1
                 print(f"Pre-warmed {cached} user profiles")
         except Exception as e:

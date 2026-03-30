@@ -16,7 +16,7 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # Redis cache for embeddings (1 hour TTL)
 _embedding_cache = None
-EMBEDDING_CACHE_TTL = 3600  # 1 hour
+EMBEDDING_CACHE_TTL = 86400  # 24 hours
 
 def _get_redis():
     global _embedding_cache

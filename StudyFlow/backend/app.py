@@ -45,8 +45,8 @@ except Exception as _e:
     print(f"Redis cache not available: {_e}")
     redis_cache = None
 
-PROFILE_CACHE_TTL = 600  # 10 minutes
-BROWSE_CACHE_TTL = 300   # 5 minutes
+PROFILE_CACHE_TTL = 3600   # 1 hour
+BROWSE_CACHE_TTL = 1800   # 30 minutes
 
 def get_cached_profile(user_id):
     """Get user profile from Redis cache or Supabase. Returns {username, is_public} or None."""
@@ -4663,7 +4663,7 @@ def chat_with_notes():
             # Cache RAG results for 2 minutes
             if redis_cache and search_results:
                 try:
-                    redis_cache.setex(rag_cache_key, 120, json.dumps(search_results))
+                    redis_cache.setex(rag_cache_key, 600, json.dumps(search_results))
                 except:
                     pass
 
@@ -4937,10 +4937,10 @@ def canvas_preload():
             "sticky_notes": stickies_resp.data or []
         }
 
-        # Cache for 2 minutes
+        # Cache for 10 minutes
         if redis_cache:
             try:
-                redis_cache.setex(cache_key, 120, json.dumps(result))
+                redis_cache.setex(cache_key, 600, json.dumps(result))
             except:
                 pass
 
@@ -5943,7 +5943,7 @@ def semantic_browse_notes():
         # Cache result in Redis for 5 minutes
         if redis_cache:
             try:
-                redis_cache.setex(cache_key, 300, json.dumps(response_data))
+                redis_cache.setex(cache_key, 1800, json.dumps(response_data))
             except:
                 pass
 
@@ -10414,7 +10414,7 @@ def admin_analytics():
         # Cache for 10 minutes
         if redis_cache:
             try:
-                redis_cache.setex(cache_key, 600, json.dumps(result))
+                redis_cache.setex(cache_key, 1800, json.dumps(result))
             except:
                 pass
 
