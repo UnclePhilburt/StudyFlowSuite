@@ -5244,7 +5244,7 @@ def update_collective_brain_setting():
 
 @app.route("/api/folders/list", methods=["GET"])
 @supabase_auth_required
-def list_folders():
+def list_note_folders():
     """Get all folders for current user"""
     try:
         from StudyFlow.backend.supabase_client import get_user_folders
