@@ -5413,6 +5413,26 @@ def semantic_browse_notes():
             # Use content_summary if available, otherwise chunk_text
             content = result.get('content_summary') or result.get('chunk_text', '')
 
+            # Get upvote count from ai_response_ratings
+            try:
+                ratings = supabase.table("ai_response_ratings").select("vote, cited_note_ids").execute()
+                upvotes = 0
+                downvotes = 0
+
+                if ratings.data:
+                    for rating in ratings.data:
+                        cited_note_ids = rating.get('cited_note_ids', [])
+                        if note_id in cited_note_ids:
+                            vote = rating.get('vote', 0)
+                            if vote == 1:
+                                upvotes += 1
+                            elif vote == -1:
+                                downvotes += 1
+
+                net_upvotes = upvotes - downvotes
+            except:
+                net_upvotes = 0
+
             formatted_results.append({
                 "note_id": note_id,
                 "filename": note['original_filename'],
@@ -5421,7 +5441,8 @@ def semantic_browse_notes():
                 "course_code": note.get('course_code', ''),
                 "created_at": note.get('uploaded_at', ''),
                 "content": content,
-                "similarity": round(result['similarity'], 2)
+                "similarity": round(result['similarity'], 2),
+                "upvotes": net_upvotes
             })
 
         debug_log(f"✅ Semantic browse: Found {len(formatted_results)} unique notes")
