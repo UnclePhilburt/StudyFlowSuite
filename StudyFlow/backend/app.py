@@ -5339,34 +5339,41 @@ def browse_notes():
         filtered_notes = []
         for note in notes:
             profile = get_cached_profile(note['user_id'])
-            if not profile:
-                continue
-            if not profile.get('is_public', True):
+            if not profile or not profile.get('is_public', True):
                 continue
             note['username'] = profile.get('username', 'Anonymous')
             filtered_notes.append(note)
 
-            # Get view count
-            try:
-                view_count_response = supabase.table("note_views").select("id", count="exact").eq("note_id", note['id']).execute()
-                note['view_count'] = view_count_response.count if view_count_response.count else 0
-            except:
-                note['view_count'] = 0
+        # Batch fetch view counts and download counts instead of N+1
+        note_ids = [n['id'] for n in filtered_notes]
+        view_counts = {}
+        dl_counts = {}
 
-            # Download count from download_transactions table
+        if note_ids:
+            # Batch view counts: fetch all views for these notes
             try:
-                dl_count_response = supabase.table("download_transactions").select("id", count="exact").eq("note_id", note['id']).execute()
-                note['usage_count'] = dl_count_response.count if dl_count_response.count else 0
+                views_resp = supabase.table("note_views").select("note_id").in_("note_id", note_ids).execute()
+                for v in (views_resp.data or []):
+                    nid = v['note_id']
+                    view_counts[nid] = view_counts.get(nid, 0) + 1
             except:
-                note['usage_count'] = 0
+                pass
 
-            # Rename original_filename to filename for frontend (with fallback)
+            # Batch download counts
+            try:
+                dl_resp = supabase.table("download_transactions").select("note_id").in_("note_id", note_ids).execute()
+                for d in (dl_resp.data or []):
+                    nid = d['note_id']
+                    dl_counts[nid] = dl_counts.get(nid, 0) + 1
+            except:
+                pass
+
+        for note in filtered_notes:
+            note['view_count'] = view_counts.get(note['id'], 0)
+            note['usage_count'] = dl_counts.get(note['id'], 0)
             note['filename'] = note.pop('original_filename', note.pop('filename', 'Unknown'))
-
-            # Remove user_id from response
             note.pop('user_id', None)
 
-        # Replace notes with filtered list
         notes = filtered_notes
 
         # Filter by tags if specified
@@ -5521,37 +5528,40 @@ def semantic_browse_notes():
 
         # Format results with note metadata
         formatted_results = []
-        seen_notes = set()  # Track unique notes
+        seen_notes = set()
 
-        # Add vector search results
+        # De-duplicate vector results and collect unique note IDs
+        deduped_results = []
         for result in search_results:
             note_id = result['note_id']
-
-            # Skip duplicates (same note, different chunks)
             if note_id in seen_notes:
                 continue
             seen_notes.add(note_id)
+            deduped_results.append(result)
 
-            # Get note metadata (includes pre-computed net_votes)
-            note_data = supabase.table("notes").select(
+        # Batch fetch all note metadata in ONE query
+        if deduped_results:
+            all_note_ids = [r['note_id'] for r in deduped_results]
+            notes_resp = supabase.table("notes").select(
                 "id, original_filename, university, course_code, user_id, uploaded_at, net_votes"
-            ).eq("id", note_id).single().execute()
+            ).in_("id", all_note_ids).execute()
+            notes_map = {n['id']: n for n in (notes_resp.data or [])}
+        else:
+            notes_map = {}
 
-            if not note_data.data:
+        # Build formatted results using batch data + cached profiles
+        for result in deduped_results:
+            note_id = result['note_id']
+            note = notes_map.get(note_id)
+            if not note:
                 continue
 
-            note = note_data.data
-
-            # Get username (cached)
             profile = get_cached_profile(note['user_id'])
             if not profile or not profile.get('is_public', True):
-                continue  # Skip if user has Nexus disabled
+                continue
             username = profile.get('username', 'Anonymous')
 
-            # Use content_summary if available, otherwise chunk_text
             content = result.get('content_summary') or result.get('chunk_text', '')
-
-            # Use pre-computed net_votes from notes table (updated by Celery)
             net_upvotes = note.get('net_votes', 0)
 
             formatted_results.append({
@@ -5567,36 +5577,39 @@ def semantic_browse_notes():
             })
 
         # Add filename search results (not already in vector results)
+        # Batch fetch net_votes and content previews for all filename results
+        new_filename_ids = [fr['note_id'] for fr in filename_results if fr['note_id'] not in seen_notes]
+        filename_votes_map = {}
+        filename_content_map = {}
+
+        if new_filename_ids:
+            # Batch net_votes
+            try:
+                nv_resp = supabase.table("notes").select("id, net_votes").in_("id", new_filename_ids).execute()
+                for n in (nv_resp.data or []):
+                    filename_votes_map[n['id']] = n.get('net_votes', 0)
+            except:
+                pass
+
+            # Batch content previews
+            try:
+                chunks_resp = supabase.table("note_chunks").select("note_id, chunk_text, content_summary").in_("note_id", new_filename_ids).execute()
+                for chunk in (chunks_resp.data or []):
+                    if chunk['note_id'] not in filename_content_map:
+                        filename_content_map[chunk['note_id']] = chunk.get('content_summary') or chunk.get('chunk_text', '')
+            except:
+                pass
+
         for filename_result in filename_results:
             note_id = filename_result['note_id']
 
             if note_id in seen_notes:
-                continue  # Already got this note from vector search
+                continue
             seen_notes.add(note_id)
 
             note_data = filename_result['note_data']
-
-            # Get pre-computed net_votes
-            try:
-                note_full = supabase.table("notes").select("net_votes").eq("id", note_id).single().execute()
-                net_upvotes = note_full.data.get('net_votes', 0) if note_full.data else 0
-            except:
-                net_upvotes = 0
-
-            # Fetch actual content preview from note chunks
-            content_preview = ""
-            try:
-                chunks = supabase.table("note_chunks").select("chunk_text, content_summary").eq("note_id", note_id).limit(1).execute()
-                if chunks.data and len(chunks.data) > 0:
-                    chunk = chunks.data[0]
-                    # Use content_summary if available, otherwise chunk_text
-                    content_preview = chunk.get('content_summary') or chunk.get('chunk_text', '')
-            except:
-                pass
-
-            # Fallback to generic message if no content found
-            if not content_preview:
-                content_preview = "Study notes and materials"
+            net_upvotes = filename_votes_map.get(note_id, 0)
+            content_preview = filename_content_map.get(note_id, "Study notes and materials")
 
             # Add to results with low similarity (since it didn't match content)
             formatted_results.append({

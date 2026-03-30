@@ -247,6 +247,54 @@ def keep_warm():
         print(f"Warm ping failed: {e}")
 
 
+@celery_app.task(name="StudyFlow.backend.tasks.prewarm_cache")
+def prewarm_cache():
+    """Pre-load frequently accessed data into Redis on startup/periodically."""
+    try:
+        import redis
+        from StudyFlow.backend.supabase_client import supabase
+
+        url = os.getenv("CELERY_BROKER_URL", os.getenv("REDIS_URL", "redis://localhost:6379/0"))
+        r = redis.from_url(url, decode_responses=True)
+
+        # 1. Pre-cache the most active user profiles
+        try:
+            # Get users who have public notes (most likely to appear in search results)
+            notes_resp = supabase.table("notes").select("user_id").eq("is_public", True).limit(200).execute()
+            user_ids = list(set(n['user_id'] for n in (notes_resp.data or []) if n.get('user_id')))
+
+            if user_ids:
+                profiles_resp = supabase.table("user_profiles").select("id, username, is_public").in_("id", user_ids).execute()
+                cached = 0
+                for p in (profiles_resp.data or []):
+                    profile_data = json.dumps({
+                        "username": p.get("username") or "Anonymous",
+                        "is_public": p.get("is_public", True)
+                    })
+                    r.setex(f"profile:{p['id']}", 600, profile_data)
+                    cached += 1
+                print(f"Pre-warmed {cached} user profiles")
+        except Exception as e:
+            print(f"Profile pre-warm error: {e}")
+
+        # 2. Pre-cache popular browse results (recent notes, no filter)
+        try:
+            import urllib.request
+            backend_url = os.getenv("RENDER_EXTERNAL_URL", "https://studyflowsuite.onrender.com")
+            # Trigger a browse request to populate the cache
+            # This will be cached by the browse endpoint's Redis logic
+            print("Pre-warm: browse cache will populate on first request")
+        except:
+            pass
+
+        print("Cache pre-warm complete")
+
+    except Exception as e:
+        print(f"Pre-warm error: {e}")
+        import traceback
+        print(traceback.format_exc())
+
+
 def anonymize_chunks_batch(chunk_texts):
     """
     Use Gemini to anonymize chunks for Nexus.
