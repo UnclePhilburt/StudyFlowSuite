@@ -235,6 +235,125 @@ def backfill_all_vote_counts():
         print(traceback.format_exc())
 
 
+@celery_app.task(name="StudyFlow.backend.tasks.send_citation_notifications")
+def send_citation_notifications(sources, requesting_user_id):
+    """
+    Background task: notify note owners when their notes are cited in chat.
+    Moved out of the request cycle to speed up chat responses.
+    """
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+        from datetime import datetime, timedelta
+
+        for src in (sources or []):
+            src_note_id = src.get("note_id")
+            if not src_note_id:
+                continue
+
+            try:
+                note_row = supabase.table("notes").select("user_id, original_filename").eq("id", src_note_id).execute()
+                if not note_row.data:
+                    continue
+
+                owner_id = note_row.data[0].get("user_id")
+                if not owner_id or owner_id == requesting_user_id:
+                    continue
+
+                # Skip duplicate citation notifications within 24 hours
+                cutoff = (datetime.utcnow() - timedelta(hours=24)).isoformat()
+                existing = supabase.table("notifications") \
+                    .select("id") \
+                    .eq("user_id", owner_id) \
+                    .eq("type", "note_cited") \
+                    .eq("note_id", src_note_id) \
+                    .gte("created_at", cutoff) \
+                    .limit(1) \
+                    .execute()
+
+                if existing.data:
+                    continue
+
+                fname = note_row.data[0].get("original_filename", "your note")
+                supabase.table("notifications").insert({
+                    "user_id": owner_id,
+                    "type": "note_cited",
+                    "title": "Note Cited",
+                    "message": f"Your note {fname} was cited in a chat",
+                    "note_id": src_note_id,
+                    "is_read": False
+                }).execute()
+
+                print(f"Sent citation notification to {owner_id} for note {src_note_id}")
+            except Exception as e:
+                print(f"Citation notification error for {src_note_id}: {e}")
+                continue
+
+    except Exception as e:
+        print(f"Citation notifications task error: {e}")
+
+
+@celery_app.task(name="StudyFlow.backend.tasks.update_view_download_counts")
+def update_view_download_counts():
+    """
+    Periodic task: recalculate view_count and download_count for all notes.
+    Runs every 30 minutes so browse endpoint reads columns instead of counting.
+    """
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        # Get all view counts
+        views_resp = supabase.table("note_views").select("note_id").execute()
+        view_counts = {}
+        for v in (views_resp.data or []):
+            nid = v['note_id']
+            view_counts[nid] = view_counts.get(nid, 0) + 1
+
+        # Get all download counts
+        dl_resp = supabase.table("download_transactions").select("note_id").execute()
+        dl_counts = {}
+        for d in (dl_resp.data or []):
+            nid = d['note_id']
+            dl_counts[nid] = dl_counts.get(nid, 0) + 1
+
+        # Get all note IDs that have counts
+        all_ids = set(list(view_counts.keys()) + list(dl_counts.keys()))
+
+        updated = 0
+        for nid in all_ids:
+            try:
+                update = {}
+                if nid in view_counts:
+                    update["view_count"] = view_counts[nid]
+                if nid in dl_counts:
+                    update["download_count"] = dl_counts[nid]
+                if update:
+                    supabase.table("notes").update(update).eq("id", nid).execute()
+                    updated += 1
+            except:
+                pass
+
+        # Reset counts for notes that no longer have views/downloads
+        try:
+            noted_resp = supabase.table("notes").select("id, view_count, download_count").execute()
+            for n in (noted_resp.data or []):
+                reset = {}
+                if n.get('view_count', 0) > 0 and n['id'] not in view_counts:
+                    reset['view_count'] = 0
+                if n.get('download_count', 0) > 0 and n['id'] not in dl_counts:
+                    reset['download_count'] = 0
+                if reset:
+                    supabase.table("notes").update(reset).eq("id", n['id']).execute()
+        except:
+            pass
+
+        print(f"Updated view/download counts for {updated} notes")
+
+    except Exception as e:
+        print(f"View/download count update error: {e}")
+        import traceback
+        print(traceback.format_exc())
+
+
 @celery_app.task(name="StudyFlow.backend.tasks.keep_warm")
 def keep_warm():
     """Periodic ping to prevent Render cold starts."""

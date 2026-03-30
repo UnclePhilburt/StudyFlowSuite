@@ -4819,42 +4819,13 @@ def chat_with_notes():
         except Exception as log_error:
             debug_log(f"[-] Provenance logging failed (non-blocking): {log_error}")
 
-        # Notify note owners when their note is cited in chat
-        try:
-            from datetime import datetime, timedelta
-            for src in sources:
-                src_note_id = src.get("note_id")
-                if not src_note_id:
-                    continue
-                # Look up the note owner
-                note_row = supabase.table("notes").select("user_id, original_filename").eq("id", src_note_id).execute()
-                if not note_row.data:
-                    continue
-                owner_id = note_row.data[0].get("user_id")
-                if not owner_id or owner_id == request.user_id:
-                    continue
-                # Skip duplicate citation notifications within 24 hours
-                cutoff = (datetime.utcnow() - timedelta(hours=24)).isoformat()
-                existing = supabase.table("notifications") \
-                    .select("id") \
-                    .eq("user_id", owner_id) \
-                    .eq("type", "note_cited") \
-                    .eq("note_id", src_note_id) \
-                    .gte("created_at", cutoff) \
-                    .limit(1) \
-                    .execute()
-                if existing.data:
-                    continue
-                fname = note_row.data[0].get("original_filename", "your note")
-                create_notification(
-                    user_id=owner_id,
-                    notif_type="note_cited",
-                    title="Note Cited",
-                    message=f"Your note {fname} was cited in a chat",
-                    note_id=src_note_id,
-                )
-        except Exception as notif_err:
-            debug_log(f"[-] Citation notification failed (non-blocking): {notif_err}")
+        # Notify note owners in background (Celery) -- don't block the response
+        if sources:
+            try:
+                from StudyFlow.backend.tasks import send_citation_notifications
+                send_citation_notifications.delay(sources, request.user_id)
+            except Exception as celery_err:
+                debug_log(f"[-] Failed to queue citation notifications: {celery_err}")
 
         # Generate title for new conversations (if title is still None)
         if conversation and not conversation.get('title'):
@@ -5345,10 +5316,9 @@ def browse_notes():
         limit = int(request.args.get('limit', 50))
         offset = int(request.args.get('offset', 0))
 
-        # Build query (removed username - use user_id instead)
-        # Exclude Wikipedia notes (user_id is NULL)
+        # Build query -- includes pre-computed view/download counts
         query = supabase.table("notes").select(
-            "id, original_filename, university, course_code, user_id, topic_tags, page_count, uploaded_at"
+            "id, original_filename, university, course_code, user_id, topic_tags, page_count, uploaded_at, view_count, download_count"
         ).eq("is_public", True).not_.is_("user_id", "null")
 
         if university:
@@ -5369,33 +5339,11 @@ def browse_notes():
             note['username'] = profile.get('username', 'Anonymous')
             filtered_notes.append(note)
 
-        # Batch fetch view counts and download counts instead of N+1
-        note_ids = [n['id'] for n in filtered_notes]
-        view_counts = {}
-        dl_counts = {}
-
-        if note_ids:
-            # Batch view counts: fetch all views for these notes
-            try:
-                views_resp = supabase.table("note_views").select("note_id").in_("note_id", note_ids).execute()
-                for v in (views_resp.data or []):
-                    nid = v['note_id']
-                    view_counts[nid] = view_counts.get(nid, 0) + 1
-            except:
-                pass
-
-            # Batch download counts
-            try:
-                dl_resp = supabase.table("download_transactions").select("note_id").in_("note_id", note_ids).execute()
-                for d in (dl_resp.data or []):
-                    nid = d['note_id']
-                    dl_counts[nid] = dl_counts.get(nid, 0) + 1
-            except:
-                pass
-
+        # Read pre-computed counts (updated by Celery every 30 min)
         for note in filtered_notes:
-            note['view_count'] = view_counts.get(note['id'], 0)
-            note['usage_count'] = dl_counts.get(note['id'], 0)
+            note['view_count'] = note.get('view_count', 0) or 0
+            note['usage_count'] = note.get('download_count', 0) or 0
+            note.pop('download_count', None)
             note['filename'] = note.pop('original_filename', note.pop('filename', 'Unknown'))
             note.pop('user_id', None)
 

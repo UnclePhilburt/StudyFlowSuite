@@ -21,6 +21,8 @@ celery_app.conf.task_routes = {
     "StudyFlow.backend.tasks.backfill_all_vote_counts": {"queue": "celery"},
     "StudyFlow.backend.tasks.keep_warm": {"queue": "celery"},
     "StudyFlow.backend.tasks.prewarm_cache": {"queue": "celery"},
+    "StudyFlow.backend.tasks.send_citation_notifications": {"queue": "celery"},
+    "StudyFlow.backend.tasks.update_view_download_counts": {"queue": "celery"},
 }
 celery_app.conf.task_default_queue = "celery"
 
@@ -37,6 +39,10 @@ celery_app.conf.beat_schedule = {
     "prewarm-cache": {
         "task": "StudyFlow.backend.tasks.prewarm_cache",
         "schedule": 900.0,  # Every 15 minutes
+    },
+    "update-view-download-counts": {
+        "task": "StudyFlow.backend.tasks.update_view_download_counts",
+        "schedule": 1800.0,  # Every 30 minutes
     },
 }
 celery_app.conf.timezone = "UTC"
