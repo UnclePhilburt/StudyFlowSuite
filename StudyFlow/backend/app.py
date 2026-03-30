@@ -9596,6 +9596,170 @@ def flagged_notes():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/admin/analytics", methods=["GET"])
+def admin_analytics():
+    """ADMIN: Analytics overview -- signups, uploads, conversations, downloads over last 30 days."""
+    try:
+        admin_key = request.args.get("key", "")
+        if admin_key != os.getenv("ADMIN_KEY", "change_me_in_production"):
+            return jsonify({"error": "Unauthorized"}), 403
+
+        # Check Redis cache (10 min TTL since analytics are expensive)
+        cache_key = "admin:analytics"
+        if redis_cache:
+            try:
+                cached = redis_cache.get(cache_key)
+                if cached:
+                    return jsonify(json.loads(cached)), 200
+            except:
+                pass
+
+        from StudyFlow.backend.supabase_client import supabase
+        from datetime import datetime, timedelta
+
+        now = datetime.utcnow()
+        thirty_days_ago = (now - timedelta(days=30)).isoformat()
+        seven_days_ago = (now - timedelta(days=7)).isoformat()
+
+        # --- Summary stats ---
+        total_users = 0
+        try:
+            resp = supabase.table("user_profiles").select("id", count="exact").execute()
+            total_users = resp.count or 0
+        except:
+            pass
+
+        total_notes = 0
+        try:
+            resp = supabase.table("notes").select("id", count="exact").execute()
+            total_notes = resp.count or 0
+        except:
+            pass
+
+        total_conversations = 0
+        try:
+            resp = supabase.table("conversations").select("id", count="exact").is_("deleted_at", "null").execute()
+            total_conversations = resp.count or 0
+        except:
+            pass
+
+        total_downloads = 0
+        try:
+            resp = supabase.table("download_transactions").select("id", count="exact").execute()
+            total_downloads = resp.count or 0
+        except:
+            pass
+
+        # New users last 7 days
+        new_users_7d = 0
+        try:
+            resp = supabase.table("user_profiles").select("id", count="exact").gte("created_at", seven_days_ago).execute()
+            new_users_7d = resp.count or 0
+        except:
+            pass
+
+        # New notes last 7 days
+        new_notes_7d = 0
+        try:
+            resp = supabase.table("notes").select("id", count="exact").gte("uploaded_at", seven_days_ago).execute()
+            new_notes_7d = resp.count or 0
+        except:
+            pass
+
+        # --- Daily time series (last 30 days) ---
+
+        # Signups per day
+        signups_daily = {}
+        try:
+            resp = supabase.table("user_profiles").select("created_at").gte("created_at", thirty_days_ago).execute()
+            for row in (resp.data or []):
+                day = row['created_at'][:10]
+                signups_daily[day] = signups_daily.get(day, 0) + 1
+        except:
+            pass
+
+        # Uploads per day
+        uploads_daily = {}
+        try:
+            resp = supabase.table("notes").select("uploaded_at").gte("uploaded_at", thirty_days_ago).execute()
+            for row in (resp.data or []):
+                day = row['uploaded_at'][:10]
+                uploads_daily[day] = uploads_daily.get(day, 0) + 1
+        except:
+            pass
+
+        # Conversations per day (proxy for active users)
+        conversations_daily = {}
+        try:
+            resp = supabase.table("conversations").select("created_at").gte("created_at", thirty_days_ago).is_("deleted_at", "null").execute()
+            for row in (resp.data or []):
+                day = row['created_at'][:10]
+                conversations_daily[day] = conversations_daily.get(day, 0) + 1
+        except:
+            pass
+
+        # Downloads per day
+        downloads_daily = {}
+        try:
+            resp = supabase.table("download_transactions").select("created_at").gte("created_at", thirty_days_ago).execute()
+            for row in (resp.data or []):
+                day = row['created_at'][:10]
+                downloads_daily[day] = downloads_daily.get(day, 0) + 1
+        except:
+            pass
+
+        # Build date range for last 30 days
+        dates = []
+        for i in range(30, -1, -1):
+            d = (now - timedelta(days=i)).strftime("%Y-%m-%d")
+            dates.append(d)
+
+        # --- Top universities ---
+        university_counts = {}
+        try:
+            resp = supabase.table("user_profiles").select("university").not_.is_("university", "null").execute()
+            for row in (resp.data or []):
+                uni = row.get('university')
+                if uni:
+                    university_counts[uni] = university_counts.get(uni, 0) + 1
+        except:
+            pass
+
+        top_universities = sorted(university_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+
+        result = {
+            "summary": {
+                "total_users": total_users,
+                "total_notes": total_notes,
+                "total_conversations": total_conversations,
+                "total_downloads": total_downloads,
+                "new_users_7d": new_users_7d,
+                "new_notes_7d": new_notes_7d
+            },
+            "dates": dates,
+            "daily": {
+                "signups": [signups_daily.get(d, 0) for d in dates],
+                "uploads": [uploads_daily.get(d, 0) for d in dates],
+                "conversations": [conversations_daily.get(d, 0) for d in dates],
+                "downloads": [downloads_daily.get(d, 0) for d in dates]
+            },
+            "top_universities": [{"name": u[0], "count": u[1]} for u in top_universities]
+        }
+
+        # Cache for 10 minutes
+        if redis_cache:
+            try:
+                redis_cache.setex(cache_key, 600, json.dumps(result))
+            except:
+                pass
+
+        return jsonify(result), 200
+
+    except Exception as e:
+        debug_log(f"Admin analytics error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/admin/users", methods=["GET"])
 def admin_users():
     """ADMIN: List users with search, filters, and stats."""
