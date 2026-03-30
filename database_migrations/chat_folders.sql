@@ -1,7 +1,8 @@
--- Chat folders for canvas navigation
+-- Chat folders for canvas navigation (supports nesting via parent_id)
 CREATE TABLE IF NOT EXISTS chat_folders (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    parent_id UUID REFERENCES chat_folders(id) ON DELETE CASCADE,
     name TEXT NOT NULL DEFAULT 'New Folder',
     color TEXT DEFAULT '#7c9885',
     icon TEXT DEFAULT 'folder',

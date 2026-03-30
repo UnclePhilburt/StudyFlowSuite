@@ -4902,16 +4902,19 @@ def list_chat_folders():
 @app.route("/api/chat-folders", methods=["POST"])
 @supabase_auth_required
 def create_chat_folder():
-    """Create a new chat folder."""
+    """Create a new chat folder (supports nesting via parent_id)."""
     try:
         data = request.get_json()
-        folder = supabase.table("chat_folders").insert({
+        row = {
             "user_id": request.user_id,
             "name": data.get("name", "New Folder"),
             "color": data.get("color", "#7c9885"),
             "position_x": data.get("position_x", 0),
             "position_y": data.get("position_y", 0)
-        }).execute()
+        }
+        if data.get("parent_id"):
+            row["parent_id"] = data["parent_id"]
+        folder = supabase.table("chat_folders").insert(row).execute()
         return jsonify(folder.data[0] if folder.data else {}), 201
     except Exception as e:
         return jsonify({"error": str(e)}), 500
