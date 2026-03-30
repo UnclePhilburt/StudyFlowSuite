@@ -9739,7 +9739,7 @@ def admin_user_detail(user_id):
 
         # Get conversation count
         try:
-            convos_resp = supabase.table("conversation_messages").select("id", count="exact").eq("user_id", user_id).execute()
+            convos_resp = supabase.table("conversations").select("id", count="exact").eq("user_id", user_id).is_("deleted_at", "null").execute()
             total_conversations = convos_resp.count if convos_resp.count else 0
         except:
             total_conversations = 0
