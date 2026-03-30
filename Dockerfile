@@ -26,7 +26,7 @@ ENV PYTHONPATH=/app
 # - If ROLE is "flower", run Flower.
 # - Otherwise (or if ROLE is not set), run the web server.
 CMD if [ "$ROLE" = "worker" ]; then \
-      celery --app StudyFlow.backend.tasks worker --loglevel info --concurrency 4; \
+      celery --app StudyFlow.backend.tasks worker --beat --loglevel info --concurrency 4; \
     elif [ "$ROLE" = "flower" ]; then \
       celery flower --app StudyFlow.backend.tasks --loglevel info; \
     else \

@@ -17,8 +17,24 @@ celery_app = Celery(
 
 celery_app.conf.task_routes = {
     "StudyFlow.backend.tasks.process_question_async": {"queue": "celery"},
+    "StudyFlow.backend.tasks.update_note_votes": {"queue": "celery"},
+    "StudyFlow.backend.tasks.backfill_all_vote_counts": {"queue": "celery"},
+    "StudyFlow.backend.tasks.keep_warm": {"queue": "celery"},
 }
 celery_app.conf.task_default_queue = "celery"
+
+# Periodic tasks (Celery Beat)
+celery_app.conf.beat_schedule = {
+    "keep-render-warm": {
+        "task": "StudyFlow.backend.tasks.keep_warm",
+        "schedule": 300.0,  # Every 5 minutes
+    },
+    "backfill-votes-hourly": {
+        "task": "StudyFlow.backend.tasks.backfill_all_vote_counts",
+        "schedule": 3600.0,  # Every hour
+    },
+}
+celery_app.conf.timezone = "UTC"
 
 # Postgres DB check (optional)
 def ensure_db_ready():

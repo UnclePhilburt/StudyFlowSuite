@@ -23,8 +23,9 @@ from StudyFlow.backend.image_processing import preprocess_image
 from StudyFlow.config import TESSERACT_PATH
 from StudyFlow.logging_utils import debug_log
 from StudyFlow.backend.submit_button_storage import register_submit_button_upload
-from StudyFlow.backend.tasks import process_question_async, celery_app
+from StudyFlow.backend.tasks import process_question_async, update_note_votes, celery_app
 from StudyFlow.backend import tasks  # registers the Celery task
+import redis as redis_lib
 from StudyFlow.backend.supabase_auth import supabase_auth_required, account_not_frozen  # Supabase Auth decorators
 from StudyFlow.backend.supabase_client import supabase  # Supabase client for database operations
 
@@ -32,6 +33,16 @@ BACKEND_URL = os.environ.get("BACKEND_URL", "https://studyflowsuite.onrender.com
 
 stripe.api_key = os.environ['STRIPE_SECRET_KEY']
 WEBHOOK_SECRET    = os.environ['STRIPE_WEBHOOK_SECRET']
+
+# Redis cache (same instance as Celery broker)
+_redis_url = os.getenv("CELERY_BROKER_URL", os.getenv("REDIS_URL", "redis://localhost:6379/0"))
+try:
+    redis_cache = redis_lib.from_url(_redis_url, decode_responses=True)
+    redis_cache.ping()
+    print(f"Redis cache connected: {_redis_url}")
+except Exception as _e:
+    print(f"Redis cache not available: {_e}")
+    redis_cache = None
 
 BREVO_API_KEY = os.environ.get("BREVO_API_KEY")
 if not BREVO_API_KEY:
@@ -655,6 +666,23 @@ def init_users_table():
 
 # Initialize users table
 init_users_table()
+
+@app.route("/health", methods=["GET"])
+def health_check():
+    return jsonify({"status": "ok"}), 200
+
+
+@app.route("/admin/backfill-votes", methods=["POST"])
+def admin_backfill_votes():
+    """ADMIN: Trigger a vote count backfill for all notes."""
+    admin_key = request.args.get("key", "") or (request.get_json() or {}).get("key", "")
+    if admin_key != os.getenv("ADMIN_KEY", "change_me_in_production"):
+        return jsonify({"error": "Unauthorized"}), 403
+
+    from StudyFlow.backend.tasks import backfill_all_vote_counts
+    task = backfill_all_vote_counts.delay()
+    return jsonify({"success": True, "task_id": str(task.id), "message": "Backfill queued"}), 200
+
 
 @app.route("/api/signup", methods=["POST"])
 def signup():
@@ -4585,45 +4613,28 @@ def chat_with_notes():
             search_results = [r for r in search_results if r['note_id'] in personal_note_ids]
             debug_log(f"Filtered to {len(search_results)} personal chunks")
 
-        # Apply voting-based ranking to boost helpful notes and demote unhelpful ones
+        # Apply voting-based ranking using pre-computed net_votes
         if search_results:
-            from collections import defaultdict
-
-            # Get all unique note IDs from search results
+            # Batch fetch net_votes for all notes in results
             note_ids_in_results = list(set(r['note_id'] for r in search_results))
-
-            # Fetch all ratings for these notes
-            ratings = supabase.table("ai_response_ratings").select("cited_note_ids, vote").execute()
-
-            # Calculate helpfulness score for each note
-            note_votes = defaultdict(lambda: {"upvotes": 0, "downvotes": 0})
-            for rating in ratings.data:
-                cited_note_ids = rating.get('cited_note_ids', [])
-                vote = rating.get('vote', 0)
-
-                for note_id in cited_note_ids:
-                    if note_id in note_ids_in_results:
-                        if vote == 1:
-                            note_votes[note_id]["upvotes"] += 1
-                        elif vote == -1:
-                            note_votes[note_id]["downvotes"] += 1
+            net_votes_map = {}
+            try:
+                nv_resp = supabase.table("notes").select("id, net_votes").in_("id", note_ids_in_results).execute()
+                for n in (nv_resp.data or []):
+                    net_votes_map[n["id"]] = n.get("net_votes", 0)
+            except:
+                pass
 
             # Apply weighted ranking: Similarity (70%) + Helpfulness (30%)
             for result in search_results:
                 note_id = result['note_id']
-                votes = note_votes[note_id]
-                upvotes = votes["upvotes"]
-                downvotes = votes["downvotes"]
+                net = net_votes_map.get(note_id, 0)
 
-                # Helpfulness score: (upvotes - downvotes) / (total_votes + 5)
-                # The +5 prevents new notes from being over-penalized
-                total_votes = upvotes + downvotes
-                if total_votes > 0:
-                    helpfulness_score = (upvotes - downvotes) / (total_votes + 5)
-                else:
-                    helpfulness_score = 0  # Neutral for unvoted notes
+                # Normalize net votes to -1 to 1 range (capped at +/-20)
+                capped = max(-20, min(20, net))
+                helpfulness_score = capped / 20.0
 
-                # Normalize helpfulness to 0-1 range (assuming score will be between -1 and 1)
+                # Normalize to 0-1 range
                 normalized_helpfulness = (helpfulness_score + 1) / 2
 
                 # Combined score: 70% similarity + 30% helpfulness
@@ -4632,7 +4643,6 @@ def chat_with_notes():
 
                 result['combined_score'] = combined_score
                 result['helpfulness_score'] = helpfulness_score
-                result['vote_data'] = {"upvotes": upvotes, "downvotes": downvotes}
 
             # Re-sort by combined score
             search_results.sort(key=lambda x: x.get('combined_score', 0), reverse=True)
@@ -4949,6 +4959,13 @@ def rate_chat_response():
             }).execute()
 
             debug_log(f"[+] Created response rating: message={message_id}, user={request.user_id}, vote={vote}")
+
+        # Trigger async vote count update for cited notes
+        if cited_note_ids:
+            try:
+                update_note_votes.delay(cited_note_ids)
+            except Exception as celery_err:
+                debug_log(f"[!] Failed to queue vote update: {celery_err}")
 
         return jsonify({"success": True, "vote": vote}), 200
 
@@ -5370,6 +5387,17 @@ def semantic_browse_notes():
         university_filter = data.get('university')  # Optional university filter
         offset = data.get('offset', 0)  # Pagination offset
 
+        # Check Redis cache for recent identical searches
+        cache_key = f"browse:{question}:{university_filter or ''}:{offset}"
+        if redis_cache:
+            try:
+                cached = redis_cache.get(cache_key)
+                if cached:
+                    debug_log(f"Cache HIT for browse: '{question}' (offset={offset})")
+                    return jsonify(json.loads(cached)), 200
+            except:
+                pass  # Cache miss or error, proceed normally
+
         # Generate embedding for the question
         query_embedding = generate_embedding(question)
         if not query_embedding:
@@ -5444,9 +5472,9 @@ def semantic_browse_notes():
                 continue
             seen_notes.add(note_id)
 
-            # Get note metadata
+            # Get note metadata (includes pre-computed net_votes)
             note_data = supabase.table("notes").select(
-                "id, original_filename, university, course_code, user_id, uploaded_at"
+                "id, original_filename, university, course_code, user_id, uploaded_at, net_votes"
             ).eq("id", note_id).single().execute()
 
             if not note_data.data:
@@ -5466,25 +5494,8 @@ def semantic_browse_notes():
             # Use content_summary if available, otherwise chunk_text
             content = result.get('content_summary') or result.get('chunk_text', '')
 
-            # Get upvote count from ai_response_ratings
-            try:
-                ratings = supabase.table("ai_response_ratings").select("vote, cited_note_ids").execute()
-                upvotes = 0
-                downvotes = 0
-
-                if ratings.data:
-                    for rating in ratings.data:
-                        cited_note_ids = rating.get('cited_note_ids', [])
-                        if note_id in cited_note_ids:
-                            vote = rating.get('vote', 0)
-                            if vote == 1:
-                                upvotes += 1
-                            elif vote == -1:
-                                downvotes += 1
-
-                net_upvotes = upvotes - downvotes
-            except:
-                net_upvotes = 0
+            # Use pre-computed net_votes from notes table (updated by Celery)
+            net_upvotes = note.get('net_votes', 0)
 
             formatted_results.append({
                 "note_id": note_id,
@@ -5495,9 +5506,7 @@ def semantic_browse_notes():
                 "created_at": note.get('uploaded_at', ''),
                 "content": content,
                 "similarity": round(result['similarity'], 2),
-                "upvotes": net_upvotes,
-                "raw_upvotes": upvotes,
-                "raw_downvotes": downvotes
+                "upvotes": net_upvotes
             })
 
         # Add filename search results (not already in vector results)
@@ -5510,27 +5519,12 @@ def semantic_browse_notes():
 
             note_data = filename_result['note_data']
 
-            # Get upvote count
+            # Get pre-computed net_votes
             try:
-                ratings = supabase.table("ai_response_ratings").select("vote, cited_note_ids").execute()
-                upvotes = 0
-                downvotes = 0
-
-                if ratings.data:
-                    for rating in ratings.data:
-                        cited_note_ids = rating.get('cited_note_ids', [])
-                        if note_id in cited_note_ids:
-                            vote = rating.get('vote', 0)
-                            if vote == 1:
-                                upvotes += 1
-                            elif vote == -1:
-                                downvotes += 1
-
-                net_upvotes = upvotes - downvotes
+                note_full = supabase.table("notes").select("net_votes").eq("id", note_id).single().execute()
+                net_upvotes = note_full.data.get('net_votes', 0) if note_full.data else 0
             except:
                 net_upvotes = 0
-                upvotes = 0
-                downvotes = 0
 
             # Fetch actual content preview from note chunks
             content_preview = ""
@@ -5557,9 +5551,7 @@ def semantic_browse_notes():
                 "created_at": note_data.get('uploaded_at', ''),
                 "content": content_preview,
                 "similarity": 0.3,  # Low base similarity for title-only matches
-                "upvotes": net_upvotes,
-                "raw_upvotes": upvotes,
-                "raw_downvotes": downvotes
+                "upvotes": net_upvotes
             })
 
         debug_log(f"✅ Semantic browse: Found {len(formatted_results)} unique notes ({len(search_results)} from content, {len(filename_results)} from titles)")
@@ -5569,18 +5561,13 @@ def semantic_browse_notes():
 
             for note in formatted_results:
                 similarity = note['similarity']
-                upvotes = note['raw_upvotes']
-                downvotes = note['raw_downvotes']
-                total_votes = upvotes + downvotes
+                net = note.get('upvotes', 0)
                 filename = note['filename'].lower()
 
-                # Calculate helpfulness score
-                # Normalize: (upvotes - downvotes) / (total_votes + 5)
-                # The +5 prevents new notes from being penalized
-                if total_votes > 0:
-                    helpfulness_score = (upvotes - downvotes) / (total_votes + 5)
-                else:
-                    helpfulness_score = 0
+                # Calculate helpfulness score from pre-computed net_votes
+                # Normalize net votes to a -1 to 1 range (capped at +/-20)
+                capped = max(-20, min(20, net))
+                helpfulness_score = capped / 20.0
 
                 # Normalize to 0-1 range
                 normalized_helpfulness = (helpfulness_score + 1) / 2
@@ -5620,18 +5607,25 @@ def semantic_browse_notes():
         paginated_results = formatted_results[start_idx:end_idx]
         has_more = len(formatted_results) > end_idx
 
-        # Clean up response - remove internal fields
+        # Clean up response - remove internal ranking fields
         for note in paginated_results:
-            note.pop('raw_upvotes', None)
-            note.pop('raw_downvotes', None)
-            note.pop('combined_score', None)  # Keep internal ranking score hidden
-            note.pop('title_match_score', None)  # Keep title match score hidden
+            note.pop('combined_score', None)
+            note.pop('title_match_score', None)
 
-        return jsonify({
+        response_data = {
             "notes": paginated_results,
             "has_more": has_more,
             "total": len(formatted_results)
-        }), 200
+        }
+
+        # Cache result in Redis for 5 minutes
+        if redis_cache:
+            try:
+                redis_cache.setex(cache_key, 300, json.dumps(response_data))
+            except:
+                pass  # Non-critical, skip cache write
+
+        return jsonify(response_data), 200
 
     except Exception as e:
         debug_log(f"❌ Semantic browse error: {e}\n{traceback.format_exc()}")

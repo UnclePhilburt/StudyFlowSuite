@@ -151,6 +151,102 @@ def process_note_async(note_id, user_id, full_text, course_metadata, file_hash=N
         print(traceback.format_exc())
 
 
+@celery_app.task(name="StudyFlow.backend.tasks.update_note_votes")
+def update_note_votes(note_ids):
+    """
+    Recalculate net_votes for specific notes after a vote is cast.
+    Called from the rate-response endpoint.
+    """
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        # Fetch all ratings that cite any of these notes
+        ratings_resp = supabase.table("ai_response_ratings").select("vote, cited_note_ids").execute()
+        ratings = ratings_resp.data or []
+
+        # Aggregate votes per note
+        vote_map = {}
+        for rating in ratings:
+            for nid in (rating.get("cited_note_ids") or []):
+                if nid in note_ids:
+                    if nid not in vote_map:
+                        vote_map[nid] = 0
+                    vote_map[nid] += rating["vote"]
+
+        # Update each note's net_votes
+        for nid in note_ids:
+            net = vote_map.get(nid, 0)
+            supabase.table("notes").update({"net_votes": net}).eq("id", nid).execute()
+
+        print(f"Updated net_votes for {len(note_ids)} notes")
+
+    except Exception as e:
+        print(f"Error updating note votes: {e}")
+        import traceback
+        print(traceback.format_exc())
+
+
+@celery_app.task(name="StudyFlow.backend.tasks.backfill_all_vote_counts")
+def backfill_all_vote_counts():
+    """
+    Periodic task: recalculate net_votes for ALL notes.
+    Runs hourly to keep counts accurate.
+    """
+    try:
+        from StudyFlow.backend.supabase_client import supabase
+
+        # Fetch all ratings
+        ratings_resp = supabase.table("ai_response_ratings").select("vote, cited_note_ids").execute()
+        ratings = ratings_resp.data or []
+
+        # Aggregate all votes
+        vote_map = {}
+        for rating in ratings:
+            for nid in (rating.get("cited_note_ids") or []):
+                if nid not in vote_map:
+                    vote_map[nid] = 0
+                vote_map[nid] += rating["vote"]
+
+        # Update notes that have votes
+        updated = 0
+        for nid, net in vote_map.items():
+            try:
+                supabase.table("notes").update({"net_votes": net}).eq("id", nid).execute()
+                updated += 1
+            except:
+                pass
+
+        # Reset notes that no longer have votes
+        if vote_map:
+            # Get all notes with non-zero net_votes that aren't in vote_map
+            noted_resp = supabase.table("notes").select("id").neq("net_votes", 0).execute()
+            for n in (noted_resp.data or []):
+                if n["id"] not in vote_map:
+                    try:
+                        supabase.table("notes").update({"net_votes": 0}).eq("id", n["id"]).execute()
+                    except:
+                        pass
+
+        print(f"Backfill complete: updated {updated} notes with vote counts")
+
+    except Exception as e:
+        print(f"Error backfilling votes: {e}")
+        import traceback
+        print(traceback.format_exc())
+
+
+@celery_app.task(name="StudyFlow.backend.tasks.keep_warm")
+def keep_warm():
+    """Periodic ping to prevent Render cold starts."""
+    try:
+        import urllib.request
+        backend_url = os.getenv("RENDER_EXTERNAL_URL", "https://studyflowsuite.onrender.com")
+        urllib.request.urlopen(backend_url + "/health", timeout=10)
+        print("Server warm ping OK")
+    except Exception as e:
+        print(f"Warm ping failed: {e}")
+
+
 def anonymize_chunks_batch(chunk_texts):
     """
     Use Gemini to anonymize chunks for Nexus.
