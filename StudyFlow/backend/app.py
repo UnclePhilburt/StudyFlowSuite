@@ -5453,10 +5453,42 @@ def semantic_browse_notes():
                 "created_at": note.get('uploaded_at', ''),
                 "content": content,
                 "similarity": round(result['similarity'], 2),
-                "upvotes": net_upvotes
+                "upvotes": net_upvotes,
+                "raw_upvotes": upvotes,
+                "raw_downvotes": downvotes
             })
 
         debug_log(f"✅ Semantic browse: Found {len(formatted_results)} unique notes")
+
+        # Apply weighted ranking: 70% similarity + 30% upvote helpfulness
+        if formatted_results:
+            for note in formatted_results:
+                similarity = note['similarity']
+                upvotes = note['raw_upvotes']
+                downvotes = note['raw_downvotes']
+                total_votes = upvotes + downvotes
+
+                # Calculate helpfulness score (similar to chat ranking)
+                # Normalize: (upvotes - downvotes) / (total_votes + 5)
+                # The +5 prevents new notes from being penalized
+                if total_votes > 0:
+                    helpfulness_score = (upvotes - downvotes) / (total_votes + 5)
+                else:
+                    helpfulness_score = 0
+
+                # Normalize to 0-1 range
+                normalized_helpfulness = (helpfulness_score + 1) / 2
+
+                # Combined score: 70% similarity + 30% helpfulness
+                combined_score = (similarity * 0.7) + (normalized_helpfulness * 0.3)
+                note['combined_score'] = round(combined_score, 4)
+
+            # Re-sort by combined score
+            formatted_results.sort(key=lambda x: x.get('combined_score', 0), reverse=True)
+
+            debug_log(f"📊 Top 5 ranked notes:")
+            for i, note in enumerate(formatted_results[:5], 1):
+                debug_log(f"  {i}. {note['filename'][:40]} - Combined: {note['combined_score']:.3f} (Sim: {note['similarity']:.2f}, Upvotes: {note['upvotes']})")
 
         # Apply pagination
         page_size = 10
@@ -5465,6 +5497,12 @@ def semantic_browse_notes():
 
         paginated_results = formatted_results[start_idx:end_idx]
         has_more = len(formatted_results) > end_idx
+
+        # Clean up response - remove internal fields
+        for note in paginated_results:
+            note.pop('raw_upvotes', None)
+            note.pop('raw_downvotes', None)
+            note.pop('combined_score', None)  # Keep internal ranking score hidden
 
         return jsonify({
             "notes": paginated_results,
