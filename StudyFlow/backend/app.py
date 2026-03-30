@@ -9532,6 +9532,310 @@ def flagged_notes():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/admin/users", methods=["GET"])
+def admin_users():
+    """ADMIN: List users with search, filters, and stats."""
+    try:
+        admin_key = request.args.get("key", "")
+        if admin_key != os.getenv("ADMIN_KEY", "change_me_in_production"):
+            return jsonify({"error": "Unauthorized"}), 403
+
+        from StudyFlow.backend.supabase_client import supabase
+
+        search = request.args.get("search", "").strip()
+        filter_by = request.args.get("filter", "")  # suspended, banned, frozen
+        sort_by = request.args.get("sort", "recent")  # recent, name, notes
+        offset = int(request.args.get("offset", 0))
+        limit = int(request.args.get("limit", 50))
+
+        # Fetch user profiles
+        query = supabase.table("user_profiles").select(
+            "id, email, username, full_name, university, subscription_tier, "
+            "good_standing, dmca_strikes, permanent_bad_standing, "
+            "account_frozen, frozen_reason, age_verified, edu_email_verified, "
+            "is_public, created_at"
+        )
+
+        # Apply filters
+        if filter_by == "suspended":
+            query = query.eq("account_frozen", True)
+        elif filter_by == "banned":
+            query = query.eq("permanent_bad_standing", True)
+        elif filter_by == "bad_standing":
+            query = query.eq("good_standing", False)
+
+        # Sort
+        if sort_by == "name":
+            query = query.order("username", desc=False)
+        else:
+            query = query.order("created_at", desc=True)
+
+        profiles_resp = query.range(offset, offset + limit - 1).execute()
+        profiles = profiles_resp.data or []
+
+        # Apply text search client-side (supabase text search is limited)
+        if search:
+            search_lower = search.lower()
+            profiles = [p for p in profiles if
+                search_lower in (p.get("username") or "").lower() or
+                search_lower in (p.get("email") or "").lower() or
+                search_lower in (p.get("full_name") or "").lower() or
+                search_lower in (p.get("university") or "").lower()
+            ]
+
+        # Batch get note counts for all users
+        user_ids = [p["id"] for p in profiles]
+        note_counts = {}
+        if user_ids:
+            for uid in user_ids:
+                try:
+                    count_resp = supabase.table("notes").select("id", count="exact").eq("user_id", uid).execute()
+                    note_counts[uid] = count_resp.count if count_resp.count else 0
+                except:
+                    note_counts[uid] = 0
+
+        # Build response
+        users = []
+        for p in profiles:
+            uid = p["id"]
+            status = "active"
+            if p.get("permanent_bad_standing"):
+                status = "banned"
+            elif p.get("account_frozen"):
+                status = "suspended"
+            elif not p.get("good_standing", True):
+                status = "bad_standing"
+
+            users.append({
+                "id": uid,
+                "email": p.get("email", ""),
+                "username": p.get("username", ""),
+                "full_name": p.get("full_name", ""),
+                "university": p.get("university", ""),
+                "subscription": p.get("subscription_tier", "free"),
+                "status": status,
+                "dmca_strikes": p.get("dmca_strikes", 0),
+                "edu_verified": p.get("edu_email_verified", False),
+                "age_verified": p.get("age_verified", False),
+                "nexus_enabled": p.get("is_public", True),
+                "note_count": note_counts.get(uid, 0),
+                "created_at": p.get("created_at", ""),
+                "frozen_reason": p.get("frozen_reason", "")
+            })
+
+        # Sort by note count if requested
+        if sort_by == "notes":
+            users.sort(key=lambda u: u["note_count"], reverse=True)
+
+        debug_log(f"[Admin] Users list: {len(users)} users returned")
+        return jsonify({"users": users, "total": len(users)}), 200
+
+    except Exception as e:
+        debug_log(f"Admin users error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/admin/users/<user_id>", methods=["GET"])
+def admin_user_detail(user_id):
+    """ADMIN: Get detailed user profile with activity stats."""
+    try:
+        admin_key = request.args.get("key", "")
+        if admin_key != os.getenv("ADMIN_KEY", "change_me_in_production"):
+            return jsonify({"error": "Unauthorized"}), 403
+
+        from StudyFlow.backend.supabase_client import supabase
+
+        # Get full profile
+        profile_resp = supabase.table("user_profiles").select("*").eq("id", user_id).single().execute()
+        if not profile_resp.data:
+            return jsonify({"error": "User not found"}), 404
+
+        p = profile_resp.data
+
+        # Get note count and list
+        notes_resp = supabase.table("notes").select(
+            "id, original_filename, university, course_code, is_public, uploaded_at"
+        ).eq("user_id", user_id).order("uploaded_at", desc=True).limit(20).execute()
+        notes = notes_resp.data or []
+
+        # Get DMCA history
+        dmca_resp = supabase.table("dmca_takedowns").select(
+            "id, note_filename, reason, status, created_at"
+        ).eq("uploader_id", user_id).order("created_at", desc=True).execute()
+        dmca_history = dmca_resp.data or []
+
+        # Get total note count
+        total_notes_resp = supabase.table("notes").select("id", count="exact").eq("user_id", user_id).execute()
+        total_notes = total_notes_resp.count if total_notes_resp.count else 0
+
+        # Get conversation count
+        try:
+            convos_resp = supabase.table("conversation_messages").select("id", count="exact").eq("user_id", user_id).execute()
+            total_conversations = convos_resp.count if convos_resp.count else 0
+        except:
+            total_conversations = 0
+
+        # Determine status
+        status = "active"
+        if p.get("permanent_bad_standing"):
+            status = "banned"
+        elif p.get("account_frozen"):
+            status = "suspended"
+        elif not p.get("good_standing", True):
+            status = "bad_standing"
+
+        user = {
+            "id": p["id"],
+            "email": p.get("email", ""),
+            "username": p.get("username", ""),
+            "full_name": p.get("full_name", ""),
+            "university": p.get("university", ""),
+            "subscription": p.get("subscription_tier", "free"),
+            "status": status,
+            "dmca_strikes": p.get("dmca_strikes", 0),
+            "edu_verified": p.get("edu_email_verified", False),
+            "age_verified": p.get("age_verified", False),
+            "nexus_enabled": p.get("is_public", True),
+            "good_standing": p.get("good_standing", True),
+            "account_frozen": p.get("account_frozen", False),
+            "frozen_reason": p.get("frozen_reason", ""),
+            "frozen_at": p.get("frozen_at", ""),
+            "permanent_bad_standing": p.get("permanent_bad_standing", False),
+            "pages_uploaded_this_month": p.get("pages_uploaded_this_month", 0),
+            "created_at": p.get("created_at", ""),
+            "stats": {
+                "total_notes": total_notes,
+                "total_conversations": total_conversations
+            },
+            "recent_notes": [{
+                "id": n["id"],
+                "filename": n.get("original_filename", "Untitled"),
+                "university": n.get("university", ""),
+                "course_code": n.get("course_code", ""),
+                "is_public": n.get("is_public", True),
+                "uploaded_at": n.get("uploaded_at", "")
+            } for n in notes],
+            "dmca_history": dmca_history
+        }
+
+        return jsonify(user), 200
+
+    except Exception as e:
+        debug_log(f"Admin user detail error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/admin/users/<user_id>/suspend", methods=["POST"])
+def admin_suspend_user(user_id):
+    """ADMIN: Suspend (freeze) a user account."""
+    try:
+        data = request.get_json()
+        admin_key = data.get("key", "")
+        if admin_key != os.getenv("ADMIN_KEY", "change_me_in_production"):
+            return jsonify({"error": "Unauthorized"}), 403
+
+        from StudyFlow.backend.supabase_client import supabase
+        from datetime import datetime
+
+        reason = data.get("reason", "Admin suspension")
+
+        supabase.table("user_profiles").update({
+            "account_frozen": True,
+            "frozen_at": datetime.utcnow().isoformat(),
+            "frozen_reason": reason
+        }).eq("id", user_id).execute()
+
+        # Notify user
+        create_notification(
+            user_id=user_id,
+            notif_type="account_suspended",
+            title="Account Suspended",
+            message=f"Your account has been suspended: {reason}"
+        )
+
+        debug_log(f"[Admin] Suspended user {user_id}: {reason}")
+        return jsonify({"success": True, "action": "suspended"}), 200
+
+    except Exception as e:
+        debug_log(f"Admin suspend error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/admin/users/<user_id>/unsuspend", methods=["POST"])
+def admin_unsuspend_user(user_id):
+    """ADMIN: Unsuspend (unfreeze) a user account."""
+    try:
+        data = request.get_json()
+        admin_key = data.get("key", "")
+        if admin_key != os.getenv("ADMIN_KEY", "change_me_in_production"):
+            return jsonify({"error": "Unauthorized"}), 403
+
+        from StudyFlow.backend.supabase_client import supabase
+
+        supabase.table("user_profiles").update({
+            "account_frozen": False,
+            "frozen_at": None,
+            "frozen_reason": None
+        }).eq("id", user_id).execute()
+
+        create_notification(
+            user_id=user_id,
+            notif_type="account_restored",
+            title="Account Restored",
+            message="Your account has been restored. Welcome back."
+        )
+
+        debug_log(f"[Admin] Unsuspended user {user_id}")
+        return jsonify({"success": True, "action": "unsuspended"}), 200
+
+    except Exception as e:
+        debug_log(f"Admin unsuspend error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/admin/users/<user_id>/ban", methods=["POST"])
+def admin_ban_user(user_id):
+    """ADMIN: Permanently ban a user (sets 3 DMCA strikes + permanent bad standing)."""
+    try:
+        data = request.get_json()
+        admin_key = data.get("key", "")
+        if admin_key != os.getenv("ADMIN_KEY", "change_me_in_production"):
+            return jsonify({"error": "Unauthorized"}), 403
+
+        from StudyFlow.backend.supabase_client import supabase
+        from datetime import datetime
+
+        reason = data.get("reason", "Permanent ban by admin")
+
+        supabase.table("user_profiles").update({
+            "dmca_strikes": 3,
+            "permanent_bad_standing": True,
+            "good_standing": False,
+            "account_frozen": True,
+            "frozen_at": datetime.utcnow().isoformat(),
+            "frozen_reason": reason
+        }).eq("id", user_id).execute()
+
+        # Make all their notes private
+        supabase.table("notes").update({
+            "is_public": False
+        }).eq("user_id", user_id).execute()
+
+        create_notification(
+            user_id=user_id,
+            notif_type="account_banned",
+            title="Account Banned",
+            message=f"Your account has been permanently banned: {reason}"
+        )
+
+        debug_log(f"[Admin] Banned user {user_id}: {reason}")
+        return jsonify({"success": True, "action": "banned"}), 200
+
+    except Exception as e:
+        debug_log(f"Admin ban error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/admin/review/<note_id>", methods=["POST"])
 def review_note(note_id):
     """ADMIN: Approve or reject a note."""
