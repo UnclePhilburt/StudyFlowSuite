@@ -5460,15 +5460,21 @@ def semantic_browse_notes():
 
         debug_log(f"✅ Semantic browse: Found {len(formatted_results)} unique notes")
 
-        # Apply weighted ranking: 70% similarity + 30% upvote helpfulness
+        # Apply weighted ranking: similarity + upvote helpfulness + title match boost
         if formatted_results:
+            # Extract query keywords (remove common words)
+            query_words = set(question.lower().split())
+            stopwords = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'from', 'is', 'are', 'was', 'were', 'what', 'how'}
+            query_keywords = query_words - stopwords
+
             for note in formatted_results:
                 similarity = note['similarity']
                 upvotes = note['raw_upvotes']
                 downvotes = note['raw_downvotes']
                 total_votes = upvotes + downvotes
+                filename = note['filename'].lower()
 
-                # Calculate helpfulness score (similar to chat ranking)
+                # Calculate helpfulness score
                 # Normalize: (upvotes - downvotes) / (total_votes + 5)
                 # The +5 prevents new notes from being penalized
                 if total_votes > 0:
@@ -5479,16 +5485,29 @@ def semantic_browse_notes():
                 # Normalize to 0-1 range
                 normalized_helpfulness = (helpfulness_score + 1) / 2
 
-                # Combined score: 70% similarity + 30% helpfulness
-                combined_score = (similarity * 0.7) + (normalized_helpfulness * 0.3)
+                # Calculate title match score
+                title_match_count = 0
+                for keyword in query_keywords:
+                    if keyword in filename:
+                        title_match_count += 1
+
+                # Title match boost: percentage of query keywords found in title
+                if query_keywords:
+                    title_match_score = title_match_count / len(query_keywords)
+                else:
+                    title_match_score = 0
+
+                # Combined score: 60% similarity + 25% helpfulness + 15% title match
+                combined_score = (similarity * 0.6) + (normalized_helpfulness * 0.25) + (title_match_score * 0.15)
                 note['combined_score'] = round(combined_score, 4)
+                note['title_match_score'] = round(title_match_score, 2)
 
             # Re-sort by combined score
             formatted_results.sort(key=lambda x: x.get('combined_score', 0), reverse=True)
 
             debug_log(f"📊 Top 5 ranked notes:")
             for i, note in enumerate(formatted_results[:5], 1):
-                debug_log(f"  {i}. {note['filename'][:40]} - Combined: {note['combined_score']:.3f} (Sim: {note['similarity']:.2f}, Upvotes: {note['upvotes']})")
+                debug_log(f"  {i}. {note['filename'][:40]} - Combined: {note['combined_score']:.3f} (Sim: {note['similarity']:.2f}, Upvotes: {note['upvotes']}, Title: {note['title_match_score']:.2f})")
 
         # Apply pagination
         page_size = 10
@@ -5503,6 +5522,7 @@ def semantic_browse_notes():
             note.pop('raw_upvotes', None)
             note.pop('raw_downvotes', None)
             note.pop('combined_score', None)  # Keep internal ranking score hidden
+            note.pop('title_match_score', None)  # Keep title match score hidden
 
         return jsonify({
             "notes": paginated_results,
