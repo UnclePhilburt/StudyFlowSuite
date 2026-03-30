@@ -5532,6 +5532,21 @@ def semantic_browse_notes():
                 upvotes = 0
                 downvotes = 0
 
+            # Fetch actual content preview from note chunks
+            content_preview = ""
+            try:
+                chunks = supabase.table("note_chunks").select("chunk_text, content_summary").eq("note_id", note_id).limit(1).execute()
+                if chunks.data and len(chunks.data) > 0:
+                    chunk = chunks.data[0]
+                    # Use content_summary if available, otherwise chunk_text
+                    content_preview = chunk.get('content_summary') or chunk.get('chunk_text', '')
+            except:
+                pass
+
+            # Fallback to generic message if no content found
+            if not content_preview:
+                content_preview = "Study notes and materials"
+
             # Add to results with low similarity (since it didn't match content)
             formatted_results.append({
                 "note_id": note_id,
@@ -5540,7 +5555,7 @@ def semantic_browse_notes():
                 "university": note_data.get('university', 'Unknown'),
                 "course_code": note_data.get('course_code', ''),
                 "created_at": note_data.get('uploaded_at', ''),
-                "content": f"File matches your search: {note_data['original_filename']}",
+                "content": content_preview,
                 "similarity": 0.3,  # Low base similarity for title-only matches
                 "upvotes": net_upvotes,
                 "raw_upvotes": upvotes,
