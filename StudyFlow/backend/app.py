@@ -5324,6 +5324,115 @@ def browse_notes():
         }), 500
 
 
+@app.route("/api/notes/semantic-browse", methods=["POST"])
+@supabase_auth_required
+def semantic_browse_notes():
+    """
+    Semantic search for browse page - returns note metadata + matching paragraphs
+
+    Expects JSON:
+    {
+        "question": "What is photosynthesis?"
+    }
+
+    Returns:
+    [
+        {
+            "note_id": "...",
+            "filename": "Biology_Chapter_3.pdf",
+            "username": "john_doe",
+            "university": "MIT",
+            "course_code": "BIO101",
+            "created_at": "2024-01-15",
+            "content": "Photosynthesis is the process...",
+            "similarity": 0.89
+        }
+    ]
+    """
+    try:
+        from StudyFlow.backend.supabase_client import search_notes_vector, supabase
+        from StudyFlow.backend.embedding_client import generate_embedding
+
+        data = request.get_json()
+        if not data or not data.get('question'):
+            return jsonify({"error": "Missing question"}), 400
+
+        question = data.get('question')
+
+        # Generate embedding for the question
+        query_embedding = generate_embedding(question)
+        if not query_embedding:
+            return jsonify({"error": "Failed to generate query embedding"}), 500
+
+        debug_log(f"🔍 Semantic browse search for: '{question}'")
+
+        # Search using pgvector
+        search_results = search_notes_vector(
+            query_embedding=query_embedding,
+            user_id=request.user_id,
+            university=None,
+            course_code=None,
+            match_threshold=0.4,
+            match_count=10  # Return top 10 for browse
+        )
+
+        if not search_results:
+            return jsonify([]), 200
+
+        # Format results with note metadata
+        formatted_results = []
+        seen_notes = set()  # Track unique notes
+
+        for result in search_results:
+            note_id = result['note_id']
+
+            # Skip duplicates (same note, different chunks)
+            if note_id in seen_notes:
+                continue
+            seen_notes.add(note_id)
+
+            # Get note metadata
+            note_data = supabase.table("notes").select(
+                "id, original_filename, university, course_code, user_id, uploaded_at"
+            ).eq("id", note_id).single().execute()
+
+            if not note_data.data:
+                continue
+
+            note = note_data.data
+
+            # Get username
+            try:
+                user_profile = supabase.table("user_profiles").select("username, is_public").eq("id", note['user_id']).single().execute()
+                if not user_profile.data or not user_profile.data.get('is_public', True):
+                    continue  # Skip if user has Nexus disabled
+                username = user_profile.data.get('username') or 'Anonymous'
+            except:
+                continue
+
+            # Use content_summary if available, otherwise chunk_text
+            content = result.get('content_summary') or result.get('chunk_text', '')
+
+            formatted_results.append({
+                "note_id": note_id,
+                "filename": note['original_filename'],
+                "username": username,
+                "university": note.get('university', 'Unknown'),
+                "course_code": note.get('course_code', ''),
+                "created_at": note.get('uploaded_at', ''),
+                "content": content,
+                "similarity": round(result['similarity'], 2)
+            })
+
+        debug_log(f"✅ Semantic browse: Found {len(formatted_results)} unique notes")
+
+        return jsonify(formatted_results), 200
+
+    except Exception as e:
+        debug_log(f"❌ Semantic browse error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/notes/topic-tags", methods=["GET"])
 @supabase_auth_required
 def get_topic_tags():
