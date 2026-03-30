@@ -5353,6 +5353,15 @@ def semantic_browse_notes():
         from StudyFlow.backend.supabase_client import search_notes_vector, supabase
         from StudyFlow.backend.embedding_client import generate_embedding
 
+        # Check .edu email verification requirement
+        user_profile = supabase.table("user_profiles").select("edu_email_verified").eq("id", request.user_id).single().execute()
+        if user_profile.data:
+            edu_verified = user_profile.data.get('edu_email_verified', False)
+            if not edu_verified:
+                return jsonify({"error": "Browse requires a verified .edu email address"}), 403
+        else:
+            return jsonify({"error": "User profile not found"}), 404
+
         data = request.get_json()
         if not data or not data.get('question'):
             return jsonify({"error": "Missing question"}), 400
