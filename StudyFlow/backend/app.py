@@ -4929,8 +4929,10 @@ def update_chat_folder(folder_id):
         update = {}
         if "name" in data: update["name"] = data["name"]
         if "color" in data: update["color"] = data["color"]
+        if "icon" in data: update["icon"] = data["icon"]
         if "position_x" in data: update["position_x"] = data["position_x"]
         if "position_y" in data: update["position_y"] = data["position_y"]
+        if "parent_id" in data: update["parent_id"] = data["parent_id"]
         supabase.table("chat_folders").update(update).eq("id", folder_id).eq("user_id", request.user_id).execute()
         return jsonify({"success": True}), 200
     except Exception as e:
