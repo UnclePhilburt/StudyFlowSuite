@@ -14,6 +14,7 @@ import numpy as np
 import psycopg2
 import traceback
 import uuid
+import hashlib
 import requests
 import stripe
 import google.generativeai as genai
@@ -43,6 +44,39 @@ try:
 except Exception as _e:
     print(f"Redis cache not available: {_e}")
     redis_cache = None
+
+PROFILE_CACHE_TTL = 600  # 10 minutes
+BROWSE_CACHE_TTL = 300   # 5 minutes
+
+def get_cached_profile(user_id):
+    """Get user profile from Redis cache or Supabase. Returns {username, is_public} or None."""
+    cache_key = f"profile:{user_id}"
+
+    # Try cache first
+    if redis_cache:
+        try:
+            cached = redis_cache.get(cache_key)
+            if cached:
+                return json.loads(cached)
+        except:
+            pass
+
+    # Fetch from Supabase
+    try:
+        resp = supabase.table("user_profiles").select("username, is_public").eq("id", user_id).single().execute()
+        if resp.data:
+            profile = {"username": resp.data.get("username") or "Anonymous", "is_public": resp.data.get("is_public", True)}
+            # Cache it
+            if redis_cache:
+                try:
+                    redis_cache.setex(cache_key, PROFILE_CACHE_TTL, json.dumps(profile))
+                except:
+                    pass
+            return profile
+    except:
+        pass
+    return None
+
 
 BREVO_API_KEY = os.environ.get("BREVO_API_KEY")
 if not BREVO_API_KEY:
@@ -4586,17 +4620,36 @@ def chat_with_notes():
         if not query_embedding:
             return jsonify({"error": "Failed to generate query embedding"}), 500
 
-        # Search database for relevant content (increased count for consensus)
-        search_results = search_notes_vector(
-            query_embedding=query_embedding,
-            user_id=request.user_id,
-            university=None,  # Not filtering, just using for prioritization
-            course_code=None,
-            match_threshold=0.4,
-            match_count=15  # Increased from 5 to show more sources for consensus
-        )
+        # Search database for relevant content (cached for 2 min for similar queries)
+        rag_cache_key = f"rag:{hashlib.md5(message.encode()).hexdigest()}:{request.user_id}:{search_scope}"
+        search_results = None
 
-        debug_log(f"🔍 Found {len(search_results) if search_results else 0} relevant chunks")
+        if redis_cache:
+            try:
+                cached_rag = redis_cache.get(rag_cache_key)
+                if cached_rag:
+                    search_results = json.loads(cached_rag)
+                    debug_log(f"RAG cache HIT: {len(search_results)} chunks")
+            except:
+                pass
+
+        if search_results is None:
+            search_results = search_notes_vector(
+                query_embedding=query_embedding,
+                user_id=request.user_id,
+                university=None,  # Not filtering, just using for prioritization
+                course_code=None,
+                match_threshold=0.4,
+                match_count=15
+            )
+            # Cache RAG results for 2 minutes
+            if redis_cache and search_results:
+                try:
+                    redis_cache.setex(rag_cache_key, 120, json.dumps(search_results))
+                except:
+                    pass
+
+        debug_log(f"Found {len(search_results) if search_results else 0} relevant chunks")
 
         # Prioritize results from same university (MSU Lane)
         if user_university and search_results:
@@ -5233,6 +5286,22 @@ def browse_notes():
 
         user_id = request.user_id
 
+        # Check Redis cache for this browse request
+        university_param = request.args.get('university', '')
+        sort_param = request.args.get('sort', 'recent')
+        limit_param = request.args.get('limit', '50')
+        offset_param = request.args.get('offset', '0')
+        browse_cache_key = f"browse_api:{university_param}:{sort_param}:{limit_param}:{offset_param}"
+
+        if redis_cache:
+            try:
+                cached = redis_cache.get(browse_cache_key)
+                if cached:
+                    debug_log(f"Browse API cache HIT")
+                    return jsonify(json.loads(cached)), 200
+            except:
+                pass
+
         # Check .edu email verification requirement
         user_profile = supabase.table("user_profiles").select("edu_email_verified").eq("id", user_id).single().execute()
         if user_profile.data:
@@ -5266,31 +5335,16 @@ def browse_notes():
         response = query.order("uploaded_at", desc=True).range(offset, offset + limit - 1).execute()
         notes = response.data if response.data else []
 
-        # Filter notes by user's Nexus setting and get usernames
+        # Filter notes by user's Nexus setting and get usernames (cached)
         filtered_notes = []
         for note in notes:
-            # Get username AND check if user has Nexus enabled
-            try:
-                user_profile = supabase.table("user_profiles").select("username, is_public").eq("id", note['user_id']).single().execute()
-
-                if user_profile.data:
-                    # Check if user has Nexus enabled (is_public defaults to True if not set)
-                    user_is_public = user_profile.data.get('is_public', True)
-
-                    # Only include note if user has Nexus enabled
-                    if user_is_public:
-                        note['username'] = user_profile.data.get('username') or 'Anonymous'
-                        filtered_notes.append(note)
-                    else:
-                        # User has Nexus disabled, skip this note
-                        debug_log(f"Skipping note {note['id']} - user has Nexus disabled")
-                        continue
-                else:
-                    # No profile found, skip
-                    continue
-            except:
-                # Error fetching profile, skip to be safe
+            profile = get_cached_profile(note['user_id'])
+            if not profile:
                 continue
+            if not profile.get('is_public', True):
+                continue
+            note['username'] = profile.get('username', 'Anonymous')
+            filtered_notes.append(note)
 
             # Get view count
             try:
@@ -5326,9 +5380,18 @@ def browse_notes():
             notes.sort(key=lambda x: x.get('view_count', 0), reverse=True)
         # 'recent' is already sorted by created_at desc
 
-        debug_log(f"📚 Browse: Found {len(notes)} public notes")
+        debug_log(f"Browse: Found {len(notes)} public notes")
 
-        return jsonify({"notes": notes}), 200
+        response_data = {"notes": notes}
+
+        # Cache browse results for 5 minutes
+        if redis_cache:
+            try:
+                redis_cache.setex(browse_cache_key, BROWSE_CACHE_TTL, json.dumps(response_data))
+            except:
+                pass
+
+        return jsonify(response_data), 200
 
     except Exception as e:
         error_trace = traceback.format_exc()
@@ -5441,18 +5504,15 @@ def semantic_browse_notes():
                     matches = sum(1 for keyword in query_keywords if keyword in filename_lower)
                     # Only include if ALL keywords are present
                     if matches == len(query_keywords):
-                        # Check if user has Nexus enabled
-                        try:
-                            user_profile = supabase.table("user_profiles").select("username, is_public").eq("id", note_data['user_id']).single().execute()
-                            if user_profile.data and user_profile.data.get('is_public', True):
-                                filename_results.append({
-                                    'note_id': note_data['id'],
-                                    'note_data': note_data,
-                                    'username': user_profile.data.get('username') or 'Anonymous',
-                                    'keyword_matches': matches
-                                })
-                        except:
-                            continue
+                        # Check if user has Nexus enabled (cached)
+                        profile = get_cached_profile(note_data['user_id'])
+                        if profile and profile.get('is_public', True):
+                            filename_results.append({
+                                'note_id': note_data['id'],
+                                'note_data': note_data,
+                                'username': profile.get('username', 'Anonymous'),
+                                'keyword_matches': matches
+                            })
 
                 debug_log(f"📁 Filename search: Found {len(filename_results)} notes with matching titles")
             except Exception as e:
@@ -5482,14 +5542,11 @@ def semantic_browse_notes():
 
             note = note_data.data
 
-            # Get username
-            try:
-                user_profile = supabase.table("user_profiles").select("username, is_public").eq("id", note['user_id']).single().execute()
-                if not user_profile.data or not user_profile.data.get('is_public', True):
-                    continue  # Skip if user has Nexus disabled
-                username = user_profile.data.get('username') or 'Anonymous'
-            except:
-                continue
+            # Get username (cached)
+            profile = get_cached_profile(note['user_id'])
+            if not profile or not profile.get('is_public', True):
+                continue  # Skip if user has Nexus disabled
+            username = profile.get('username', 'Anonymous')
 
             # Use content_summary if available, otherwise chunk_text
             content = result.get('content_summary') or result.get('chunk_text', '')

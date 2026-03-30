@@ -1,9 +1,12 @@
 """
 OpenAI Embedding Client for StudyFlow
 Generates vector embeddings for text chunks using text-embedding-3-small
+Redis-cached to avoid duplicate API calls for identical queries.
 """
 
 import os
+import json
+import hashlib
 import openai
 from typing import List
 from StudyFlow.logging_utils import debug_log
@@ -11,25 +14,46 @@ from StudyFlow.logging_utils import debug_log
 # Initialize OpenAI client
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
+# Redis cache for embeddings (1 hour TTL)
+_embedding_cache = None
+EMBEDDING_CACHE_TTL = 3600  # 1 hour
+
+def _get_redis():
+    global _embedding_cache
+    if _embedding_cache is None:
+        try:
+            import redis
+            url = os.getenv("CELERY_BROKER_URL", os.getenv("REDIS_URL", "redis://localhost:6379/0"))
+            _embedding_cache = redis.from_url(url, decode_responses=True)
+            _embedding_cache.ping()
+        except:
+            _embedding_cache = False  # Mark as unavailable
+    return _embedding_cache if _embedding_cache else None
+
 
 def generate_embedding(text: str, model: str = "text-embedding-3-small") -> List[float]:
     """
-    Generate a single embedding for text.
-
-    Args:
-        text: The text to embed
-        model: OpenAI embedding model (default: text-embedding-3-small)
-
-    Returns:
-        List of floats representing the embedding vector (1536 dimensions)
+    Generate a single embedding for text. Cached in Redis for 1 hour.
     """
     try:
         # Clean the text
         text = text.replace("\n", " ").strip()
 
         if not text:
-            debug_log("⚠️ Empty text passed to generate_embedding")
+            debug_log("Empty text passed to generate_embedding")
             return None
+
+        # Check Redis cache
+        cache_key = "emb:" + hashlib.md5(text.encode()).hexdigest()
+        r = _get_redis()
+        if r:
+            try:
+                cached = r.get(cache_key)
+                if cached:
+                    debug_log(f"Embedding cache HIT ({len(text)} chars)")
+                    return json.loads(cached)
+            except:
+                pass
 
         # Call OpenAI API
         response = openai.embeddings.create(
@@ -38,11 +62,19 @@ def generate_embedding(text: str, model: str = "text-embedding-3-small") -> List
         )
 
         embedding = response.data[0].embedding
-        debug_log(f"✅ Generated embedding ({len(embedding)} dimensions)")
+        debug_log(f"Generated embedding ({len(embedding)} dimensions)")
+
+        # Cache in Redis
+        if r:
+            try:
+                r.setex(cache_key, EMBEDDING_CACHE_TTL, json.dumps(embedding))
+            except:
+                pass
+
         return embedding
 
     except Exception as e:
-        debug_log(f"❌ Error generating embedding: {e}")
+        debug_log(f"Error generating embedding: {e}")
         return None
 
 
