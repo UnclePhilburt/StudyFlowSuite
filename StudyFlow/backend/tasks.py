@@ -344,7 +344,13 @@ Return ONLY a JSON array of anonymized chunks in the same order:
             batch_anonymized = json.loads(response_text.strip())
             anonymized.extend(batch_anonymized)
 
-            print(f"🔒 Anonymized batch {i//batch_size + 1}")
+            try:
+                from StudyFlow.backend.cost_tracker import track_ai_call
+                track_ai_call("gemini", "flash", "anonymization")
+            except:
+                pass
+
+            print(f"Anonymized batch {i//batch_size + 1}")
 
         return anonymized
 

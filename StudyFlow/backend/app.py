@@ -3480,6 +3480,12 @@ def upload_note():
             ocr_text = response.text.strip()
             page_count = 1
 
+            try:
+                from StudyFlow.backend.cost_tracker import track_ai_call
+                track_ai_call("gemini", "flash-lite", "ocr_image")
+            except:
+                pass
+
         elif file_ext == 'pdf':
             # PDF file
             import PyPDF2
@@ -3606,6 +3612,12 @@ NOT study material: grocery lists, personal emails, blank pages, random text, ad
 
                 response = model.generate_content(prompt)
                 ai_text = response.text.strip()
+
+                try:
+                    from StudyFlow.backend.cost_tracker import track_ai_call
+                    track_ai_call("gemini", "flash-lite", "verification")
+                except:
+                    pass
 
                 # Parse JSON response
                 import json
@@ -4522,9 +4534,15 @@ Just answer the question directly as if you're a tutor who knows this informatio
 
 Return your detailed answer:"""
 
-        debug_log(f"🤖 Generating detailed answer for question: '{question[:50]}...'")
+        debug_log(f"Generating detailed answer for question: '{question[:50]}...'")
         response = model.generate_content(prompt)
         answer = response.text.strip()
+
+        try:
+            from StudyFlow.backend.cost_tracker import track_ai_call
+            track_ai_call("gemini", "flash", "hint_gen")
+        except:
+            pass
 
         debug_log(f"✅ Generated answer: '{answer[:80]}...'")
 
@@ -6978,6 +6996,12 @@ NOT study material: grocery lists, personal emails, blank pages, random text, ad
 
         response = model.generate_content(prompt)
         ai_text = response.text.strip()
+
+        try:
+            from StudyFlow.backend.cost_tracker import track_ai_call
+            track_ai_call("gemini", "flash-lite", "upload_verify")
+        except:
+            pass
 
         # Parse JSON response
         import json
@@ -9593,6 +9617,33 @@ def flagged_notes():
 
     except Exception as e:
         debug_log(f"Flagged notes error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/admin/ai-costs", methods=["GET"])
+def admin_ai_costs():
+    """ADMIN: Get AI API cost data for dashboard."""
+    try:
+        admin_key = request.args.get("key", "")
+        if admin_key != os.getenv("ADMIN_KEY", "change_me_in_production"):
+            return jsonify({"error": "Unauthorized"}), 403
+
+        from StudyFlow.backend.cost_tracker import get_cost_summary
+        data = get_cost_summary(days=30)
+
+        if not data:
+            return jsonify({
+                "dates": [], "daily_totals": [],
+                "month_total": 0, "last_month_total": 0,
+                "seven_day_total": 0, "today_breakdown": [],
+                "today_calls": [], "provider_totals": [],
+                "message": "No cost data yet. Tracking starts from now."
+            }), 200
+
+        return jsonify(data), 200
+
+    except Exception as e:
+        debug_log(f"Admin AI costs error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
 

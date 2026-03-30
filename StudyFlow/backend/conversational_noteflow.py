@@ -150,7 +150,14 @@ Title:"""
         )
 
         title = response.text.strip().strip('"').strip("'")
-        debug_log(f"✅ Generated conversation title: {title}")
+        debug_log(f"Generated conversation title: {title}")
+
+        try:
+            from StudyFlow.backend.cost_tracker import track_ai_call
+            track_ai_call("gemini", "flash-lite", "title_gen")
+        except:
+            pass
+
         return title
 
     except Exception as e:
@@ -292,6 +299,13 @@ No relevant context found. Politely let them know you don't have information abo
         response_time_ms = int((time.time() - start_time) * 1000)
 
         answer = response.text
+
+        # Track cost
+        try:
+            from StudyFlow.backend.cost_tracker import track_ai_call
+            track_ai_call("gemini", "flash-lite", "chat")
+        except:
+            pass
 
         # Build attribution footer with Wikipedia links and student contributors
         from datetime import datetime

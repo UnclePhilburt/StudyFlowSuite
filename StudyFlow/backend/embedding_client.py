@@ -64,6 +64,13 @@ def generate_embedding(text: str, model: str = "text-embedding-3-small") -> List
         embedding = response.data[0].embedding
         debug_log(f"Generated embedding ({len(embedding)} dimensions)")
 
+        # Track cost
+        try:
+            from StudyFlow.backend.cost_tracker import track_ai_call
+            track_ai_call("openai", "embedding", "embedding", tokens_estimate=len(text) // 4)
+        except:
+            pass
+
         # Cache in Redis
         if r:
             try:
@@ -114,7 +121,15 @@ def generate_embeddings_batch(texts: List[str], model: str = "text-embedding-3-s
             batch_embeddings = [item.embedding for item in response.data]
             all_embeddings.extend(batch_embeddings)
 
-            debug_log(f"✅ Generated {len(batch_embeddings)} embeddings (batch {i//batch_size + 1})")
+            # Track cost
+            try:
+                from StudyFlow.backend.cost_tracker import track_ai_call
+                total_chars = sum(len(t) for t in batch)
+                track_ai_call("openai", "embedding", "embedding_batch", tokens_estimate=total_chars // 4)
+            except:
+                pass
+
+            debug_log(f"Generated {len(batch_embeddings)} embeddings (batch {i//batch_size + 1})")
 
         return all_embeddings
 
