@@ -5029,6 +5029,57 @@ def canvas_invalidate():
         return jsonify({"success": True}), 200
 
 
+@app.route("/api/flashcards/generate", methods=["POST"])
+@supabase_auth_required
+def generate_flashcards():
+    """Generate quiz questions for flashcard mode. Uses general knowledge, no Nexus dependency."""
+    try:
+        import google.generativeai as genai
+
+        data = request.get_json()
+        topic = data.get("topic", "").strip()
+        count = data.get("count", 15)
+
+        if not topic:
+            return jsonify({"error": "Topic required"}), 400
+
+        genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+        model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
+
+        prompt = f"""Generate exactly {count} quiz questions about "{topic}".
+Each question has exactly two answer choices where only one is correct.
+Mix multiple choice and true/false style questions.
+
+Return ONLY a valid JSON array with no other text:
+[{{"question":"What is...?","left":"Answer A","right":"Answer B","correct":"left"}}]
+
+The "correct" field must be either "left" or "right".
+Do not include any explanation, markdown, or other text. Just the JSON array."""
+
+        response = model.generate_content(
+            prompt,
+            generation_config=genai.GenerationConfig(temperature=0.7, max_output_tokens=2000)
+        )
+
+        text = response.text.strip()
+
+        # Track cost
+        try:
+            from StudyFlow.backend.cost_tracker import track_ai_call
+            track_ai_call("gemini", "flash-lite", "flashcard_gen")
+        except:
+            pass
+
+        # Clean and parse
+        cleaned = text.replace('```json', '').replace('```', '').strip()
+
+        return jsonify({"questions": cleaned}), 200
+
+    except Exception as e:
+        debug_log(f"Flashcard generation error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/chat-folders", methods=["GET"])
 @supabase_auth_required
 def list_chat_folders():
