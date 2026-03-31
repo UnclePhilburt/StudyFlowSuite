@@ -4781,6 +4781,10 @@ def chat_with_notes():
         else:
             conv_id = create_conversation(request.user_id, source=source)
             conversation = get_conversation(conv_id, request.user_id)
+            # Invalidate canvas cache so new conversation appears
+            if redis_cache:
+                try: redis_cache.delete(f"canvas_preload:{request.user_id}")
+                except: pass
 
         debug_log(f"💬 Chat message in conversation {conv_id}: '{message[:50]}...'")
 
@@ -5347,6 +5351,9 @@ def create_chat_folder():
         if data.get("parent_id"):
             row["parent_id"] = data["parent_id"]
         folder = supabase.table("chat_folders").insert(row).execute()
+        if redis_cache:
+            try: redis_cache.delete(f"canvas_preload:{request.user_id}")
+            except: pass
         return jsonify(folder.data[0] if folder.data else {}), 201
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -5366,6 +5373,9 @@ def update_chat_folder(folder_id):
         if "position_y" in data: update["position_y"] = data["position_y"]
         if "parent_id" in data: update["parent_id"] = data["parent_id"]
         supabase.table("chat_folders").update(update).eq("id", folder_id).eq("user_id", request.user_id).execute()
+        if redis_cache:
+            try: redis_cache.delete(f"canvas_preload:{request.user_id}")
+            except: pass
         return jsonify({"success": True}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -5379,6 +5389,9 @@ def delete_chat_folder(folder_id):
         # Unfiled all conversations in this folder
         supabase.table("conversations").update({"folder_id": None}).eq("folder_id", folder_id).eq("user_id", request.user_id).execute()
         supabase.table("chat_folders").delete().eq("id", folder_id).eq("user_id", request.user_id).execute()
+        if redis_cache:
+            try: redis_cache.delete(f"canvas_preload:{request.user_id}")
+            except: pass
         return jsonify({"success": True}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -5392,6 +5405,9 @@ def move_conversation(conversation_id):
         data = request.get_json()
         folder_id = data.get("folder_id")  # null = unfiled
         supabase.table("conversations").update({"folder_id": folder_id}).eq("id", conversation_id).eq("user_id", request.user_id).execute()
+        if redis_cache:
+            try: redis_cache.delete(f"canvas_preload:{request.user_id}")
+            except: pass
         return jsonify({"success": True}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
