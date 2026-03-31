@@ -4654,6 +4654,33 @@ def chat_with_notes():
             add_message(conv_id, 'user', message)
             add_message(conv_id, 'assistant', sem_cached['response'], sem_cached['sources'])
 
+            # SB 1324 Provenance Logging -- even for cached responses
+            try:
+                source_log_entries = []
+                for s in (sem_cached['sources'] or []):
+                    source_log_entries.append({
+                        "note_id": s.get("note_id"),
+                        "filename": s.get("filename"),
+                        "similarity": s.get("similarity"),
+                        "contributor_username": s.get("username"),
+                        "source_type": "nexus_note"
+                    })
+                client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+                if client_ip and ',' in client_ip:
+                    client_ip = client_ip.split(',')[0].strip()
+                log_ai_response(
+                    user_id=request.user_id,
+                    conversation_id=conv_id,
+                    prompt_text=message,
+                    response_text=sem_cached['response'],
+                    sources_used=source_log_entries,
+                    model_used="semantic_cache",
+                    response_time_ms=0,
+                    ip_address=client_ip
+                )
+            except Exception as log_error:
+                debug_log(f"[-] Provenance logging (cached) failed: {log_error}")
+
             # Track search
             try:
                 from StudyFlow.backend.search_tracker import track_search
