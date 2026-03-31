@@ -9819,7 +9819,7 @@ def get_group_messages(group_id):
             return jsonify({"error": "Not a member"}), 403
 
         messages_resp = supabase.table("study_group_messages").select(
-            "id, user_id, role, content, sources, created_at, pinned"
+            "id, user_id, role, content, sources, created_at, pinned, reactions"
         ).eq("group_id", group_id).order("created_at").limit(100).execute()
 
         messages = []
@@ -9840,7 +9840,8 @@ def get_group_messages(group_id):
                 "username": username,
                 "user_id": m["user_id"],
                 "created_at": m["created_at"],
-                "pinned": m.get("pinned", False)
+                "pinned": m.get("pinned", False),
+                "reactions": m.get("reactions", {})
             })
 
         return jsonify({"messages": messages}), 200
