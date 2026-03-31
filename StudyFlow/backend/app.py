@@ -1067,6 +1067,92 @@ def create_portal_session():
         app.logger.error(f"❌ Create portal session error: {e}\n{traceback.format_exc()}")
         return jsonify({'error': 'Failed to create portal session'}), 500
 
+@app.route("/api/warmup", methods=["POST"])
+@supabase_auth_required
+def user_warmup():
+    """Pre-warm all Redis caches for a user on login. Called once, everything loads fast after."""
+    try:
+        user_id = request.user_id
+
+        # 1. Cache user profile
+        try:
+            profile = supabase.table("user_profiles").select("*").eq("id", user_id).single().execute()
+            if profile.data and redis_cache:
+                redis_cache.setex(f"profile:{user_id}", PROFILE_CACHE_TTL, json.dumps({
+                    "username": profile.data.get("username") or "Anonymous",
+                    "is_public": profile.data.get("is_public", True)
+                }))
+        except:
+            pass
+
+        # 2. Cache dashboard layout
+        try:
+            layout = supabase.table("user_profiles").select("dashboard_layout").eq("id", user_id).single().execute()
+            if layout.data and redis_cache:
+                redis_cache.setex(f"dashboard:{user_id}", 600, json.dumps(layout.data.get("dashboard_layout", {})))
+        except:
+            pass
+
+        # 3. Cache canvas preload (all folders, conversations, messages, sticky notes)
+        try:
+            folders_resp = supabase.table("chat_folders").select("*").eq("user_id", user_id).order("created_at").execute()
+            convos_resp = supabase.table("conversations").select(
+                "id, title, folder_id, updated_at, canvas_layout"
+            ).eq("user_id", user_id).is_("deleted_at", "null").order("updated_at", desc=True).execute()
+            stickies_resp = supabase.table("canvas_sticky_notes").select("*").eq("user_id", user_id).execute()
+
+            convos = convos_resp.data or []
+            conversations_with_messages = []
+            for conv in convos:
+                msgs_resp = supabase.table("conversation_messages").select(
+                    "content, role, sources, created_at"
+                ).eq("conversation_id", conv["id"]).order("created_at").execute()
+                conversations_with_messages.append({
+                    "id": conv["id"],
+                    "title": conv.get("title"),
+                    "folder_id": conv.get("folder_id"),
+                    "updated_at": conv.get("updated_at"),
+                    "canvas_layout": conv.get("canvas_layout"),
+                    "messages": msgs_resp.data or []
+                })
+
+            canvas_data = {
+                "folders": folders_resp.data or [],
+                "conversations": conversations_with_messages,
+                "sticky_notes": stickies_resp.data or []
+            }
+
+            if redis_cache:
+                redis_cache.setex(f"canvas_preload:{user_id}", 600, json.dumps(canvas_data))
+        except:
+            pass
+
+        # 4. Cache user's notes list
+        try:
+            notes_resp = supabase.table("notes").select(
+                "id, original_filename, university, course_code, uploaded_at, is_public"
+            ).eq("user_id", user_id).order("uploaded_at", desc=True).limit(50).execute()
+            if notes_resp.data and redis_cache:
+                redis_cache.setex(f"user_notes:{user_id}", 600, json.dumps(notes_resp.data))
+        except:
+            pass
+
+        # 5. Cache notifications
+        try:
+            notif_resp = supabase.table("notifications").select("*").eq("user_id", user_id).eq("is_read", False).order("created_at", desc=True).limit(20).execute()
+            if redis_cache:
+                redis_cache.setex(f"notifications:{user_id}", 300, json.dumps(notif_resp.data or []))
+        except:
+            pass
+
+        debug_log(f"[Warmup] Pre-warmed all caches for user {user_id}")
+        return jsonify({"success": True}), 200
+
+    except Exception as e:
+        debug_log(f"Warmup error: {e}")
+        return jsonify({"success": True}), 200  # Don't fail login over warmup
+
+
 @app.route("/api/current-user", methods=["GET"])
 @supabase_auth_required
 def get_current_user():
