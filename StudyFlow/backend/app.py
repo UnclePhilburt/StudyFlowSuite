@@ -1127,13 +1127,27 @@ def user_warmup():
         except:
             pass
 
-        # 4. Cache user's notes list
+        # 4. Cache user's notes list (same format as /api/notes/list)
         try:
-            notes_resp = supabase.table("notes").select(
-                "id, original_filename, university, course_code, uploaded_at, is_public"
-            ).eq("user_id", user_id).order("uploaded_at", desc=True).limit(50).execute()
+            notes_resp = supabase.table("notes").select("*").eq("user_id", user_id).order("uploaded_at", desc=True).execute()
             if notes_resp.data and redis_cache:
-                redis_cache.setex(f"user_notes:{user_id}", 600, json.dumps(notes_resp.data))
+                formatted_notes = []
+                for note in notes_resp.data:
+                    formatted_notes.append({
+                        "id": note['id'],
+                        "filename": note.get('original_filename', ''),
+                        "file_type": note.get('file_type'),
+                        "file_size": note.get('file_size'),
+                        "pages": note.get('page_count'),
+                        "uploaded_at": note.get('uploaded_at'),
+                        "processed": note.get('processed'),
+                        "is_public": note.get('is_public'),
+                        "university": note.get('university'),
+                        "course_code": note.get('course_code'),
+                        "professor": note.get('professor'),
+                        "folder_id": note.get('folder_id')
+                    })
+                redis_cache.setex(f"user_notes:{user_id}", 300, json.dumps(formatted_notes))
         except:
             pass
 
