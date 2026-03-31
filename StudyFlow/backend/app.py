@@ -10012,10 +10012,10 @@ def review_queue():
         reviewed_resp = supabase.table("reviewed_notes").select("note_id").execute()
         reviewed_ids = set(r["note_id"] for r in (reviewed_resp.data or []))
 
-        # Get all notes
+        # Get all notes (newest first)
         notes_resp = supabase.table("notes").select(
             "id, user_id, original_filename, file_size, university, course_code, file_path, uploaded_at, is_public"
-        ).order("uploaded_at").limit(200).execute()
+        ).order("uploaded_at", desc=True).limit(200).execute()
 
         # Filter out already reviewed
         unreviewed = [n for n in (notes_resp.data or []) if n["id"] not in reviewed_ids][:50]
