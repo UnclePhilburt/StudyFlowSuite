@@ -5395,10 +5395,15 @@ def delete_conversation_endpoint(conversation_id):
 
         success = delete_conversation(conversation_id, request.user_id)
 
-        if success:
-            return jsonify({"success": True}), 200
-        else:
-            return jsonify({"error": "Conversation not found or access denied"}), 404
+        # Invalidate canvas preload cache
+        if redis_cache:
+            try:
+                redis_cache.delete(f"canvas_preload:{request.user_id}")
+            except:
+                pass
+
+        # Return 200 even if already deleted (idempotent)
+        return jsonify({"success": True}), 200
 
     except Exception as e:
         debug_log(f"❌ Error deleting conversation: {e}\n{traceback.format_exc()}")
