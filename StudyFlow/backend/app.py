@@ -1098,7 +1098,7 @@ def user_warmup():
             folders_resp = supabase.table("chat_folders").select("*").eq("user_id", user_id).order("created_at").execute()
             convos_resp = supabase.table("conversations").select(
                 "id, title, folder_id, updated_at, canvas_layout"
-            ).eq("user_id", user_id).is_("deleted_at", "null").order("updated_at", desc=True).execute()
+            ).eq("user_id", user_id).eq("source", "chat").is_("deleted_at", "null").order("updated_at", desc=True).execute()
             stickies_resp = supabase.table("canvas_sticky_notes").select("*").eq("user_id", user_id).execute()
 
             convos = convos_resp.data or []
@@ -5148,11 +5148,11 @@ def canvas_preload():
             except:
                 pass
 
-        # Fetch everything in parallel-ish
+        # Fetch everything in parallel-ish (exclude plugin conversations)
         folders_resp = supabase.table("chat_folders").select("*").eq("user_id", user_id).order("created_at").execute()
         convos_resp = supabase.table("conversations").select(
             "id, title, folder_id, updated_at, canvas_layout"
-        ).eq("user_id", user_id).is_("deleted_at", "null").order("updated_at", desc=True).execute()
+        ).eq("user_id", user_id).eq("source", "chat").is_("deleted_at", "null").order("updated_at", desc=True).execute()
 
         stickies_resp = supabase.table("canvas_sticky_notes").select("*").eq("user_id", user_id).execute()
 
@@ -5481,7 +5481,7 @@ def list_unfiled_conversations():
     try:
         resp = supabase.table("conversations").select(
             "id, title, updated_at, canvas_layout"
-        ).eq("user_id", request.user_id).is_("folder_id", "null").is_("deleted_at", "null").order("updated_at", desc=True).execute()
+        ).eq("user_id", request.user_id).eq("source", "chat").is_("folder_id", "null").is_("deleted_at", "null").order("updated_at", desc=True).execute()
         return jsonify({"conversations": resp.data or []}), 200
     except Exception as e:
         return jsonify({"conversations": []}), 200
