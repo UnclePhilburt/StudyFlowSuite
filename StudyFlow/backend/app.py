@@ -1094,9 +1094,12 @@ def get_current_user():
             "id": profile.get("id"),
             "email": profile.get("email"),
             "name": profile.get("full_name"),
+            "university": profile.get("university"),
+            "username": profile.get("username"),
+            "subscription_tier": profile.get("subscription_tier", "free"),
             "subscription_status": profile.get("subscription_tier", "free"),
             "edu_verified": profile.get("edu_email_verified", False),
-            "is_beta": False,  # Legacy field, always False for new users
+            "is_beta": False,
             "created_at": profile.get("created_at")
         }), 200
 
