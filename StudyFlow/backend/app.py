@@ -9726,6 +9726,46 @@ def download_group_note(group_id, note_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/groups/<group_id>/messages/<message_id>/react", methods=["POST"])
+@supabase_auth_required
+def react_to_message(group_id, message_id):
+    """Toggle a reaction on a group chat message."""
+    try:
+        data = request.get_json()
+        emoji = data.get("emoji")
+        if not emoji:
+            return jsonify({"error": "emoji required"}), 400
+
+        # Get current reactions
+        msg_resp = supabase.table("study_group_messages").select("reactions").eq("id", message_id).eq("group_id", group_id).single().execute()
+        if not msg_resp.data:
+            return jsonify({"error": "Message not found"}), 404
+
+        reactions = msg_resp.data.get("reactions") or {}
+        user_id = request.user_id
+
+        # Toggle: add or remove user from this emoji
+        if emoji in reactions:
+            users = reactions[emoji]
+            if user_id in users:
+                users.remove(user_id)
+                if not users:
+                    del reactions[emoji]
+            else:
+                users.append(user_id)
+        else:
+            reactions[emoji] = [user_id]
+
+        # Save
+        supabase.table("study_group_messages").update({"reactions": reactions}).eq("id", message_id).execute()
+
+        return jsonify({"success": True, "reactions": reactions}), 200
+
+    except Exception as e:
+        debug_log(f"React error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/groups/<group_id>/chat", methods=["POST"])
 @supabase_auth_required
 def group_chat(group_id):
