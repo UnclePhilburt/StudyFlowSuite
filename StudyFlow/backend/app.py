@@ -5032,9 +5032,11 @@ def canvas_invalidate():
 @app.route("/api/flashcards/generate", methods=["POST"])
 @supabase_auth_required
 def generate_flashcards():
-    """Generate quiz questions for flashcard mode. Uses general knowledge, no Nexus dependency."""
+    """Generate quiz questions. Searches Nexus first, falls back to general knowledge."""
     try:
         import google.generativeai as genai
+        from StudyFlow.backend.embedding_client import generate_embedding
+        from StudyFlow.backend.supabase_client import search_notes_vector
 
         data = request.get_json()
         topic = data.get("topic", "").strip()
@@ -5043,10 +5045,50 @@ def generate_flashcards():
         if not topic:
             return jsonify({"error": "Topic required"}), 400
 
+        # Search Nexus for relevant notes
+        note_context = ""
+        sources_used = []
+        try:
+            query_embedding = generate_embedding(topic)
+            if query_embedding:
+                results = search_notes_vector(
+                    query_embedding=query_embedding,
+                    user_id=request.user_id,
+                    match_threshold=0.5,
+                    match_count=10
+                )
+                if results:
+                    chunks = []
+                    for r in results[:8]:
+                        text = r.get('content_summary') or r.get('chunk_text', '')
+                        if text:
+                            chunks.append(text[:500])
+                            sources_used.append(r.get('note_id'))
+                    if chunks:
+                        note_context = "\n\n".join(chunks)
+                        debug_log(f"Flashcards: found {len(chunks)} relevant note chunks for '{topic}'")
+        except Exception as search_err:
+            debug_log(f"Flashcard Nexus search failed (using general knowledge): {search_err}")
+
         genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
         model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
 
-        prompt = f"""Generate exactly {count} quiz questions about "{topic}".
+        if note_context:
+            prompt = f"""Based on the following study notes, generate exactly {count} quiz questions about "{topic}".
+
+STUDY NOTES:
+{note_context}
+
+Generate questions that test understanding of the material in these notes.
+Each question has exactly two answer choices where only one is correct.
+
+Return ONLY a valid JSON array with no other text:
+[{{"question":"What is...?","left":"Answer A","right":"Answer B","correct":"left"}}]
+
+The "correct" field must be either "left" or "right".
+No explanation, no markdown, just the JSON array."""
+        else:
+            prompt = f"""Generate exactly {count} quiz questions about "{topic}".
 Each question has exactly two answer choices where only one is correct.
 Mix multiple choice and true/false style questions.
 
@@ -5054,7 +5096,7 @@ Return ONLY a valid JSON array with no other text:
 [{{"question":"What is...?","left":"Answer A","right":"Answer B","correct":"left"}}]
 
 The "correct" field must be either "left" or "right".
-Do not include any explanation, markdown, or other text. Just the JSON array."""
+No explanation, no markdown, just the JSON array."""
 
         response = model.generate_content(
             prompt,
@@ -5063,17 +5105,19 @@ Do not include any explanation, markdown, or other text. Just the JSON array."""
 
         text = response.text.strip()
 
-        # Track cost
         try:
             from StudyFlow.backend.cost_tracker import track_ai_call
             track_ai_call("gemini", "flash-lite", "flashcard_gen")
         except:
             pass
 
-        # Clean and parse
         cleaned = text.replace('```json', '').replace('```', '').strip()
 
-        return jsonify({"questions": cleaned}), 200
+        return jsonify({
+            "questions": cleaned,
+            "used_notes": len(sources_used) > 0,
+            "source_count": len(sources_used)
+        }), 200
 
     except Exception as e:
         debug_log(f"Flashcard generation error: {e}\n{traceback.format_exc()}")
