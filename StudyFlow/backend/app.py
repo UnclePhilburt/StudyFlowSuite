@@ -10009,8 +10009,13 @@ def review_queue():
         from StudyFlow.backend.supabase_client import supabase
 
         # Get IDs of already-reviewed notes
-        reviewed_resp = supabase.table("reviewed_notes").select("note_id").execute()
-        reviewed_ids = set(r["note_id"] for r in (reviewed_resp.data or []))
+        reviewed_ids = set()
+        try:
+            reviewed_resp = supabase.table("reviewed_notes").select("note_id").execute()
+            reviewed_ids = set(r["note_id"] for r in (reviewed_resp.data or []))
+        except Exception as rev_err:
+            debug_log(f"[Review] reviewed_notes query failed (table may not exist): {rev_err}")
+            # Continue without filtering -- show all notes
 
         # Get all notes (newest first)
         notes_resp = supabase.table("notes").select(
@@ -10045,7 +10050,15 @@ def review_queue():
                 "created_at": n.get("uploaded_at")
             })
 
-        return jsonify({"notes": notes, "total": len(notes)}), 200
+        return jsonify({
+            "notes": notes,
+            "total": len(notes),
+            "debug": {
+                "total_notes_in_db": len(notes_resp.data or []),
+                "reviewed_count": len(reviewed_ids),
+                "unreviewed_count": len(unreviewed)
+            }
+        }), 200
 
     except Exception as e:
         debug_log(f"Review queue error: {e}\n{traceback.format_exc()}")
