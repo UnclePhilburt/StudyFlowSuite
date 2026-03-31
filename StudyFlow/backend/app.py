@@ -1139,9 +1139,55 @@ def user_warmup():
 
         # 5. Cache notifications
         try:
-            notif_resp = supabase.table("notifications").select("*").eq("user_id", user_id).eq("is_read", False).order("created_at", desc=True).limit(20).execute()
+            notif_resp = supabase.table("notifications").select("*").eq("user_id", user_id).order("created_at", desc=True).limit(50).execute()
             if redis_cache:
-                redis_cache.setex(f"notifications:{user_id}", 300, json.dumps(notif_resp.data or []))
+                redis_cache.setex(f"notifications:{user_id}", 120, json.dumps({"notifications": notif_resp.data or []}))
+        except:
+            pass
+
+        # 6. Cache study groups
+        try:
+            memberships = supabase.table("study_group_members").select("group_id, role").eq("user_id", user_id).execute()
+            groups = []
+            for m in (memberships.data or []):
+                g = supabase.table("study_groups").select("*").eq("id", m["group_id"]).execute()
+                if g.data:
+                    group = g.data[0]
+                    members = supabase.table("study_group_members").select("id", count="exact").eq("group_id", m["group_id"]).execute()
+                    group["member_count"] = members.count if members.count else 0
+                    group["role"] = m["role"]
+                    groups.append(group)
+            if redis_cache:
+                redis_cache.setex(f"user_groups:{user_id}", 300, json.dumps({"groups": groups}))
+        except:
+            pass
+
+        # 7. Cache calendar events
+        try:
+            events_resp = supabase.table("calendar_events").select("*").eq("user_id", user_id).order("due_date").execute()
+            if redis_cache:
+                redis_cache.setex(f"calendar:{user_id}:::", 300, json.dumps({"success": True, "events": events_resp.data or []}))
+        except:
+            pass
+
+        # 8. Cache leaderboard (shared across users)
+        try:
+            if not redis_cache or not redis_cache.get("leaderboard:main"):
+                from collections import defaultdict
+                notes_lb = supabase.table("notes").select("user_id, page_count").eq("is_public", True).execute()
+                user_pages = defaultdict(int)
+                for note in (notes_lb.data or []):
+                    user_pages[note['user_id']] += note.get('page_count', 0)
+                top_users = sorted(user_pages.items(), key=lambda x: x[1], reverse=True)[:20]
+                leaderboard = []
+                for uid, pages in top_users:
+                    try:
+                        p = supabase.table("user_profiles").select("username, university").eq("id", uid).single().execute()
+                        if p.data:
+                            leaderboard.append({"user_id": uid, "username": p.data.get('username'), "university": p.data.get('university'), "pages_contributed": pages})
+                    except: pass
+                if redis_cache:
+                    redis_cache.setex("leaderboard:main", 1800, json.dumps(leaderboard))
         except:
             pass
 
@@ -1410,6 +1456,13 @@ def update_user_preferences():
 def get_leaderboard():
     """Get top contributors to the Nexus (leaderboard)"""
     try:
+        # Check Redis cache
+        if redis_cache:
+            try:
+                cached = redis_cache.get("leaderboard:main")
+                if cached: return jsonify(json.loads(cached)), 200
+            except: pass
+
         # Try to use the stored procedure first
         try:
             result = supabase.rpc("get_nexus_leaderboard", {
@@ -1450,10 +1503,13 @@ def get_leaderboard():
             except:
                 pass
 
+        if redis_cache:
+            try: redis_cache.setex("leaderboard:main", 1800, json.dumps(leaderboard))
+            except: pass
         return jsonify(leaderboard), 200
 
     except Exception as e:
-        debug_log(f"❌ Leaderboard error: {e}\n{traceback.format_exc()}")
+        debug_log(f"Leaderboard error: {e}\n{traceback.format_exc()}")
         return jsonify([]), 200
 
 
@@ -3789,6 +3845,11 @@ NOT study material: grocery lists, personal emails, blank pages, random text, ad
         except Exception as notif_err:
             debug_log(f"[-] Upload notification failed (non-blocking): {notif_err}")
 
+        # Invalidate notes cache
+        if redis_cache:
+            try: redis_cache.delete(f"user_notes:{request.user_id}")
+            except: pass
+
         return jsonify({
             "success": True,
             "note_id": note_id,
@@ -3829,11 +3890,15 @@ def list_notes():
         return '', 200
 
     try:
-        from StudyFlow.backend.supabase_client import get_user_notes
+        cache_key = f"user_notes:{request.user_id}"
+        if redis_cache:
+            try:
+                cached = redis_cache.get(cache_key)
+                if cached: return jsonify(json.loads(cached)), 200
+            except: pass
 
-        debug_log(f"[*] Fetching notes for user: {request.user_id}")
+        from StudyFlow.backend.supabase_client import get_user_notes
         notes = get_user_notes(request.user_id)
-        debug_log(f"[*] Found {len(notes)} notes for user {request.user_id}")
 
         # Format response
         formatted_notes = []
@@ -3853,10 +3918,13 @@ def list_notes():
                 "folder_id": note.get('folder_id')  # Include folder assignment
             })
 
+        if redis_cache:
+            try: redis_cache.setex(cache_key, 300, json.dumps(formatted_notes))
+            except: pass
         return jsonify(formatted_notes), 200
 
     except Exception as e:
-        debug_log(f"❌ List notes error: {e}\n{traceback.format_exc()}")
+        debug_log(f"List notes error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
 
@@ -5029,11 +5097,20 @@ def list_conversations():
     }
     """
     try:
+        cache_key = f"convos_list:{request.user_id}"
+        if redis_cache:
+            try:
+                cached = redis_cache.get(cache_key)
+                if cached: return jsonify(json.loads(cached)), 200
+            except: pass
+
         from StudyFlow.backend.conversational_noteflow import list_user_conversations
-
         conversations = list_user_conversations(request.user_id, limit=50)
-
-        return jsonify({"conversations": conversations}), 200
+        resp = {"conversations": conversations}
+        if redis_cache:
+            try: redis_cache.setex(cache_key, 120, json.dumps(resp))
+            except: pass
+        return jsonify(resp), 200
 
     except Exception as e:
         debug_log(f"❌ Error listing conversations: {e}\n{traceback.format_exc()}")
@@ -7453,13 +7530,20 @@ def get_calendar_events():
     try:
         from StudyFlow.backend.supabase_client import supabase
 
-        query = supabase.table("calendar_events").select("*").eq("user_id", request.user_id)
-
-        # Apply filters
-        start_date = request.args.get('start_date')
-        end_date = request.args.get('end_date')
-        course_code = request.args.get('course_code')
+        start_date = request.args.get('start_date', '')
+        end_date = request.args.get('end_date', '')
+        course_code = request.args.get('course_code', '')
         completed = request.args.get('completed')
+
+        # Check Redis cache
+        cache_key = f"calendar:{request.user_id}:{start_date}:{end_date}:{course_code}:{completed}"
+        if redis_cache:
+            try:
+                cached = redis_cache.get(cache_key)
+                if cached: return jsonify(json.loads(cached)), 200
+            except: pass
+
+        query = supabase.table("calendar_events").select("*").eq("user_id", request.user_id)
 
         if start_date:
             query = query.gte('due_date', start_date)
@@ -7470,15 +7554,14 @@ def get_calendar_events():
         if completed is not None:
             query = query.eq('completed', completed.lower() == 'true')
 
-        # Order by due date
         query = query.order('due_date', desc=False)
-
         result = query.execute()
 
-        return jsonify({
-            "success": True,
-            "events": result.data
-        }), 200
+        resp = {"success": True, "events": result.data}
+        if redis_cache:
+            try: redis_cache.setex(cache_key, 300, json.dumps(resp))
+            except: pass
+        return jsonify(resp), 200
 
     except Exception as e:
         debug_log(f"❌ Get calendar events error: {e}\n{traceback.format_exc()}")
@@ -8391,6 +8474,13 @@ def create_notification(user_id, notif_type, title, message, note_id=None, actor
 def get_notifications():
     """Return the last 50 notifications for the authenticated user."""
     try:
+        cache_key = f"notifications:{request.user_id}"
+        if redis_cache:
+            try:
+                cached = redis_cache.get(cache_key)
+                if cached: return jsonify(json.loads(cached)), 200
+            except: pass
+
         from StudyFlow.backend.supabase_client import supabase
         result = supabase.table("notifications") \
             .select("*") \
@@ -8398,7 +8488,11 @@ def get_notifications():
             .order("created_at", desc=True) \
             .limit(50) \
             .execute()
-        return jsonify({"notifications": result.data or []}), 200
+        resp = {"notifications": result.data or []}
+        if redis_cache:
+            try: redis_cache.setex(cache_key, 120, json.dumps(resp))
+            except: pass
+        return jsonify(resp), 200
     except Exception as e:
         debug_log(f"Get notifications error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
@@ -9500,6 +9594,13 @@ def create_group():
 def list_groups():
     """List all groups the user is a member of."""
     try:
+        cache_key = f"user_groups:{request.user_id}"
+        if redis_cache:
+            try:
+                cached = redis_cache.get(cache_key)
+                if cached: return jsonify(json.loads(cached)), 200
+            except: pass
+
         from StudyFlow.backend.supabase_client import supabase
 
         memberships = supabase.table("study_group_members").select(
@@ -9520,7 +9621,11 @@ def list_groups():
                 group["role"] = m["role"]
                 groups.append(group)
 
-        return jsonify({"groups": groups}), 200
+        resp = {"groups": groups}
+        if redis_cache:
+            try: redis_cache.setex(cache_key, 300, json.dumps(resp))
+            except: pass
+        return jsonify(resp), 200
 
     except Exception as e:
         debug_log(f"List groups error: {e}\n{traceback.format_exc()}")
@@ -10031,6 +10136,11 @@ def group_chat(group_id):
             "content": message
         }).execute()
 
+        # Invalidate cached messages
+        if redis_cache:
+            try: redis_cache.delete(f"group_msgs:{group_id}")
+            except: pass
+
         return jsonify({
             "success": True,
             "sender_username": sender_username
@@ -10046,6 +10156,14 @@ def group_chat(group_id):
 def get_group_messages(group_id):
     """Get chat history for a group."""
     try:
+        # Check Redis cache
+        cache_key = f"group_msgs:{group_id}"
+        if redis_cache:
+            try:
+                cached = redis_cache.get(cache_key)
+                if cached: return jsonify(json.loads(cached)), 200
+            except: pass
+
         from StudyFlow.backend.supabase_client import supabase
 
         member_check = supabase.table("study_group_members").select("id").eq(
@@ -10079,7 +10197,11 @@ def get_group_messages(group_id):
                 "reactions": m.get("reactions", {})
             })
 
-        return jsonify({"messages": messages}), 200
+        result = {"messages": messages}
+        if redis_cache:
+            try: redis_cache.setex(cache_key, 60, json.dumps(result))  # 1 min for chat
+            except: pass
+        return jsonify(result), 200
 
     except Exception as e:
         debug_log(f"Get group messages error: {e}\n{traceback.format_exc()}")
