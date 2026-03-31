@@ -5070,6 +5070,18 @@ def generate_flashcards():
         except Exception as search_err:
             debug_log(f"Flashcard Nexus search failed (using general knowledge): {search_err}")
 
+        # Check Redis cache
+        has_notes = len(note_context) > 0
+        cache_key = f"flashcards:{hashlib.md5((topic + str(has_notes)).encode()).hexdigest()}"
+        if redis_cache:
+            try:
+                cached = redis_cache.get(cache_key)
+                if cached:
+                    debug_log(f"Flashcard cache HIT for '{topic}' (notes={has_notes})")
+                    return jsonify({"questions": cached, "used_notes": has_notes, "source_count": len(sources_used), "cached": True}), 200
+            except:
+                pass
+
         genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
         model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
 
@@ -5113,9 +5125,16 @@ No explanation, no markdown, just the JSON array."""
 
         cleaned = text.replace('```json', '').replace('```', '').strip()
 
+        # Cache for 1 hour
+        if redis_cache:
+            try:
+                redis_cache.setex(cache_key, 3600, cleaned)
+            except:
+                pass
+
         return jsonify({
             "questions": cleaned,
-            "used_notes": len(sources_used) > 0,
+            "used_notes": has_notes,
             "source_count": len(sources_used)
         }), 200
 
