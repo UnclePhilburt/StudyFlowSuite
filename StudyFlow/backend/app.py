@@ -4961,6 +4961,27 @@ def chat_with_notes():
             for i, r in enumerate(search_results[:5]):
                 debug_log(f"  #{i+1}: similarity={r.get('similarity', 0):.2f}, helpfulness={r.get('helpfulness_score', 0):.2f}, combined={r.get('combined_score', 0):.2f}, votes={r.get('vote_data')}")
 
+        # Wikipedia priority: only use Wikipedia as backfill when student notes are thin
+        if search_results:
+            # Separate student notes from Wikipedia
+            note_ids_all = list(set(r['note_id'] for r in search_results))
+            wiki_check = supabase.table("notes").select("id, university").in_("id", note_ids_all).execute()
+            wiki_note_ids = set(n['id'] for n in (wiki_check.data or []) if (n.get('university') or '').lower() == 'wikipedia')
+
+            student_results = [r for r in search_results if r['note_id'] not in wiki_note_ids]
+            wiki_results = [r for r in search_results if r['note_id'] in wiki_note_ids]
+
+            # Only include Wikipedia if fewer than 2 quality student results
+            quality_student = [r for r in student_results if r.get('similarity', 0) > 0.6]
+
+            if len(quality_student) >= 2:
+                search_results = student_results  # Drop Wikipedia entirely
+                debug_log(f"Enough student notes ({len(quality_student)}), skipping Wikipedia")
+            else:
+                # Backfill with max 3 Wikipedia chunks
+                search_results = student_results + wiki_results[:3]
+                debug_log(f"Low student notes ({len(quality_student)}), backfilling with {min(len(wiki_results), 3)} Wikipedia chunks")
+
         # Add search result metadata and enrich with missing fields (CONSENSUS: show all sources)
         sources = []
         seen_note_ids = set()
