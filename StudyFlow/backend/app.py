@@ -11665,44 +11665,53 @@ def generate_outline():
         else:
             topic_instruction = "The student has not specified a topic. Identify the main themes and topics across all their notes and create an outline that covers the most important material."
 
-        prompt = f"""You are an academic outline generator for a study tool. Your job is to help students organize their own notes into a structured paper outline.
+        prompt = f"""You are an academic outline generator. Organize the student's notes into a structured paper outline.
 
-CRITICAL RULES:
-- You are NOT writing their paper. You are organizing their existing notes into a logical outline.
-- Every point MUST come from the student's actual notes provided below. Do NOT add outside information.
-- Do NOT write full sentences or paragraphs that could be copy-pasted as essay prose.
-- DO include direct quotes from their notes (in quotation marks) that are worth expanding on.
-- DO suggest connections between topics the student should explore.
-- DO provide "Main idea" framing for each section (one sentence max).
-- Attribute every point to the source note it came from.
+RULES:
+- You are NOT writing their paper. You are organizing their existing notes.
+- Every point MUST come from the student's notes below. Do NOT add outside information.
+- Do NOT write full paragraphs. Use bullet points and short phrases.
+- Include direct quotes from their notes (in quotation marks) worth expanding on.
+- Suggest connections between topics.
+- Attribute every point to its source note.
 
 {topic_instruction}
-
-FORMAT: {format_instructions}
 
 STUDENT'S NOTES:
 {note_context}
 
-Generate a detailed outline with this structure for EACH section:
+Respond with ONLY valid JSON (no markdown, no code fences) in this exact structure:
+{{
+  "suggested_titles": ["Title Option 1", "Title Option 2", "Title Option 3"],
+  "thesis_direction": "Your notes suggest you could argue...",
+  "sections": [
+    {{
+      "heading": "Section Title",
+      "level": 1,
+      "main_idea": "One sentence framing what this section covers",
+      "key_points": [
+        {{"text": "Specific fact or concept from notes", "source": "filename.pdf"}},
+        {{"text": "Another key point", "source": "filename.pdf"}}
+      ],
+      "quotes": [
+        {{"text": "Direct quote worth expanding on", "source": "filename.pdf"}}
+      ],
+      "connections": ["How this relates to other sections"],
+      "subsections": [
+        {{
+          "heading": "Subsection Title",
+          "level": 2,
+          "key_points": [
+            {{"text": "Point", "source": "filename.pdf"}}
+          ]
+        }}
+      ]
+    }}
+  ],
+  "conclusion_direction": "What to summarize and reflect on (NOT a written conclusion)"
+}}
 
-**[Section Title]**
-Main idea: [One sentence framing what this section covers]
-
-Key points to address:
-- [Specific fact/concept from their notes] (Source: [filename])
-- [Another key point] (Source: [filename])
-
-Notable quotes from your notes:
-- "[Direct quote worth expanding on]" (Source: [filename])
-
-Connections to make:
-- [How this section relates to other sections/themes]
-
----
-
-Start with 2-3 suggested titles, then a thesis direction, then the full sectioned outline. End with a suggested conclusion direction (what to summarize, NOT a written conclusion).
-
-Do NOT use markdown headers with #. Use plain text with bold markers ** for section titles."""
+Include 4-8 main sections with subsections where appropriate. Make key_points detailed -- 3-6 per section."""
 
         # Call Gemini
         genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
@@ -11710,6 +11719,22 @@ Do NOT use markdown headers with #. Use plain text with bold markers ** for sect
 
         response = model.generate_content(prompt)
         outline_text = response.text
+
+        # Try to parse as JSON, fall back to raw text
+        outline_json = None
+        try:
+            # Strip markdown code fences if present
+            clean = outline_text.strip()
+            if clean.startswith('```'):
+                clean = clean.split('\n', 1)[1] if '\n' in clean else clean[3:]
+            if clean.endswith('```'):
+                clean = clean[:-3]
+            clean = clean.strip()
+            if clean.startswith('json'):
+                clean = clean[4:].strip()
+            outline_json = json.loads(clean)
+        except:
+            outline_json = None
 
         # Track cost
         try:
@@ -11733,6 +11758,7 @@ Do NOT use markdown headers with #. Use plain text with bold markers ** for sect
 
         return jsonify({
             "outline": outline_text,
+            "outline_json": outline_json,
             "format": doc_format,
             "notes_used": len(note_id_set),
             "chunks_analyzed": len(chunks)
