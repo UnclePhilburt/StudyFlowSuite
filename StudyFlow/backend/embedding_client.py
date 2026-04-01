@@ -12,10 +12,12 @@ import requests
 from typing import List
 from StudyFlow.logging_utils import debug_log
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
 GEMINI_EMBED_URL = "https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent"
 GEMINI_BATCH_URL = "https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:batchEmbedContents"
 EMBEDDING_DIMENSIONS = 768
+
+def _get_gemini_key():
+    return os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
 
 # Redis cache for embeddings
 _embedding_cache = None
@@ -58,9 +60,12 @@ def generate_embedding(text: str, model: str = None) -> List[float]:
             except:
                 pass
 
-        if not GEMINI_API_KEY:
-            debug_log("No Gemini API key configured for embeddings")
+        gemini_key = _get_gemini_key()
+        if not gemini_key:
+            debug_log("No Gemini API key configured for embeddings. GEMINI_API_KEY env var not set.")
             return None
+
+        debug_log(f"Calling Gemini embedding API ({len(text)} chars, key={gemini_key[:8]}...)")
 
         # Call Gemini API with retry on rate limit
         embedding = None
@@ -68,7 +73,7 @@ def generate_embedding(text: str, model: str = None) -> List[float]:
         for attempt in range(max_retries):
             try:
                 resp = requests.post(
-                    f"{GEMINI_EMBED_URL}?key={GEMINI_API_KEY}",
+                    f"{GEMINI_EMBED_URL}?key={_get_gemini_key()}",
                     json={
                         "model": "models/text-embedding-004",
                         "content": {"parts": [{"text": text[:2048]}]},
@@ -140,7 +145,7 @@ def generate_embeddings_batch(texts: List[str], model: str = None) -> List[List[
             debug_log("No valid texts to embed")
             return []
 
-        if not GEMINI_API_KEY:
+        if not _get_gemini_key():
             debug_log("No Gemini API key configured for embeddings")
             return []
 
@@ -161,7 +166,7 @@ def generate_embeddings_batch(texts: List[str], model: str = None) -> List[List[
             ]
 
             resp = requests.post(
-                f"{GEMINI_BATCH_URL}?key={GEMINI_API_KEY}",
+                f"{GEMINI_BATCH_URL}?key={_get_gemini_key()}",
                 json={"requests": requests_payload},
                 timeout=30
             )
