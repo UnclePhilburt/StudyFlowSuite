@@ -43,9 +43,10 @@ def generate_embedding(text: str, model: str = None) -> List[float]:
     Retries with exponential backoff on rate limit.
     """
     try:
+        print(f"[EMBEDDING] generate_embedding called with {len(text)} chars", flush=True)
         text = text.replace("\n", " ").strip()
         if not text:
-            debug_log("Empty text passed to generate_embedding")
+            print("[EMBEDDING] Empty text, returning None", flush=True)
             return None
 
         # Check Redis cache (use gemini-prefixed key to avoid old OpenAI cache collisions)
@@ -62,10 +63,10 @@ def generate_embedding(text: str, model: str = None) -> List[float]:
 
         gemini_key = _get_gemini_key()
         if not gemini_key:
-            debug_log("No Gemini API key configured for embeddings. GEMINI_API_KEY env var not set.")
+            print("[EMBEDDING] No Gemini API key found. GEMINI_API_KEY env var not set.", flush=True)
             return None
 
-        debug_log(f"Calling Gemini embedding API ({len(text)} chars, key={gemini_key[:8]}...)")
+        print(f"[EMBEDDING] Calling Gemini API ({len(text)} chars, key={gemini_key[:8]}...)", flush=True)
 
         # Call Gemini API with retry on rate limit
         embedding = None
