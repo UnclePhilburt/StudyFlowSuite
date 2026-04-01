@@ -477,3 +477,93 @@ Return ONLY a JSON array of anonymized chunks in the same order:
         print(f"❌ Error anonymizing chunks: {e}")
         # Return None for all chunks if anonymization fails
         return [None] * len(chunk_texts)
+
+
+@celery_app.task(name="StudyFlow.backend.tasks.reembed_all_chunks")
+def reembed_all_chunks():
+    """
+    Re-generate all note_chunk embeddings using Gemini (768-dim).
+    Run after migrating from OpenAI 1536-dim to Gemini 768-dim.
+    Processes in batches with rate limit awareness.
+    """
+    import time
+    from StudyFlow.backend.supabase_client import supabase
+    from StudyFlow.backend.embedding_client import generate_embedding
+
+    print("Starting re-embedding of all note chunks with Gemini...")
+
+    try:
+        # Get all chunks that need re-embedding (NULL embedding)
+        offset = 0
+        batch_size = 50
+        total_processed = 0
+        total_errors = 0
+
+        while True:
+            resp = supabase.table("note_chunks").select(
+                "id, chunk_text"
+            ).is_("embedding", "null").order("created_at").range(offset, offset + batch_size - 1).execute()
+
+            chunks = resp.data or []
+            if not chunks:
+                break
+
+            for chunk in chunks:
+                chunk_id = chunk['id']
+                text = chunk.get('chunk_text', '')
+
+                if not text or not text.strip():
+                    total_errors += 1
+                    continue
+
+                embedding = generate_embedding(text)
+                if embedding:
+                    try:
+                        supabase.table("note_chunks").update(
+                            {"embedding": embedding}
+                        ).eq("id", chunk_id).execute()
+                        total_processed += 1
+                    except Exception as e:
+                        print(f"Error updating chunk {chunk_id}: {e}")
+                        total_errors += 1
+                else:
+                    total_errors += 1
+
+                # Small delay to respect Gemini rate limits (1500 RPM = 25/sec)
+                time.sleep(0.05)
+
+            print(f"Re-embedded batch: {total_processed} done, {total_errors} errors")
+
+            # Don't increment offset since we're filtering by NULL embedding
+            # (processed chunks no longer match the query)
+            # But if all chunks in this batch failed, move forward to avoid infinite loop
+            if total_processed == 0 and total_errors >= batch_size:
+                offset += batch_size
+
+        print(f"Re-embedding complete: {total_processed} chunks processed, {total_errors} errors")
+
+        # Clear old embedding caches in Redis
+        try:
+            import redis
+            url = os.getenv("CELERY_BROKER_URL", os.getenv("REDIS_URL", "redis://localhost:6379/0"))
+            r = redis.from_url(url, decode_responses=True)
+            # Clear old OpenAI embedding cache keys
+            for key in r.scan_iter("emb:*"):
+                r.delete(key)
+            # Clear vector search cache
+            for key in r.scan_iter("vsearch:*"):
+                r.delete(key)
+            # Clear browse cache
+            for key in r.scan_iter("browse:*"):
+                r.delete(key)
+            print("Cleared old embedding and search caches from Redis")
+        except Exception as e:
+            print(f"Cache clear error: {e}")
+
+        return {"processed": total_processed, "errors": total_errors}
+
+    except Exception as e:
+        print(f"Re-embedding task failed: {e}")
+        import traceback
+        print(traceback.format_exc())
+        return {"error": str(e)}

@@ -11593,6 +11593,20 @@ def university_stats():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/admin/reembed", methods=["POST"])
+def trigger_reembed():
+    """ADMIN: Trigger re-embedding of all note chunks with Gemini."""
+    admin_key = request.args.get("key", "")
+    if admin_key != os.getenv("ADMIN_KEY", "change_me_in_production"):
+        return jsonify({"error": "Unauthorized"}), 403
+    try:
+        from StudyFlow.backend.tasks import reembed_all_chunks
+        reembed_all_chunks.delay()
+        return jsonify({"status": "Re-embedding task started"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     try:
         port = int(os.environ.get("PORT", 5000))
