@@ -4820,7 +4820,7 @@ def chat_with_notes():
         # Generate embedding for the question
         query_embedding = generate_embedding(message)
         if not query_embedding:
-            return jsonify({"error": "Failed to generate query embedding"}), 500
+            return jsonify({"error": "AI service is temporarily busy. Please try again in a moment.", "retry": True}), 503
 
         # Semantic cache check -- if a very similar question was asked before, return cached response
         from StudyFlow.backend.semantic_cache import check_semantic_cache, store_semantic_cache
