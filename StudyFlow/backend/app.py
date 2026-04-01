@@ -11706,7 +11706,7 @@ Do NOT use markdown headers with #. Use plain text with bold markers ** for sect
 
         # Call Gemini
         genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-        model = genai.GenerativeModel('gemini-2.5-flash-preview-04-17')
+        model = genai.GenerativeModel('gemini-3-flash-preview')
 
         response = model.generate_content(prompt)
         outline_text = response.text
