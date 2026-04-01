@@ -483,64 +483,77 @@ Return ONLY a JSON array of anonymized chunks in the same order:
 def reembed_all_chunks():
     """
     Re-generate all note_chunk embeddings using Gemini (768-dim).
-    Run after migrating from OpenAI 1536-dim to Gemini 768-dim.
-    Processes in batches with rate limit awareness.
+    Uses BATCH embedding API for ~100x speedup over one-by-one.
     """
     import time
     from StudyFlow.backend.supabase_client import supabase
-    from StudyFlow.backend.embedding_client import generate_embedding
+    from StudyFlow.backend.embedding_client import generate_embeddings_batch
 
-    print("Starting re-embedding of all note chunks with Gemini...")
+    print("Starting BATCH re-embedding of all note chunks with Gemini...", flush=True)
 
     try:
-        # Get all chunks that need re-embedding (NULL embedding)
-        offset = 0
-        batch_size = 50
         total_processed = 0
         total_errors = 0
+        batch_size = 50  # Gemini batch limit is 100, use 50 for safety
 
         while True:
+            # Fetch a batch of chunks with NULL embeddings
             resp = supabase.table("note_chunks").select(
                 "id, chunk_text"
-            ).is_("embedding", "null").order("created_at").range(offset, offset + batch_size - 1).execute()
+            ).is_("embedding", "null").order("created_at").limit(batch_size).execute()
 
             chunks = resp.data or []
             if not chunks:
                 break
 
-            for chunk in chunks:
-                chunk_id = chunk['id']
-                text = chunk.get('chunk_text', '')
+            # Filter out empty texts
+            valid_chunks = [(c['id'], c.get('chunk_text', '').strip()) for c in chunks if c.get('chunk_text', '').strip()]
 
-                if not text or not text.strip():
-                    total_errors += 1
-                    continue
+            if not valid_chunks:
+                total_errors += len(chunks)
+                break
 
-                embedding = generate_embedding(text)
-                if embedding:
+            # Batch embed all texts at once
+            texts = [t for _, t in valid_chunks]
+            ids = [cid for cid, _ in valid_chunks]
+
+            embeddings = generate_embeddings_batch(texts)
+
+            if not embeddings or len(embeddings) != len(ids):
+                print(f"Batch embedding failed or size mismatch: got {len(embeddings) if embeddings else 0}, expected {len(ids)}", flush=True)
+                total_errors += len(ids)
+                # Fall back to one-by-one for this batch
+                from StudyFlow.backend.embedding_client import generate_embedding
+                for i, (chunk_id, text) in enumerate(valid_chunks):
+                    emb = generate_embedding(text)
+                    if emb:
+                        try:
+                            supabase.table("note_chunks").update({"embedding": emb}).eq("id", chunk_id).execute()
+                            total_processed += 1
+                        except:
+                            total_errors += 1
+                    else:
+                        total_errors += 1
+                    time.sleep(0.05)
+                continue
+
+            # Update each chunk with its embedding
+            for i, chunk_id in enumerate(ids):
+                emb = embeddings[i]
+                if emb and len(emb) > 0 and any(v != 0 for v in emb):
                     try:
-                        supabase.table("note_chunks").update(
-                            {"embedding": embedding}
-                        ).eq("id", chunk_id).execute()
+                        supabase.table("note_chunks").update({"embedding": emb}).eq("id", chunk_id).execute()
                         total_processed += 1
                     except Exception as e:
-                        print(f"Error updating chunk {chunk_id}: {e}")
+                        print(f"Update error {chunk_id}: {e}", flush=True)
                         total_errors += 1
                 else:
                     total_errors += 1
 
-                # Small delay to respect Gemini rate limits (1500 RPM = 25/sec)
-                time.sleep(0.05)
+            print(f"Batch done: {total_processed} total processed, {total_errors} errors", flush=True)
+            time.sleep(0.5)  # Brief pause between batches
 
-            print(f"Re-embedded batch: {total_processed} done, {total_errors} errors")
-
-            # Don't increment offset since we're filtering by NULL embedding
-            # (processed chunks no longer match the query)
-            # But if all chunks in this batch failed, move forward to avoid infinite loop
-            if total_processed == 0 and total_errors >= batch_size:
-                offset += batch_size
-
-        print(f"Re-embedding complete: {total_processed} chunks processed, {total_errors} errors")
+        print(f"Re-embedding complete: {total_processed} chunks processed, {total_errors} errors", flush=True)
 
         # Clear old embedding caches in Redis
         try:
