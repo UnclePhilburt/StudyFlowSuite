@@ -11607,6 +11607,27 @@ def trigger_reembed():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/admin/flush-cache", methods=["POST"])
+def flush_user_cache():
+    """ADMIN: Flush all Redis caches for a user."""
+    admin_key = request.args.get("key", "")
+    if admin_key != os.getenv("ADMIN_KEY", "change_me_in_production"):
+        return jsonify({"error": "Unauthorized"}), 403
+    user_id = request.args.get("user_id", "")
+    if not user_id:
+        return jsonify({"error": "Missing user_id"}), 400
+    try:
+        deleted = []
+        if redis_cache:
+            for prefix in ["canvas_preload:", "convos_list:", "user_notes:", "profile:", "notifications:", "user_groups:", "dashboard:", "calendar:"]:
+                key = prefix + user_id
+                if redis_cache.delete(key):
+                    deleted.append(key)
+        return jsonify({"flushed": deleted}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     try:
         port = int(os.environ.get("PORT", 5000))
