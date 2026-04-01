@@ -244,12 +244,29 @@ def make_note_public(note_id: str, user_id: str) -> bool:
 def search_notes_vector(query_embedding: list, user_id: str, university: str = None,
                        course_code: str = None, match_threshold: float = 0.7, match_count: int = 5) -> list:
     """
-    Search notes using vector similarity
+    Search notes using vector similarity. Results cached in Redis for 10 min.
     Returns chunks from user's own notes + ALL public notes (collective brain)
-    University and course_code parameters are ignored - searches all public notes
     """
+    import json, hashlib
+
+    # Build cache key from embedding hash + filters
+    emb_hash = hashlib.md5(json.dumps(query_embedding[:8]).encode()).hexdigest()[:12]
+    cache_key = f"vsearch:{emb_hash}:{university or ''}:{course_code or ''}:{match_threshold}:{match_count}"
+
+    # Check Redis cache
     try:
-        # Call the PostgreSQL function we defined
+        import redis as redis_lib
+        url = os.getenv("CELERY_BROKER_URL", os.getenv("REDIS_URL", "redis://localhost:6379/0"))
+        r = redis_lib.from_url(url, decode_responses=True)
+        cached = r.get(cache_key)
+        if cached:
+            debug_log(f"[+] Vector search cache HIT ({cache_key[:30]}...)")
+            return json.loads(cached)
+    except:
+        r = None
+
+    try:
+        # Call the PostgreSQL function
         response = supabase.rpc("search_notes_with_vector", {
             "query_embedding": query_embedding,
             "search_user_id": user_id,
@@ -260,11 +277,18 @@ def search_notes_vector(query_embedding: list, user_id: str, university: str = N
         }).execute()
 
         debug_log(f"[+] Vector search found {len(response.data)} results")
+
+        # Cache results for 10 minutes
+        if r and response.data:
+            try:
+                r.setex(cache_key, 600, json.dumps(response.data))
+            except:
+                pass
+
         return response.data
 
     except Exception as e:
         debug_log(f"[-] Error searching notes with vector: {e}")
-        # Log more details for debugging
         import traceback
         debug_log(f"Full error traceback: {traceback.format_exc()}")
         return []
