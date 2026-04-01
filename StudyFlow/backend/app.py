@@ -6224,10 +6224,16 @@ def semantic_browse_notes():
 
         question = data.get('question')
         university_filter = data.get('university')  # Optional university filter
+        course_code_filter = data.get('course_code')  # Optional course code filter
+        professor_filter = data.get('professor')  # Optional professor filter
+        username_filter = data.get('username')  # Optional uploader filter
+        file_type_filter = data.get('file_type')  # Optional file type filter (pdf, docx, txt)
+        sort_by = data.get('sort_by', 'relevance')  # relevance, newest, most_upvoted, most_downloaded
         offset = data.get('offset', 0)  # Pagination offset
 
         # Check Redis cache for recent identical searches
-        cache_key = f"browse:{question}:{university_filter or ''}:{offset}"
+        filter_str = f"{university_filter or ''}:{course_code_filter or ''}:{professor_filter or ''}:{username_filter or ''}:{file_type_filter or ''}:{sort_by}"
+        cache_key = f"browse:{question}:{filter_str}:{offset}"
         if redis_cache:
             try:
                 cached = redis_cache.get(cache_key)
@@ -6254,8 +6260,8 @@ def semantic_browse_notes():
             query_embedding=query_embedding,
             user_id=request.user_id,
             university=university_filter,
-            course_code=None,
-            match_threshold=0.6,  # Raised from 0.4 to 0.6 for more relevant results
+            course_code=course_code_filter,
+            match_threshold=0.6,
             match_count=50
         )
 
@@ -6312,7 +6318,7 @@ def semantic_browse_notes():
         if deduped_results:
             all_note_ids = [r['note_id'] for r in deduped_results]
             notes_resp = supabase.table("notes").select(
-                "id, original_filename, university, course_code, user_id, uploaded_at, net_votes"
+                "id, original_filename, university, course_code, professor, file_type, user_id, uploaded_at, net_votes"
             ).in_("id", all_note_ids).execute()
             notes_map = {n['id']: n for n in (notes_resp.data or [])}
         else:
@@ -6339,6 +6345,8 @@ def semantic_browse_notes():
                 "username": username,
                 "university": note.get('university', 'Unknown'),
                 "course_code": note.get('course_code', ''),
+                "professor": note.get('professor', ''),
+                "file_type": note.get('file_type', ''),
                 "created_at": note.get('uploaded_at', ''),
                 "content": content,
                 "similarity": round(result['similarity'], 2),
@@ -6433,6 +6441,42 @@ def semantic_browse_notes():
 
             # Filter out low relevance results (combined score below 0.45)
             formatted_results = [note for note in formatted_results if note.get('combined_score', 0) >= 0.45]
+
+        # Apply post-filters (professor, username, file_type)
+        if professor_filter:
+            pf = professor_filter.lower()
+            # Need to fetch professor field for these notes
+            note_ids = [n['note_id'] for n in formatted_results]
+            if note_ids:
+                prof_resp = supabase.table("notes").select("id, professor").in_("id", note_ids).execute()
+                prof_map = {n['id']: (n.get('professor') or '').lower() for n in (prof_resp.data or [])}
+                formatted_results = [n for n in formatted_results if pf in prof_map.get(n['note_id'], '')]
+
+        if username_filter:
+            uf = username_filter.lower()
+            formatted_results = [n for n in formatted_results if uf in (n.get('username') or '').lower()]
+
+        if file_type_filter:
+            ft = file_type_filter.lower()
+            formatted_results = [n for n in formatted_results if (n.get('filename') or '').lower().endswith('.' + ft)]
+
+        # Apply sort override
+        if sort_by == 'newest':
+            formatted_results.sort(key=lambda x: x.get('created_at', ''), reverse=True)
+        elif sort_by == 'most_upvoted':
+            formatted_results.sort(key=lambda x: x.get('upvotes', 0), reverse=True)
+        elif sort_by == 'most_downloaded':
+            # Fetch download counts
+            dl_note_ids = [n['note_id'] for n in formatted_results]
+            if dl_note_ids:
+                dl_resp = supabase.table("notes").select("id, download_count").in_("id", dl_note_ids).execute()
+                dl_map = {n['id']: n.get('download_count', 0) for n in (dl_resp.data or [])}
+                for n in formatted_results:
+                    n['_dl'] = dl_map.get(n['note_id'], 0)
+                formatted_results.sort(key=lambda x: x.get('_dl', 0), reverse=True)
+                for n in formatted_results:
+                    n.pop('_dl', None)
+        # else: 'relevance' -- already sorted by combined_score
 
             debug_log(f"📊 Top 5 ranked notes (after filtering):")
             for i, note in enumerate(formatted_results[:5], 1):
