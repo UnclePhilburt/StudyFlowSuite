@@ -12,8 +12,9 @@ import requests
 from typing import List
 from StudyFlow.logging_utils import debug_log
 
-GEMINI_EMBED_URL = "https://generativelanguage.googleapis.com/v1/models/text-embedding-004:embedContent"
-GEMINI_BATCH_URL = "https://generativelanguage.googleapis.com/v1/models/text-embedding-004:batchEmbedContents"
+GEMINI_EMBED_MODEL = "gemini-embedding-exp-03-07"  # Latest Gemini embedding model
+GEMINI_EMBED_FALLBACK = "text-embedding-004"  # Fallback if preview isn't available
+GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1/models"
 EMBEDDING_DIMENSIONS = 768
 
 def _get_gemini_key():
@@ -68,51 +69,62 @@ def generate_embedding(text: str, model: str = None) -> List[float]:
 
         print(f"[EMBEDDING] Calling Gemini API ({len(text)} chars, key={gemini_key[:8]}...)", flush=True)
 
-        # Call Gemini API with retry on rate limit
+        # Try models in order: latest first, then fallback
+        models_to_try = [GEMINI_EMBED_MODEL, GEMINI_EMBED_FALLBACK]
         embedding = None
         max_retries = 4
-        for attempt in range(max_retries):
-            try:
-                resp = requests.post(
-                    f"{GEMINI_EMBED_URL}?key={_get_gemini_key()}",
-                    json={
-                        "model": "models/text-embedding-004",
-                        "content": {"parts": [{"text": text[:2048]}]},
-                        "outputDimensionality": EMBEDDING_DIMENSIONS
-                    },
-                    timeout=10
-                )
 
-                print(f"[EMBEDDING] Gemini response: {resp.status_code}", flush=True)
+        for model_name in models_to_try:
+            embed_url = f"{GEMINI_BASE_URL}/{model_name}:embedContent"
 
-                if resp.status_code == 429:
-                    raise Exception("429 Too Many Requests")
+            for attempt in range(max_retries):
+                try:
+                    resp = requests.post(
+                        f"{embed_url}?key={gemini_key}",
+                        json={
+                            "model": f"models/{model_name}",
+                            "content": {"parts": [{"text": text[:2048]}]},
+                            "outputDimensionality": EMBEDDING_DIMENSIONS
+                        },
+                        timeout=10
+                    )
 
-                if resp.status_code != 200:
-                    print(f"[EMBEDDING] Gemini error {resp.status_code}: {resp.text[:300]}", flush=True)
-                    return None
+                    print(f"[EMBEDDING] {model_name} response: {resp.status_code}", flush=True)
 
-                data = resp.json()
-                embedding = data.get("embedding", {}).get("values")
-                if not embedding:
-                    debug_log(f"No embedding in Gemini response: {json.dumps(data)[:200]}")
-                    return None
-                break
+                    if resp.status_code == 404:
+                        print(f"[EMBEDDING] {model_name} not available, trying fallback", flush=True)
+                        break  # Try next model
 
-            except Exception as e:
-                err_str = str(e)
-                print(f"[EMBEDDING] Exception: {err_str}", flush=True)
-                if '429' not in err_str and 'rate' not in err_str.lower() and 'Too Many' not in err_str:
-                    return None
-                wait = (2 ** attempt) + 0.5
-                debug_log(f"Embedding rate limited, retry {attempt+1}/{max_retries} in {wait}s")
-                if attempt < max_retries - 1:
-                    time.sleep(wait)
-                else:
-                    debug_log("Embedding rate limit exhausted all retries")
-                    return None
+                    if resp.status_code == 429:
+                        raise Exception("429 Too Many Requests")
+
+                    if resp.status_code != 200:
+                        print(f"[EMBEDDING] {model_name} error {resp.status_code}: {resp.text[:300]}", flush=True)
+                        break  # Try next model
+
+                    data = resp.json()
+                    embedding = data.get("embedding", {}).get("values")
+                    if embedding:
+                        print(f"[EMBEDDING] Success with {model_name}: {len(embedding)} dims", flush=True)
+                    break
+
+                except Exception as e:
+                    err_str = str(e)
+                    print(f"[EMBEDDING] Exception: {err_str}", flush=True)
+                    if '429' not in err_str and 'rate' not in err_str.lower() and 'Too Many' not in err_str:
+                        break  # Not a rate limit, try next model
+                    wait = (2 ** attempt) + 0.5
+                    print(f"[EMBEDDING] Rate limited, retry {attempt+1}/{max_retries} in {wait}s", flush=True)
+                    if attempt < max_retries - 1:
+                        time.sleep(wait)
+                    else:
+                        break  # Try next model
+
+            if embedding:
+                break  # Got a result, stop trying models
 
         if not embedding:
+            print("[EMBEDDING] All models failed, returning None", flush=True)
             return None
 
         debug_log(f"Generated Gemini embedding ({len(embedding)} dimensions)")
@@ -159,24 +171,43 @@ def generate_embeddings_batch(texts: List[str], model: str = None) -> List[List[
         for i in range(0, len(cleaned_texts), batch_size):
             batch = cleaned_texts[i:i + batch_size]
 
-            requests_payload = [
-                {
-                    "model": "models/text-embedding-004",
-                    "content": {"parts": [{"text": t}]},
-                    "outputDimensionality": EMBEDDING_DIMENSIONS
-                }
-                for t in batch
-            ]
+            # Try latest model first, fallback if not available
+            gemini_key = _get_gemini_key()
+            result_embeddings = None
 
-            resp = requests.post(
-                f"{GEMINI_BATCH_URL}?key={_get_gemini_key()}",
-                json={"requests": requests_payload},
-                timeout=30
-            )
+            for model_name in [GEMINI_EMBED_MODEL, GEMINI_EMBED_FALLBACK]:
+                batch_url = f"{GEMINI_BASE_URL}/{model_name}:batchEmbedContents"
+                requests_payload = [
+                    {
+                        "model": f"models/{model_name}",
+                        "content": {"parts": [{"text": t}]},
+                        "outputDimensionality": EMBEDDING_DIMENSIONS
+                    }
+                    for t in batch
+                ]
 
-            if resp.status_code != 200:
-                debug_log(f"Gemini batch embedding error {resp.status_code}: {resp.text[:200]}")
+                resp = requests.post(
+                    f"{batch_url}?key={gemini_key}",
+                    json={"requests": requests_payload},
+                    timeout=30
+                )
+
+                if resp.status_code == 404:
+                    print(f"[EMBEDDING BATCH] {model_name} not available, trying fallback", flush=True)
+                    continue
+
+                if resp.status_code != 200:
+                    print(f"[EMBEDDING BATCH] {model_name} error {resp.status_code}: {resp.text[:200]}", flush=True)
+                    continue
+
+                result_embeddings = resp
+                break
+
+            if not result_embeddings or result_embeddings.status_code != 200:
+                print("[EMBEDDING BATCH] All models failed", flush=True)
                 return []
+
+            resp = result_embeddings
 
             data = resp.json()
             batch_embeddings = [
