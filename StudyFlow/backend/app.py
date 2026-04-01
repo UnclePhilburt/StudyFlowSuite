@@ -11593,6 +11593,156 @@ def university_stats():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/notes/generate-outline", methods=["POST"])
+@supabase_auth_required
+@account_not_frozen
+def generate_outline():
+    """
+    Generate a detailed paper outline from the user's own notes.
+    Does NOT write prose -- provides structured headers, key points,
+    quotes, and connections the student should write about.
+
+    Expects JSON:
+    {
+        "topic": "optional paper topic or prompt",
+        "format": "mla" | "apa" | "chicago",
+        "note_ids": [] (optional, defaults to all user notes)
+    }
+    """
+    try:
+        data = request.get_json() or {}
+        topic = data.get('topic', '').strip()
+        doc_format = data.get('format', 'mla').lower()
+        note_ids = data.get('note_ids', [])
+
+        user_id = request.user_id
+
+        # Fetch user's note chunks (only their own, not Nexus)
+        if note_ids:
+            chunks_resp = supabase.table("note_chunks").select(
+                "chunk_text, content_summary, note_id"
+            ).eq("user_id", user_id).in_("note_id", note_ids).order("chunk_index").execute()
+        else:
+            chunks_resp = supabase.table("note_chunks").select(
+                "chunk_text, content_summary, note_id"
+            ).eq("user_id", user_id).order("created_at").execute()
+
+        chunks = chunks_resp.data or []
+
+        if not chunks:
+            return jsonify({"error": "No notes found. Upload some notes first."}), 400
+
+        # Get note filenames for source attribution
+        note_id_set = list(set(c['note_id'] for c in chunks))
+        notes_resp = supabase.table("notes").select(
+            "id, original_filename, course_code, professor, university"
+        ).in_("id", note_id_set).execute()
+        notes_map = {n['id']: n for n in (notes_resp.data or [])}
+
+        # Build context from chunks with source labels
+        note_context = ""
+        for chunk in chunks[:100]:  # Cap at 100 chunks to fit context window
+            note = notes_map.get(chunk['note_id'], {})
+            filename = note.get('original_filename', 'Unknown')
+            course = note.get('course_code', '')
+            source_label = filename
+            if course:
+                source_label += f" ({course})"
+            text = chunk.get('content_summary') or chunk.get('chunk_text', '')
+            if text:
+                note_context += f"\n[Source: {source_label}]\n{text}\n"
+
+        # Format instructions
+        format_instructions = {
+            'mla': 'MLA format: 12pt Times New Roman, double-spaced, 1-inch margins, last name and page number in header, Works Cited page format',
+            'apa': 'APA format: 12pt Times New Roman, double-spaced, running head, title page with author and institution, References page format',
+            'chicago': 'Chicago format: 12pt Times New Roman, double-spaced, title page, footnotes/endnotes, Bibliography page format'
+        }.get(doc_format, 'MLA format')
+
+        topic_instruction = ""
+        if topic:
+            topic_instruction = f"The student's paper topic or assignment prompt is: \"{topic}\"\n\nFocus the outline on this topic, using only information from their notes that is relevant."
+        else:
+            topic_instruction = "The student has not specified a topic. Identify the main themes and topics across all their notes and create an outline that covers the most important material."
+
+        prompt = f"""You are an academic outline generator for a study tool. Your job is to help students organize their own notes into a structured paper outline.
+
+CRITICAL RULES:
+- You are NOT writing their paper. You are organizing their existing notes into a logical outline.
+- Every point MUST come from the student's actual notes provided below. Do NOT add outside information.
+- Do NOT write full sentences or paragraphs that could be copy-pasted as essay prose.
+- DO include direct quotes from their notes (in quotation marks) that are worth expanding on.
+- DO suggest connections between topics the student should explore.
+- DO provide "Main idea" framing for each section (one sentence max).
+- Attribute every point to the source note it came from.
+
+{topic_instruction}
+
+FORMAT: {format_instructions}
+
+STUDENT'S NOTES:
+{note_context}
+
+Generate a detailed outline with this structure for EACH section:
+
+**[Section Title]**
+Main idea: [One sentence framing what this section covers]
+
+Key points to address:
+- [Specific fact/concept from their notes] (Source: [filename])
+- [Another key point] (Source: [filename])
+
+Notable quotes from your notes:
+- "[Direct quote worth expanding on]" (Source: [filename])
+
+Connections to make:
+- [How this section relates to other sections/themes]
+
+---
+
+Start with 2-3 suggested titles, then a thesis direction, then the full sectioned outline. End with a suggested conclusion direction (what to summarize, NOT a written conclusion).
+
+Do NOT use markdown headers with #. Use plain text with bold markers ** for section titles."""
+
+        # Call Gemini
+        genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+        model = genai.GenerativeModel('gemini-2.5-flash-preview-04-17')
+
+        response = model.generate_content(prompt)
+        outline_text = response.text
+
+        # Track cost
+        try:
+            from StudyFlow.backend.cost_tracker import track_ai_call
+            track_ai_call("gemini", "gemini-2.5-flash", "outline_gen", tokens_estimate=len(note_context) // 4)
+        except:
+            pass
+
+        # Log for compliance
+        try:
+            from StudyFlow.backend.conversational_noteflow import log_ai_response
+            log_ai_response(
+                user_id=user_id,
+                question=f"Generate outline: {topic or 'all notes'}",
+                response_text=outline_text[:500],
+                model_used="gemini-2.5-flash",
+                sources_used=[{"note_id": nid, "filename": notes_map.get(nid, {}).get('original_filename', '')} for nid in note_id_set[:10]]
+            )
+        except:
+            pass
+
+        return jsonify({
+            "outline": outline_text,
+            "format": doc_format,
+            "notes_used": len(note_id_set),
+            "chunks_analyzed": len(chunks)
+        }), 200
+
+    except Exception as e:
+        debug_log(f"Outline generation error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/admin/reembed", methods=["POST"])
 def trigger_reembed():
     """ADMIN: Trigger re-embedding of all note chunks with Gemini."""
