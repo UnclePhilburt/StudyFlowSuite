@@ -12,8 +12,8 @@ import requests
 from typing import List
 from StudyFlow.logging_utils import debug_log
 
-GEMINI_EMBED_MODEL = "gemini-embedding-exp-03-07"  # Gemini Embedding 2 (multimodal)
-GEMINI_EMBED_FALLBACK = "text-embedding-005"  # Stable text-only fallback
+GEMINI_EMBED_MODEL = "gemini-embedding-exp"  # Gemini Embedding 2
+GEMINI_EMBED_FALLBACK = "text-embedding-005"  # Fallback
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1/models"
 EMBEDDING_DIMENSIONS = 768
 
