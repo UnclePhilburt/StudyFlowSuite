@@ -33,8 +33,11 @@ def _get_redis():
 
 def generate_embedding(text: str, model: str = "text-embedding-3-small") -> List[float]:
     """
-    Generate a single embedding for text. Cached in Redis for 1 hour.
+    Generate a single embedding for text. Cached in Redis for 24h.
+    Retries with exponential backoff on rate limit (429).
     """
+    import time
+
     try:
         # Clean the text
         text = text.replace("\n", " ").strip()
@@ -55,13 +58,29 @@ def generate_embedding(text: str, model: str = "text-embedding-3-small") -> List
             except:
                 pass
 
-        # Call OpenAI API
-        response = openai.embeddings.create(
-            input=text,
-            model=model
-        )
+        # Call OpenAI API with retry on 429
+        embedding = None
+        max_retries = 4
+        for attempt in range(max_retries):
+            try:
+                response = openai.embeddings.create(
+                    input=text,
+                    model=model
+                )
+                embedding = response.data[0].embedding
+                break
+            except openai.RateLimitError:
+                wait = (2 ** attempt) + 0.5  # 1.5s, 2.5s, 4.5s, 8.5s
+                debug_log(f"Embedding rate limited, retry {attempt+1}/{max_retries} in {wait}s")
+                if attempt < max_retries - 1:
+                    time.sleep(wait)
+                else:
+                    debug_log("Embedding rate limit exhausted all retries")
+                    return None
 
-        embedding = response.data[0].embedding
+        if not embedding:
+            return None
+
         debug_log(f"Generated embedding ({len(embedding)} dimensions)")
 
         # Track cost
