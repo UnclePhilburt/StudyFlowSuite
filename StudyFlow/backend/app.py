@@ -6338,6 +6338,10 @@ def semantic_browse_notes():
             if not note:
                 continue
 
+            # Skip Wikipedia articles from Nexus browse results
+            if (note.get('university') or '').lower() == 'wikipedia':
+                continue
+
             profile = get_cached_profile(note['user_id'])
             if not profile or not profile.get('is_public', True):
                 continue
