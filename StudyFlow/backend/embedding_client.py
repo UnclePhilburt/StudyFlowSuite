@@ -12,8 +12,8 @@ import requests
 from typing import List
 from StudyFlow.logging_utils import debug_log
 
-GEMINI_EMBED_URL = "https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent"
-GEMINI_BATCH_URL = "https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:batchEmbedContents"
+GEMINI_EMBED_URL = "https://generativelanguage.googleapis.com/v1/models/text-embedding-004:embedContent"
+GEMINI_BATCH_URL = "https://generativelanguage.googleapis.com/v1/models/text-embedding-004:batchEmbedContents"
 EMBEDDING_DIMENSIONS = 768
 
 def _get_gemini_key():
