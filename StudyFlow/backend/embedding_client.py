@@ -11,8 +11,11 @@ import openai
 from typing import List
 from StudyFlow.logging_utils import debug_log
 
-# Initialize OpenAI client
-openai.api_key = os.getenv("OPENAI_API_KEY")
+# Initialize OpenAI client with no built-in retries (we handle retries ourselves)
+_openai_client = openai.OpenAI(
+    api_key=os.getenv("OPENAI_API_KEY"),
+    max_retries=0  # Disable SDK retry -- we do our own backoff
+)
 
 # Redis cache for embeddings (1 hour TTL)
 _embedding_cache = None
@@ -63,13 +66,15 @@ def generate_embedding(text: str, model: str = "text-embedding-3-small") -> List
         max_retries = 4
         for attempt in range(max_retries):
             try:
-                response = openai.embeddings.create(
+                response = _openai_client.embeddings.create(
                     input=text,
                     model=model
                 )
                 embedding = response.data[0].embedding
                 break
-            except openai.RateLimitError:
+            except Exception as rate_err:
+                if '429' not in str(rate_err) and 'rate' not in str(rate_err).lower():
+                    raise  # Re-raise if it's not a rate limit error
                 wait = (2 ** attempt) + 0.5  # 1.5s, 2.5s, 4.5s, 8.5s
                 debug_log(f"Embedding rate limited, retry {attempt+1}/{max_retries} in {wait}s")
                 if attempt < max_retries - 1:
@@ -131,7 +136,7 @@ def generate_embeddings_batch(texts: List[str], model: str = "text-embedding-3-s
             batch = cleaned_texts[i:i + batch_size]
 
             # Call OpenAI API
-            response = openai.embeddings.create(
+            response = _openai_client.embeddings.create(
                 input=batch,
                 model=model
             )

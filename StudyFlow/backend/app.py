@@ -151,6 +151,13 @@ CORS(app,
      expose_headers=["Content-Type", "Authorization"]
 )
 
+# Ensure CORS headers on error responses (Flask-CORS misses unhandled exceptions)
+@app.errorhandler(500)
+def handle_500(e):
+    response = jsonify({"error": "Internal server error"})
+    response.status_code = 500
+    return response
+
 # ============ DMCA EMAIL NOTIFICATIONS ============
 
 def send_dmca_report_notification_to_admin(takedown_id: str, note_filename: str, reporter_email: str, reason: str) -> bool:
