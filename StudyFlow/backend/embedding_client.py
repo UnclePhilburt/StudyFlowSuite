@@ -1,28 +1,45 @@
 """
 Gemini Embedding Client for StudyFlow
-Generates vector embeddings using Google's text-embedding-004 (768 dimensions).
-Redis-cached to avoid duplicate API calls for identical queries.
+Uses Google's gemini-embedding-2-preview (768 dimensions, multimodal).
+Redis-cached to avoid duplicate API calls.
 """
 
 import os
 import json
 import hashlib
 import time
-import requests
 from typing import List
 from StudyFlow.logging_utils import debug_log
 
-GEMINI_EMBED_MODEL = "gemini-embedding-exp"  # Gemini Embedding 2
-GEMINI_EMBED_FALLBACK = "text-embedding-005"  # Fallback
-GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1/models"
 EMBEDDING_DIMENSIONS = 768
-
-def _get_gemini_key():
-    return os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+EMBEDDING_MODEL = "gemini-embedding-2-preview"
 
 # Redis cache for embeddings
 _embedding_cache = None
 EMBEDDING_CACHE_TTL = 86400  # 24 hours
+
+# Lazy-init genai client
+_genai_client = None
+
+
+def _get_client():
+    global _genai_client
+    if _genai_client is None:
+        try:
+            from google import genai
+            api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+            if not api_key:
+                print("[EMBEDDING] No GEMINI_API_KEY env var found", flush=True)
+                return None
+            _genai_client = genai.Client(api_key=api_key)
+            print(f"[EMBEDDING] genai client initialized (key={api_key[:8]}...)", flush=True)
+        except ImportError:
+            print("[EMBEDDING] google-genai package not installed, falling back to REST", flush=True)
+            return None
+        except Exception as e:
+            print(f"[EMBEDDING] Failed to init genai client: {e}", flush=True)
+            return None
+    return _genai_client
 
 
 def _get_redis():
@@ -38,101 +55,108 @@ def _get_redis():
     return _embedding_cache if _embedding_cache else None
 
 
+def _embed_via_sdk(text):
+    """Use the google-genai SDK."""
+    client = _get_client()
+    if not client:
+        return None
+
+    try:
+        from google.genai import types
+        result = client.models.embed_content(
+            model=EMBEDDING_MODEL,
+            contents=text[:8000],
+            config=types.EmbedContentConfig(
+                output_dimensionality=EMBEDDING_DIMENSIONS,
+                task_type='RETRIEVAL_DOCUMENT'
+            )
+        )
+        values = result.embeddings[0].values
+        print(f"[EMBEDDING] SDK success: {len(values)} dims", flush=True)
+        return list(values)
+    except Exception as e:
+        print(f"[EMBEDDING] SDK error: {e}", flush=True)
+        return None
+
+
+def _embed_via_rest(text):
+    """Fallback: use REST API directly."""
+    import requests as req
+
+    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    if not api_key:
+        return None
+
+    # Try multiple model IDs
+    models = [EMBEDDING_MODEL, "text-embedding-005", "embedding-001"]
+
+    for model_name in models:
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1/models/{model_name}:embedContent?key={api_key}"
+            resp = req.post(url, json={
+                "model": f"models/{model_name}",
+                "content": {"parts": [{"text": text[:8000]}]},
+                "outputDimensionality": EMBEDDING_DIMENSIONS
+            }, timeout=15)
+
+            print(f"[EMBEDDING] REST {model_name}: {resp.status_code}", flush=True)
+
+            if resp.status_code == 404:
+                continue  # Try next model
+
+            if resp.status_code != 200:
+                print(f"[EMBEDDING] REST error: {resp.text[:200]}", flush=True)
+                continue
+
+            data = resp.json()
+            values = data.get("embedding", {}).get("values")
+            if values:
+                print(f"[EMBEDDING] REST success with {model_name}: {len(values)} dims", flush=True)
+                return values
+        except Exception as e:
+            print(f"[EMBEDDING] REST {model_name} exception: {e}", flush=True)
+            continue
+
+    return None
+
+
 def generate_embedding(text: str, model: str = None) -> List[float]:
     """
-    Generate a single embedding for text using Gemini. Cached in Redis for 24h.
-    Retries with exponential backoff on rate limit.
+    Generate a single embedding. Tries SDK first, then REST fallback.
+    Cached in Redis for 24h.
     """
     try:
-        print(f"[EMBEDDING] generate_embedding called with {len(text)} chars", flush=True)
+        print(f"[EMBEDDING] generate_embedding called ({len(text)} chars)", flush=True)
         text = text.replace("\n", " ").strip()
         if not text:
-            print("[EMBEDDING] Empty text, returning None", flush=True)
             return None
 
-        # Check Redis cache (use gemini-prefixed key to avoid old OpenAI cache collisions)
+        # Check Redis cache
         cache_key = "gemb:" + hashlib.md5(text.encode()).hexdigest()
         r = _get_redis()
         if r:
             try:
                 cached = r.get(cache_key)
                 if cached:
-                    debug_log(f"Embedding cache HIT ({len(text)} chars)")
+                    print(f"[EMBEDDING] Cache HIT", flush=True)
                     return json.loads(cached)
             except:
                 pass
 
-        gemini_key = _get_gemini_key()
-        if not gemini_key:
-            print("[EMBEDDING] No Gemini API key found. GEMINI_API_KEY env var not set.", flush=True)
-            return None
-
-        print(f"[EMBEDDING] Calling Gemini API ({len(text)} chars, key={gemini_key[:8]}...)", flush=True)
-
-        # Try models in order: latest first, then fallback
-        models_to_try = [GEMINI_EMBED_MODEL, GEMINI_EMBED_FALLBACK]
-        embedding = None
-        max_retries = 4
-
-        for model_name in models_to_try:
-            embed_url = f"{GEMINI_BASE_URL}/{model_name}:embedContent"
-
-            for attempt in range(max_retries):
-                try:
-                    resp = requests.post(
-                        f"{embed_url}?key={gemini_key}",
-                        json={
-                            "model": f"models/{model_name}",
-                            "content": {"parts": [{"text": text[:2048]}]},
-                            "outputDimensionality": EMBEDDING_DIMENSIONS
-                        },
-                        timeout=10
-                    )
-
-                    print(f"[EMBEDDING] {model_name} response: {resp.status_code}", flush=True)
-
-                    if resp.status_code == 404:
-                        print(f"[EMBEDDING] {model_name} not available, trying fallback", flush=True)
-                        break  # Try next model
-
-                    if resp.status_code == 429:
-                        raise Exception("429 Too Many Requests")
-
-                    if resp.status_code != 200:
-                        print(f"[EMBEDDING] {model_name} error {resp.status_code}: {resp.text[:300]}", flush=True)
-                        break  # Try next model
-
-                    data = resp.json()
-                    embedding = data.get("embedding", {}).get("values")
-                    if embedding:
-                        print(f"[EMBEDDING] Success with {model_name}: {len(embedding)} dims", flush=True)
-                    break
-
-                except Exception as e:
-                    err_str = str(e)
-                    print(f"[EMBEDDING] Exception: {err_str}", flush=True)
-                    if '429' not in err_str and 'rate' not in err_str.lower() and 'Too Many' not in err_str:
-                        break  # Not a rate limit, try next model
-                    wait = (2 ** attempt) + 0.5
-                    print(f"[EMBEDDING] Rate limited, retry {attempt+1}/{max_retries} in {wait}s", flush=True)
-                    if attempt < max_retries - 1:
-                        time.sleep(wait)
-                    else:
-                        break  # Try next model
-
-            if embedding:
-                break  # Got a result, stop trying models
+        # Try SDK first, then REST
+        embedding = _embed_via_sdk(text)
+        if not embedding:
+            print("[EMBEDDING] SDK failed, trying REST fallback", flush=True)
+            embedding = _embed_via_rest(text)
 
         if not embedding:
-            print("[EMBEDDING] All models failed, returning None", flush=True)
+            print("[EMBEDDING] All methods failed", flush=True)
             return None
 
-        debug_log(f"Generated Gemini embedding ({len(embedding)} dimensions)")
-
-        # Track cost (Gemini embeddings are free but track for stats)
+        # Track cost (free but track for stats)
         try:
             from StudyFlow.backend.cost_tracker import track_ai_call
-            track_ai_call("google", "text-embedding-004", "embedding", tokens_estimate=len(text) // 4)
+            track_ai_call("google", EMBEDDING_MODEL, "embedding", tokens_estimate=len(text) // 4)
         except:
             pass
 
@@ -146,110 +170,70 @@ def generate_embedding(text: str, model: str = None) -> List[float]:
         return embedding
 
     except Exception as e:
-        debug_log(f"Error generating embedding: {e}")
+        print(f"[EMBEDDING] Fatal error: {e}", flush=True)
         return None
 
 
 def generate_embeddings_batch(texts: List[str], model: str = None) -> List[List[float]]:
-    """
-    Generate embeddings for multiple texts using Gemini batch API.
-    """
+    """Generate embeddings for multiple texts. Falls back to one-by-one if batch fails."""
     try:
-        cleaned_texts = [text.replace("\n", " ").strip()[:2048] for text in texts if text.strip()]
-        if not cleaned_texts:
-            debug_log("No valid texts to embed")
+        cleaned = [t.replace("\n", " ").strip()[:8000] for t in texts if t.strip()]
+        if not cleaned:
             return []
 
-        if not _get_gemini_key():
-            debug_log("No Gemini API key configured for embeddings")
-            return []
-
-        # Gemini batch supports up to 100 inputs
-        batch_size = 100
-        all_embeddings = []
-
-        for i in range(0, len(cleaned_texts), batch_size):
-            batch = cleaned_texts[i:i + batch_size]
-
-            # Try latest model first, fallback if not available
-            gemini_key = _get_gemini_key()
-            result_embeddings = None
-
-            for model_name in [GEMINI_EMBED_MODEL, GEMINI_EMBED_FALLBACK]:
-                batch_url = f"{GEMINI_BASE_URL}/{model_name}:batchEmbedContents"
-                requests_payload = [
-                    {
-                        "model": f"models/{model_name}",
-                        "content": {"parts": [{"text": t}]},
-                        "outputDimensionality": EMBEDDING_DIMENSIONS
-                    }
-                    for t in batch
-                ]
-
-                resp = requests.post(
-                    f"{batch_url}?key={gemini_key}",
-                    json={"requests": requests_payload},
-                    timeout=30
-                )
-
-                if resp.status_code == 404:
-                    print(f"[EMBEDDING BATCH] {model_name} not available, trying fallback", flush=True)
-                    continue
-
-                if resp.status_code != 200:
-                    print(f"[EMBEDDING BATCH] {model_name} error {resp.status_code}: {resp.text[:200]}", flush=True)
-                    continue
-
-                result_embeddings = resp
-                break
-
-            if not result_embeddings or result_embeddings.status_code != 200:
-                print("[EMBEDDING BATCH] All models failed", flush=True)
-                return []
-
-            resp = result_embeddings
-
-            data = resp.json()
-            batch_embeddings = [
-                emb.get("values", [])
-                for emb in data.get("embeddings", [])
-            ]
-            all_embeddings.extend(batch_embeddings)
-
-            # Track cost
+        # Try SDK batch
+        client = _get_client()
+        if client:
             try:
-                from StudyFlow.backend.cost_tracker import track_ai_call
-                total_chars = sum(len(t) for t in batch)
-                track_ai_call("google", "text-embedding-004", "embedding_batch", tokens_estimate=total_chars // 4)
-            except:
-                pass
+                from google.genai import types
+                all_embeddings = []
+                batch_size = 100
+                for i in range(0, len(cleaned), batch_size):
+                    batch = cleaned[i:i + batch_size]
+                    results = client.models.embed_content(
+                        model=EMBEDDING_MODEL,
+                        contents=batch,
+                        config=types.EmbedContentConfig(
+                            output_dimensionality=EMBEDDING_DIMENSIONS,
+                            task_type='RETRIEVAL_DOCUMENT'
+                        )
+                    )
+                    for emb in results.embeddings:
+                        all_embeddings.append(list(emb.values))
+                    print(f"[EMBEDDING BATCH] SDK: {len(batch)} done", flush=True)
+                return all_embeddings
+            except Exception as e:
+                print(f"[EMBEDDING BATCH] SDK error: {e}, falling back to one-by-one", flush=True)
 
-            debug_log(f"Generated {len(batch_embeddings)} Gemini embeddings (batch {i//batch_size + 1})")
-
-        return all_embeddings
+        # Fallback: one by one
+        embeddings = []
+        for t in cleaned:
+            emb = generate_embedding(t)
+            if emb:
+                embeddings.append(emb)
+            else:
+                embeddings.append([0.0] * EMBEDDING_DIMENSIONS)
+            time.sleep(0.05)  # Rate limit respect
+        return embeddings
 
     except Exception as e:
-        debug_log(f"Error generating batch embeddings: {e}")
+        print(f"[EMBEDDING BATCH] Fatal error: {e}", flush=True)
         return []
 
 
 def estimate_embedding_cost(text_length: int) -> float:
-    """Gemini embeddings are free -- return 0."""
+    """Gemini embeddings are free."""
     return 0.0
 
 
 def cosine_similarity(vec1: List[float], vec2: List[float]) -> float:
     """Calculate cosine similarity between two vectors."""
     import math
-
     if not vec1 or not vec2 or len(vec1) != len(vec2):
         return 0.0
-
     dot = sum(a * b for a, b in zip(vec1, vec2))
     norm1 = math.sqrt(sum(a * a for a in vec1))
     norm2 = math.sqrt(sum(b * b for b in vec2))
-
     if norm1 == 0 or norm2 == 0:
         return 0.0
-
     return dot / (norm1 * norm2)
