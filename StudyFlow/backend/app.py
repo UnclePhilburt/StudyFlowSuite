@@ -11804,6 +11804,40 @@ def flush_user_cache():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/admin/import-wikipedia", methods=["POST"])
+def admin_import_wikipedia():
+    """ADMIN: Import Wikipedia articles by subject or title."""
+    admin_key = request.args.get("key", "")
+    if admin_key != os.getenv("ADMIN_KEY", "change_me_in_production"):
+        return jsonify({"error": "Unauthorized"}), 403
+    try:
+        data = request.get_json() or {}
+        subject = data.get('subject')  # e.g. "Biology", "US History"
+        article = data.get('article')  # single article title
+
+        from scripts.wikipedia_importer import import_article, import_batch, ALL_SUBJECTS
+
+        if article:
+            result = import_article(article, course_code=data.get('course_code', 'General Knowledge'))
+            return jsonify(result), 200
+        elif subject and subject in ALL_SUBJECTS:
+            # Run in background via Celery
+            from StudyFlow.backend.tasks import celery_app
+            @celery_app.task(name="wiki_import_" + subject.replace(" ", "_"))
+            def do_import():
+                return import_batch(ALL_SUBJECTS[subject], course_code=subject)
+            do_import.delay()
+            return jsonify({"status": f"Importing {len(ALL_SUBJECTS[subject])} {subject} articles in background"}), 200
+        else:
+            return jsonify({
+                "available_subjects": list(ALL_SUBJECTS.keys()),
+                "total_articles": sum(len(a) for a in ALL_SUBJECTS.values()),
+                "usage": "POST with {subject: 'Biology'} or {article: 'Photosynthesis'}"
+            }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     try:
         port = int(os.environ.get("PORT", 5000))
