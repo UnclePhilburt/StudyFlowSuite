@@ -83,11 +83,13 @@ def generate_embedding(text: str, model: str = None) -> List[float]:
                     timeout=10
                 )
 
+                print(f"[EMBEDDING] Gemini response: {resp.status_code}", flush=True)
+
                 if resp.status_code == 429:
                     raise Exception("429 Too Many Requests")
 
                 if resp.status_code != 200:
-                    debug_log(f"Gemini embedding error {resp.status_code}: {resp.text[:200]}")
+                    print(f"[EMBEDDING] Gemini error {resp.status_code}: {resp.text[:300]}", flush=True)
                     return None
 
                 data = resp.json()
@@ -99,8 +101,8 @@ def generate_embedding(text: str, model: str = None) -> List[float]:
 
             except Exception as e:
                 err_str = str(e)
+                print(f"[EMBEDDING] Exception: {err_str}", flush=True)
                 if '429' not in err_str and 'rate' not in err_str.lower() and 'Too Many' not in err_str:
-                    debug_log(f"Gemini embedding error: {e}")
                     return None
                 wait = (2 ** attempt) + 0.5
                 debug_log(f"Embedding rate limited, retry {attempt+1}/{max_retries} in {wait}s")
