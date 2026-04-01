@@ -11808,6 +11808,34 @@ def trigger_reembed():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/admin/reembed-status", methods=["GET"])
+def reembed_status():
+    """ADMIN: Check re-embedding progress."""
+    admin_key = request.args.get("key", "")
+    if admin_key != os.getenv("ADMIN_KEY", "change_me_in_production"):
+        return jsonify({"error": "Unauthorized"}), 403
+    try:
+        # Count total chunks vs chunks with embeddings
+        total_result = supabase.table("note_chunks").select("id", count="exact").execute()
+        total_chunks = total_result.count
+
+        embedded_result = supabase.table("note_chunks").select("id", count="exact").not_.is_("embedding", "null").execute()
+        embedded_chunks = embedded_result.count
+
+        null_chunks = total_chunks - embedded_chunks
+        percent_complete = round((embedded_chunks / total_chunks * 100) if total_chunks > 0 else 0, 1)
+
+        return jsonify({
+            "total_chunks": total_chunks,
+            "embedded": embedded_chunks,
+            "remaining": null_chunks,
+            "percent_complete": percent_complete,
+            "status": "Complete" if null_chunks == 0 else "In Progress"
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/admin/flush-cache", methods=["POST"])
 def flush_user_cache():
     """ADMIN: Flush all Redis caches for a user."""
