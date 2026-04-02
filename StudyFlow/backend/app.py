@@ -4990,13 +4990,21 @@ def chat_with_notes():
                 search_results = student_results + wiki_results[:3]
                 debug_log(f"Low student notes ({len(quality_student)}), backfilling with {min(len(wiki_results), 3)} Wikipedia chunks")
 
-        # Add search result metadata and enrich with missing fields (CONSENSUS: show all sources)
+        # Add search result metadata and enrich with missing fields
+        # FILTER: Only show sources with similarity >= 0.75 to avoid irrelevant citations
         sources = []
         seen_note_ids = set()
+        DISPLAY_THRESHOLD = 0.75  # Only show high-quality sources to user
         if search_results:
-            for result in search_results:  # Deduplicate by note_id, show ALL for consensus
+            for result in search_results:  # Deduplicate by note_id
                 if result['note_id'] in seen_note_ids:
                     continue
+
+                # Skip sources below display threshold
+                if result.get('similarity', 0) < DISPLAY_THRESHOLD:
+                    debug_log(f"Skipping low-similarity source: {result.get('similarity', 0):.2f} < {DISPLAY_THRESHOLD}")
+                    continue
+
                 seen_note_ids.add(result['note_id'])
                 # REMOVED 3-source limit to show consensus from multiple students
                 note_result = supabase.table("notes").select("original_filename, user_id, university, course_code").eq("id", result['note_id']).execute()
