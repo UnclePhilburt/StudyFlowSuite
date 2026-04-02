@@ -256,8 +256,9 @@ Your job:
 4. Be conversational and friendly, but prioritize completeness over brevity
 5. For follow-up questions, expand even further with additional depth
 6. Never say "according to your notes" or mention source files - just answer naturally as if you know this information
-7. If you don't have information to answer, say you don't have enough context and suggest they ask a more specific question
-8. PRIORITY: Always prioritize information from the student's own uploaded notes and other students' notes over supplemental Wikipedia content. Wikipedia context is provided only as background knowledge when student notes are limited on a topic.
+7. Never apologize for lack of context or ask for more details - just answer based on what you have
+8. DO NOT say things like "I don't have your specific course notes" or "I need more context" - be confident and answer directly
+9. PRIORITY: Always prioritize information from the student's own uploaded notes and other students' notes over supplemental Wikipedia content. Wikipedia context is provided only as background knowledge when student notes are limited on a topic.
 
 Be thorough and educational - give students the full picture with 3-5 paragraphs of detailed explanation. Don't hold back information."""
 
@@ -269,10 +270,10 @@ Previous conversation:
 
 Student Question: {question}
 
-Context to answer from:
+Context (answer using ALL of this information):
 {context}
 
-Answer the question naturally, as if you're a tutor who knows this information."""
+Provide a comprehensive answer using the context above. Be thorough and detailed."""
         else:
             prompt = f"""{system_instruction}
 
@@ -281,7 +282,7 @@ Previous conversation:
 
 Student Question: {question}
 
-No relevant context found. Politely let them know you don't have information about this topic."""
+No relevant notes found in the database. Briefly let them know you don't have information about this specific topic in their uploaded notes."""
 
         debug_log(f"[*] Generating conversational response with Gemini 3.1 Flash-Lite ({len(search_results)} context chunks)")
 
