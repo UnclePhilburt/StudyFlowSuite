@@ -270,10 +270,10 @@ Previous conversation:
 
 Student Question: {question}
 
-Context (answer using ALL of this information):
+Context from notes:
 {context}
 
-Provide a comprehensive answer using the context above. Be thorough and detailed."""
+Answer the student's question above. Use the relevant parts of the context that directly relate to what they asked. If the context doesn't match their question, acknowledge that and answer what you can."""
         else:
             prompt = f"""{system_instruction}
 
