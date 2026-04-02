@@ -51,82 +51,96 @@ def check_semantic_cache(user_id, query_embedding):
     """
     Check if a similar question has been asked before.
     Returns cached response dict or None.
+
+    DISABLED: Always returns None to force fresh AI answers.
+    This prevents reusing old/wrong cached answers for similar questions.
     """
-    r = _get_redis()
-    if not r:
-        return None
+    # Semantic caching disabled - always get fresh answers
+    return None
 
-    try:
-        # Get all cache entry keys for this user
-        keys_key = f"sem_cache:{user_id}:keys"
-        entry_ids = r.lrange(keys_key, 0, MAX_CACHE_ENTRIES - 1)
-
-        if not entry_ids:
-            return None
-
-        best_match = None
-        best_similarity = 0
-
-        for entry_id in entry_ids:
-            entry_key = f"sem_cache:{user_id}:{entry_id}"
-            cached_embedding_str = r.hget(entry_key, "embedding")
-
-            if not cached_embedding_str:
-                continue
-
-            cached_embedding = json.loads(cached_embedding_str)
-            similarity = cosine_similarity(query_embedding, cached_embedding)
-
-            if similarity > best_similarity:
-                best_similarity = similarity
-                best_match = entry_key
-
-        if best_similarity >= SIMILARITY_THRESHOLD and best_match:
-            # Cache hit!
-            cached = r.hgetall(best_match)
-            if cached and cached.get("response"):
-                return {
-                    "response": cached["response"],
-                    "sources": json.loads(cached.get("sources", "[]")),
-                    "cached_question": cached.get("question", ""),
-                    "similarity": round(best_similarity, 4),
-                    "cache_hit": True
-                }
-
-        return None
-
-    except Exception as e:
-        print(f"Semantic cache check error: {e}")
-        return None
+    # Original implementation below (disabled):
+    # r = _get_redis()
+    # if not r:
+    #     return None
+    #
+    # try:
+    #     # Get all cache entry keys for this user
+    #     keys_key = f"sem_cache:{user_id}:keys"
+    #     entry_ids = r.lrange(keys_key, 0, MAX_CACHE_ENTRIES - 1)
+    #
+    #     if not entry_ids:
+    #         return None
+    #
+    #     best_match = None
+    #     best_similarity = 0
+    #
+    #     for entry_id in entry_ids:
+    #         entry_key = f"sem_cache:{user_id}:{entry_id}"
+    #         cached_embedding_str = r.hget(entry_key, "embedding")
+    #
+    #         if not cached_embedding_str:
+    #             continue
+    #
+    #         cached_embedding = json.loads(cached_embedding_str)
+    #         similarity = cosine_similarity(query_embedding, cached_embedding)
+    #
+    #         if similarity > best_similarity:
+    #             best_similarity = similarity
+    #             best_match = entry_key
+    #
+    #     if best_similarity >= SIMILARITY_THRESHOLD and best_match:
+    #         # Cache hit!
+    #         cached = r.hgetall(best_match)
+    #         if cached and cached.get("response"):
+    #             return {
+    #                 "response": cached["response"],
+    #                 "sources": json.loads(cached.get("sources", "[]")),
+    #                 "cached_question": cached.get("question", ""),
+    #                 "similarity": round(best_similarity, 4),
+    #                 "cache_hit": True
+    #             }
+    #
+    #     return None
+    #
+    # except Exception as e:
+    #     print(f"Semantic cache check error: {e}")
+    #     return None
 
 
 def store_semantic_cache(user_id, question, query_embedding, response, sources):
     """
     Store a Q&A pair in the semantic cache.
+
+    DISABLED: Does nothing since check_semantic_cache() is disabled.
+    No point storing answers that will never be retrieved.
     """
-    r = _get_redis()
-    if not r:
-        return
+    # Semantic caching disabled - don't store anything
+    return
 
-    try:
-        entry_id = hashlib.md5(f"{question}:{time.time()}".encode()).hexdigest()[:12]
-        entry_key = f"sem_cache:{user_id}:{entry_id}"
-        keys_key = f"sem_cache:{user_id}:keys"
-
-        # Store the entry
-        r.hset(entry_key, mapping={
-            "question": question,
-            "embedding": json.dumps(query_embedding),
-            "response": response,
-            "sources": json.dumps(sources or []),
-            "timestamp": str(time.time())
-        })
-        r.expire(entry_key, CACHE_TTL)
-
-        # Add to the keys list (most recent first)
-        r.lpush(keys_key, entry_id)
-        r.ltrim(keys_key, 0, MAX_CACHE_ENTRIES - 1)  # Keep only last N
-        r.expire(keys_key, CACHE_TTL)
-
-    except Exception as e:
-        print(f"Semantic cache store error: {e}")
+    # Original implementation below (disabled):
+    # r = _get_redis()
+    # if not r:
+    #     return
+    #
+    # try:
+    #     entry_id = hashlib.md5(f"{question}:{time.time()}".encode()).hexdigest()[:12]
+    #     entry_key = f"sem_cache:{user_id}:{entry_id}"
+    #     keys_key = f"sem_cache:{user_id}:keys"
+    #
+    #     # Store the entry
+    #     r.hset(entry_key, mapping={
+    #         "question": question,
+    #         "embedding": json.dumps(query_embedding),
+    #         "response": response,
+    #         "sources": json.dumps(sources or []),
+    #         "timestamp": str(time.time())
+    #     })
+    #     r.expire(entry_key, CACHE_TTL)
+    #
+    #     # Add to the keys list (most recent first)
+    #     r.lpush(keys_key, entry_id)
+    #     r.ltrim(keys_key, 0, MAX_CACHE_ENTRIES - 1)  # Keep only last N
+    #     r.expire(keys_key, CACHE_TTL)
+    #
+    # except Exception as e:
+    #     print(f"Semantic cache store error: {e}")
