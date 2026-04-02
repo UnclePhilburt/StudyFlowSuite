@@ -267,6 +267,8 @@ def search_notes_vector(query_embedding: list, user_id: str, university: str = N
 
     try:
         # Call the PostgreSQL function
+        debug_log(f"🔍 VECTOR SEARCH PARAMS: user_id={user_id}, university={university}, course={course_code}, threshold={match_threshold}, count={match_count}")
+
         response = supabase.rpc("search_notes_with_vector", {
             "query_embedding": query_embedding,
             "search_user_id": user_id,
@@ -277,6 +279,13 @@ def search_notes_vector(query_embedding: list, user_id: str, university: str = N
         }).execute()
 
         debug_log(f"[+] Vector search found {len(response.data)} results")
+
+        # DEBUG: Show first few results with similarity scores
+        if response.data:
+            for i, result in enumerate(response.data[:3]):
+                debug_log(f"  Result #{i+1}: similarity={result.get('similarity', 'N/A')}, note_id={result.get('note_id')}, content_preview={str(result.get('chunk_text', ''))[:80]}...")
+        else:
+            debug_log(f"  ⚠️ Database returned empty array - no matches above threshold {match_threshold}")
 
         # Cache results for 10 minutes
         if r and response.data:
