@@ -11832,32 +11832,24 @@ def force_reembed_all():
         return jsonify({"error": "Unauthorized"}), 403
 
     try:
-        # Step 1: Count total chunks with non-null embeddings
-        embedded_result = supabase.table("note_chunks").select("id", count="exact").not_.is_("embedding", "null").execute()
-        chunks_to_nullify = embedded_result.count
+        # Step 1: Count total chunks
+        total_result = supabase.table("note_chunks").select("id", count="exact").execute()
+        total_chunks = total_result.count
 
-        debug_log(f"[FORCE REEMBED] Chunks with embeddings to nullify: {chunks_to_nullify}")
+        debug_log(f"[FORCE REEMBED] Total chunks: {total_chunks}")
 
-        if chunks_to_nullify == 0:
-            debug_log(f"[FORCE REEMBED] No embeddings to nullify, starting re-embed")
-            from StudyFlow.backend.tasks import reembed_all_chunks
-            reembed_all_chunks.delay()
-            return jsonify({
-                "status": "Re-embedding started",
-                "total_chunks": chunks_to_nullify,
-                "message": "No embeddings to nullify. Re-embedding task queued."
-            }), 200
-
-        # Step 2: Nullify embeddings in batches of 1000
-        batch_size = 1000
+        # Step 2: Nullify embeddings in batches of 500 (using simple pagination)
+        batch_size = 500
         nullified_count = 0
 
         debug_log(f"[FORCE REEMBED] Nullifying embeddings in batches of {batch_size}...")
 
-        while True:
-            # Get batch of chunk IDs with embeddings
-            batch_result = supabase.table("note_chunks").select("id").not_.is_("embedding", "null").limit(batch_size).execute()
-            chunk_ids = [c["id"] for c in batch_result.data]
+        # Process in batches using offset
+        offset = 0
+        while offset < total_chunks:
+            # Get batch of chunk IDs
+            batch_result = supabase.table("note_chunks").select("id").range(offset, offset + batch_size - 1).execute()
+            chunk_ids = [c["id"] for c in (batch_result.data or [])]
 
             if not chunk_ids:
                 break
@@ -11866,7 +11858,9 @@ def force_reembed_all():
             supabase.table("note_chunks").update({"embedding": None}).in_("id", chunk_ids).execute()
             nullified_count += len(chunk_ids)
 
-            debug_log(f"[FORCE REEMBED] Nullified {nullified_count}/{chunks_to_nullify} embeddings...")
+            debug_log(f"[FORCE REEMBED] Nullified {nullified_count}/{total_chunks} embeddings...")
+
+            offset += batch_size
 
         debug_log(f"[FORCE REEMBED] All embeddings nullified ({nullified_count} total)")
 
