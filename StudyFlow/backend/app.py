@@ -4908,6 +4908,14 @@ def chat_with_notes():
 
         debug_log(f"Found {len(search_results) if search_results else 0} relevant chunks")
 
+        # DEBUG: Show detailed search results
+        if search_results:
+            debug_log(f"🔍 SEARCH RESULTS DEBUG:")
+            for i, r in enumerate(search_results[:5]):
+                debug_log(f"  Result #{i+1}: similarity={r.get('similarity', 0):.3f}, note_id={r.get('note_id')}, content_preview={str(r.get('chunk_text', r.get('content_summary', '')))[:100]}...")
+        else:
+            debug_log(f"⚠️ NO SEARCH RESULTS FOUND - will fall back to general knowledge")
+
         # Prioritize results from same university (MSU Lane)
         if user_university and search_results:
             same_uni = [r for r in search_results if r.get('university') == user_university]

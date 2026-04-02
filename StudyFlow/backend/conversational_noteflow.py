@@ -240,6 +240,20 @@ def generate_conversational_response(
 
         context = "\n\n".join(context_chunks)
 
+        # DEBUG: Show context building details
+        from StudyFlow.logging_utils import debug_log
+        debug_log(f"📝 CONTEXT DEBUG:")
+        debug_log(f"  - Total search results: {len(search_results)}")
+        debug_log(f"  - Context chunks built: {len(context_chunks)}")
+        debug_log(f"  - Context length: {len(context)} chars")
+        debug_log(f"  - Contributors: {contributors}")
+        debug_log(f"  - Wikipedia articles: {wikipedia_articles}")
+        debug_log(f"  - Student notes (no username): {student_note_count}")
+        if context:
+            debug_log(f"  - Context preview: {context[:200]}...")
+        else:
+            debug_log(f"  - ⚠️ CONTEXT IS EMPTY - will use fallback prompt")
+
         # Build conversation history for Gemini
         conversation_context = ""
         for msg in conversation_history[-6:]:  # Last 6 messages
@@ -263,6 +277,7 @@ Your job:
 Be thorough and educational - give students the full picture with 3-5 paragraphs of detailed explanation. Don't hold back information."""
 
         if context:
+            debug_log(f"✅ Using CONTEXT-BASED prompt (has {len(context)} chars of context)")
             prompt = f"""{system_instruction}
 
 Previous conversation:
@@ -275,6 +290,7 @@ Context from notes:
 
 Answer the student's question above. Use the relevant parts of the context that directly relate to what they asked. If the context doesn't match their question, acknowledge that and answer what you can."""
         else:
+            debug_log(f"❌ Using NO-CONTEXT fallback prompt")
             prompt = f"""{system_instruction}
 
 Previous conversation:
