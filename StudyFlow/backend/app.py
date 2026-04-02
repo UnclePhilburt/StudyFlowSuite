@@ -11822,7 +11822,7 @@ def force_reembed_all():
     ADMIN: Force re-embedding of ALL note chunks (not just NULL ones).
 
     This endpoint:
-    1. Nullifies all existing embeddings (clears old OpenAI embeddings)
+    1. Nullifies all existing embeddings in batches (clears old OpenAI embeddings)
     2. Triggers batch re-embedding with Gemini
 
     Use this to fix embedding model mismatch issues.
@@ -11832,19 +11832,43 @@ def force_reembed_all():
         return jsonify({"error": "Unauthorized"}), 403
 
     try:
-        # Step 1: Count total chunks
-        total_result = supabase.table("note_chunks").select("id", count="exact").execute()
-        total_chunks = total_result.count
+        # Step 1: Count total chunks with non-null embeddings
+        embedded_result = supabase.table("note_chunks").select("id", count="exact").not_.is_("embedding", "null").execute()
+        chunks_to_nullify = embedded_result.count
 
-        debug_log(f"[FORCE REEMBED] Total chunks: {total_chunks}")
+        debug_log(f"[FORCE REEMBED] Chunks with embeddings to nullify: {chunks_to_nullify}")
 
-        # Step 2: Set all embeddings to NULL
-        debug_log(f"[FORCE REEMBED] Nullifying all embeddings...")
-        update_result = supabase.table("note_chunks").update(
-            {"embedding": None}
-        ).neq("id", "00000000-0000-0000-0000-000000000000").execute()  # Dummy condition to update all
+        if chunks_to_nullify == 0:
+            debug_log(f"[FORCE REEMBED] No embeddings to nullify, starting re-embed")
+            from StudyFlow.backend.tasks import reembed_all_chunks
+            reembed_all_chunks.delay()
+            return jsonify({
+                "status": "Re-embedding started",
+                "total_chunks": chunks_to_nullify,
+                "message": "No embeddings to nullify. Re-embedding task queued."
+            }), 200
 
-        debug_log(f"[FORCE REEMBED] Embeddings nullified")
+        # Step 2: Nullify embeddings in batches of 1000
+        batch_size = 1000
+        nullified_count = 0
+
+        debug_log(f"[FORCE REEMBED] Nullifying embeddings in batches of {batch_size}...")
+
+        while True:
+            # Get batch of chunk IDs with embeddings
+            batch_result = supabase.table("note_chunks").select("id").not_.is_("embedding", "null").limit(batch_size).execute()
+            chunk_ids = [c["id"] for c in batch_result.data]
+
+            if not chunk_ids:
+                break
+
+            # Nullify this batch
+            supabase.table("note_chunks").update({"embedding": None}).in_("id", chunk_ids).execute()
+            nullified_count += len(chunk_ids)
+
+            debug_log(f"[FORCE REEMBED] Nullified {nullified_count}/{chunks_to_nullify} embeddings...")
+
+        debug_log(f"[FORCE REEMBED] All embeddings nullified ({nullified_count} total)")
 
         # Step 3: Trigger re-embedding task
         from StudyFlow.backend.tasks import reembed_all_chunks
@@ -11854,7 +11878,7 @@ def force_reembed_all():
 
         return jsonify({
             "status": "Force re-embedding started",
-            "total_chunks": total_chunks,
+            "nullified_chunks": nullified_count,
             "message": "All embeddings nullified. Re-embedding task queued."
         }), 200
 
