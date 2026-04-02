@@ -11816,6 +11816,55 @@ def trigger_reembed():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/admin/force-reembed", methods=["POST"])
+def force_reembed_all():
+    """
+    ADMIN: Force re-embedding of ALL note chunks (not just NULL ones).
+
+    This endpoint:
+    1. Nullifies all existing embeddings (clears old OpenAI embeddings)
+    2. Triggers batch re-embedding with Gemini
+
+    Use this to fix embedding model mismatch issues.
+    """
+    admin_key = request.args.get("key", "")
+    if admin_key != os.getenv("ADMIN_KEY", "change_me_in_production"):
+        return jsonify({"error": "Unauthorized"}), 403
+
+    try:
+        # Step 1: Count total chunks
+        total_result = supabase.table("note_chunks").select("id", count="exact").execute()
+        total_chunks = total_result.count
+
+        debug_log(f"[FORCE REEMBED] Total chunks: {total_chunks}")
+
+        # Step 2: Set all embeddings to NULL
+        debug_log(f"[FORCE REEMBED] Nullifying all embeddings...")
+        update_result = supabase.table("note_chunks").update(
+            {"embedding": None}
+        ).neq("id", "00000000-0000-0000-0000-000000000000").execute()  # Dummy condition to update all
+
+        debug_log(f"[FORCE REEMBED] Embeddings nullified")
+
+        # Step 3: Trigger re-embedding task
+        from StudyFlow.backend.tasks import reembed_all_chunks
+        reembed_all_chunks.delay()
+
+        debug_log(f"[FORCE REEMBED] Re-embedding task started")
+
+        return jsonify({
+            "status": "Force re-embedding started",
+            "total_chunks": total_chunks,
+            "message": "All embeddings nullified. Re-embedding task queued."
+        }), 200
+
+    except Exception as e:
+        debug_log(f"[FORCE REEMBED] ERROR: {e}")
+        import traceback
+        debug_log(traceback.format_exc())
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/admin/reembed-status", methods=["GET"])
 def reembed_status():
     """ADMIN: Check re-embedding progress."""
