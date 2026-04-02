@@ -4896,7 +4896,7 @@ def chat_with_notes():
                 user_id=request.user_id,
                 university=None,  # Not filtering, just using for prioritization
                 course_code=None,
-                match_threshold=0.5,  # Higher threshold for more relevant results
+                match_threshold=0.65,  # Very high threshold - only highly relevant results
                 match_count=15
             )
             # Cache RAG results for 2 minutes
