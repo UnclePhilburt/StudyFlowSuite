@@ -4991,10 +4991,10 @@ def chat_with_notes():
                 debug_log(f"Low student notes ({len(quality_student)}), backfilling with {min(len(wiki_results), 3)} Wikipedia chunks")
 
         # Add search result metadata and enrich with missing fields
-        # FILTER: Only show sources with similarity >= 0.75 to avoid irrelevant citations
+        # FILTER: Only show sources with similarity >= search threshold to avoid irrelevant citations
         sources = []
         seen_note_ids = set()
-        DISPLAY_THRESHOLD = 0.75  # Only show high-quality sources to user
+        DISPLAY_THRESHOLD = 0.70  # Match search threshold - show all sources AI used
         if search_results:
             for result in search_results:  # Deduplicate by note_id
                 if result['note_id'] in seen_note_ids:
