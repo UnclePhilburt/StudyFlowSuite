@@ -290,15 +290,14 @@ Context from notes:
 
 Answer the student's question above. Use the relevant parts of the context that directly relate to what they asked. If the context doesn't match their question, acknowledge that and answer what you can."""
         else:
-            debug_log(f"❌ Using NO-CONTEXT fallback prompt")
-            prompt = f"""{system_instruction}
-
-Previous conversation:
-{conversation_context}
-
-Student Question: {question}
-
-No relevant notes found in the database. Briefly let them know you don't have information about this specific topic in their uploaded notes."""
+            debug_log(f"❌ NO SOURCES FOUND - Returning hardcoded message (no AI call)")
+            # Return hardcoded message instead of calling AI with general knowledge
+            return {
+                "response": "I couldn't find any relevant notes or sources in the Nexus to answer this question. Try uploading notes on this topic or asking about content that's already been uploaded!",
+                "model_used": "no_sources",
+                "response_time_ms": 0,
+                "followup_suggestions": []
+            }
 
         debug_log(f"[*] Generating conversational response with Gemini 3.1 Flash-Lite ({len(search_results)} context chunks)")
 
