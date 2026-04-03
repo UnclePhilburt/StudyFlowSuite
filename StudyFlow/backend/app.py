@@ -12116,6 +12116,108 @@ def admin_import_wikipedia():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/search", methods=["GET"])
+@supabase_auth_required
+def global_search():
+    """Global search across notes, conversations, groups, and calendar events."""
+    try:
+        q = request.args.get("q", "").strip()
+        if not q or len(q) < 2:
+            return jsonify({"results": {}}), 200
+
+        user_id = request.user_id
+        query = f"%{q}%"
+        results = {}
+
+        # Search notes (user's own)
+        try:
+            notes_resp = supabase.table("notes").select(
+                "id, original_filename, university, course_code, uploaded_at"
+            ).eq("user_id", user_id).ilike("original_filename", query).limit(5).execute()
+            if notes_resp.data:
+                results["notes"] = [{
+                    "id": n["id"],
+                    "title": n.get("original_filename", ""),
+                    "subtitle": f"{n.get('course_code', '')} {n.get('university', '')}".strip(),
+                    "url": f"notes.html",
+                    "type": "note"
+                } for n in notes_resp.data]
+        except: pass
+
+        # Search conversations
+        try:
+            convos_resp = supabase.table("conversations").select(
+                "id, title, updated_at"
+            ).eq("user_id", user_id).eq("source", "chat").is_("deleted_at", "null").ilike("title", query).limit(5).execute()
+            if convos_resp.data:
+                results["chats"] = [{
+                    "id": c["id"],
+                    "title": c.get("title", "New Chat"),
+                    "subtitle": c.get("updated_at", "")[:10] if c.get("updated_at") else "",
+                    "url": f"chat.html?c={c['id']}",
+                    "type": "chat"
+                } for c in convos_resp.data]
+        except: pass
+
+        # Search study groups
+        try:
+            # Get user's group IDs first
+            memberships = supabase.table("study_group_members").select("group_id").eq("user_id", user_id).execute()
+            group_ids = [m["group_id"] for m in (memberships.data or [])]
+            if group_ids:
+                groups_resp = supabase.table("study_groups").select(
+                    "id, name, description"
+                ).in_("id", group_ids).ilike("name", query).limit(5).execute()
+                if groups_resp.data:
+                    results["groups"] = [{
+                        "id": g["id"],
+                        "title": g.get("name", ""),
+                        "subtitle": g.get("description", "")[:50] if g.get("description") else "",
+                        "url": f"study-groups.html?id={g['id']}",
+                        "type": "group"
+                    } for g in groups_resp.data]
+        except: pass
+
+        # Search calendar events
+        try:
+            events_resp = supabase.table("calendar_events").select(
+                "id, title, due_date, event_type"
+            ).eq("user_id", user_id).ilike("title", query).limit(5).execute()
+            if events_resp.data:
+                results["events"] = [{
+                    "id": e["id"],
+                    "title": e.get("title", ""),
+                    "subtitle": e.get("due_date", "")[:10] if e.get("due_date") else "",
+                    "url": "calendar.html",
+                    "type": "event"
+                } for e in events_resp.data]
+        except: pass
+
+        # Search Nexus (public notes, excluding Wikipedia)
+        try:
+            nexus_resp = supabase.table("notes").select(
+                "id, original_filename, university, course_code"
+            ).eq("is_public", True).neq("university", "Wikipedia").ilike("original_filename", query).limit(5).execute()
+            if nexus_resp.data:
+                # Filter out user's own notes (already in notes results)
+                nexus_notes = [n for n in nexus_resp.data if n.get("id") not in [r["id"] for r in results.get("notes", [])]]
+                if nexus_notes:
+                    results["nexus"] = [{
+                        "id": n["id"],
+                        "title": n.get("original_filename", ""),
+                        "subtitle": f"{n.get('university', '')} - {n.get('course_code', '')}".strip(' -'),
+                        "url": f"note-viewer.html?id={n['id']}",
+                        "type": "nexus"
+                    } for n in nexus_notes[:5]]
+        except: pass
+
+        return jsonify({"results": results, "query": q}), 200
+
+    except Exception as e:
+        debug_log(f"Search error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     try:
         port = int(os.environ.get("PORT", 5000))
