@@ -5569,6 +5569,16 @@ def save_canvas_layout(conversation_id):
         supabase.table("conversations").update({
             "canvas_layout": data
         }).eq("id", conversation_id).eq("user_id", request.user_id).execute()
+
+        # Invalidate Redis cache so next preload gets fresh data
+        if redis_cache:
+            try:
+                cache_key = f"canvas:{request.user_id}"
+                redis_cache.delete(cache_key)
+                debug_log(f"Invalidated canvas cache for user {request.user_id}")
+            except Exception as cache_err:
+                debug_log(f"Cache invalidation warning: {cache_err}")
+
         return jsonify({"success": True}), 200
     except Exception as e:
         debug_log(f"Save layout error: {e}")
