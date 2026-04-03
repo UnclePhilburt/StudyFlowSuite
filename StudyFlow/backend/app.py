@@ -4609,10 +4609,21 @@ def view_shared_as_images(token):
         if not note or not note.get("file_path"):
             return jsonify({"error": "File not found"}), 404
 
-        # All files are converted to PDF at upload time, so we can always render as images
-        # The file_type column shows the original format, but the stored file is always PDF
+        # Download the file
         file_data = supabase.storage.from_("note-files").download(note["file_path"])
-        doc = fitz.open(stream=file_data, filetype="pdf")
+
+        # Try to open as PDF first (most files are already PDF)
+        # If that fails, convert to PDF on-the-fly
+        try:
+            doc = fitz.open(stream=file_data, filetype="pdf")
+        except:
+            # File isn't a PDF - convert it now
+            from StudyFlow.backend.pdf_flatten import convert_to_pdf
+            original_filename = note.get("file_path", "file.txt")
+            pdf_data, _ = convert_to_pdf(file_data, original_filename)
+            if not pdf_data:
+                return jsonify({"error": "Could not convert file to PDF"}), 400
+            doc = fitz.open(stream=pdf_data, filetype="pdf")
 
         images = []
         for page_num in range(len(doc)):
