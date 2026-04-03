@@ -4609,10 +4609,8 @@ def view_shared_as_images(token):
         if not note or not note.get("file_path"):
             return jsonify({"error": "File not found"}), 404
 
-        file_type = note.get("file_type", "").lower()
-        if file_type != "pdf":
-            return jsonify({"error": "Only PDFs can be viewed as images"}), 400
-
+        # All files are converted to PDF at upload time, so we can always render as images
+        # The file_type column shows the original format, but the stored file is always PDF
         file_data = supabase.storage.from_("note-files").download(note["file_path"])
         doc = fitz.open(stream=file_data, filetype="pdf")
 
