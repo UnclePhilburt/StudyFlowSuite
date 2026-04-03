@@ -4501,7 +4501,7 @@ def get_shared_note(token):
     """Public endpoint - get a shared note by token. No auth required."""
     try:
         # Look up the share link
-        result = supabase.table("shared_notes").select("*, notes(id, original_filename, filename, file_path, file_type, page_count, uploaded_at, user_id, university, course_code, professor, semester)").eq("share_token", token).execute()
+        result = supabase.table("shared_notes").select("*, notes(id, original_filename, file_path, file_type, page_count, uploaded_at, user_id, university, course_code, professor, semester)").eq("share_token", token).execute()
 
         if not result.data:
             return jsonify({"error": "Share link not found"}), 404
@@ -4528,7 +4528,7 @@ def get_shared_note(token):
 
         return jsonify({
             "note_id": note["id"],
-            "filename": note.get("original_filename") or note.get("filename"),
+            "filename": note.get("original_filename"),
             "file_type": note.get("file_type"),
             "page_count": note.get("page_count"),
             "uploaded_at": note.get("uploaded_at"),
@@ -4637,7 +4637,7 @@ def view_shared_as_images(token):
 def list_user_shared_notes():
     """Get all share links created by the current user."""
     try:
-        result = supabase.table("shared_notes").select("*, notes(id, original_filename, filename)").eq("user_id", request.user_id).execute()
+        result = supabase.table("shared_notes").select("*, notes(id, original_filename)").eq("user_id", request.user_id).execute()
         return jsonify(result.data or []), 200
     except Exception as e:
         debug_log(f"List shared notes error: {e}\n{traceback.format_exc()}")
