@@ -1074,6 +1074,138 @@ def create_portal_session():
         app.logger.error(f"❌ Create portal session error: {e}\n{traceback.format_exc()}")
         return jsonify({'error': 'Failed to create portal session'}), 500
 
+@app.route("/api/mobile-dashboard", methods=["GET"])
+@supabase_auth_required
+def mobile_dashboard():
+    """Single endpoint for mobile dashboard -- returns everything in one call."""
+    try:
+        user_id = request.user_id
+        cache_key = f"mobile_dash:{user_id}"
+
+        if redis_cache:
+            try:
+                cached = redis_cache.get(cache_key)
+                if cached: return jsonify(json.loads(cached)), 200
+            except: pass
+
+        # Parallel-ish fetches from Supabase
+        profile_resp = supabase.table("user_profiles").select(
+            "username, university, subscription_tier, subscription_status"
+        ).eq("id", user_id).single().execute()
+
+        notes_resp = supabase.table("notes").select("id").eq("user_id", user_id).execute()
+
+        convos_resp = supabase.table("conversations").select(
+            "id, title, updated_at"
+        ).eq("user_id", user_id).eq("source", "chat").is_("deleted_at", "null").order("updated_at", desc=True).limit(5).execute()
+
+        groups_resp = supabase.table("study_group_members").select(
+            "group_id"
+        ).eq("user_id", user_id).execute()
+
+        profile = profile_resp.data or {}
+        result = {
+            "username": profile.get("username") or "Anonymous",
+            "university": profile.get("university"),
+            "tier": profile.get("subscription_tier", "free"),
+            "notes_count": len(notes_resp.data or []),
+            "chats_count": len(convos_resp.data or []),
+            "groups_count": len(groups_resp.data or []),
+            "recent_chats": convos_resp.data or []
+        }
+
+        if redis_cache:
+            try: redis_cache.setex(cache_key, 120, json.dumps(result))
+            except: pass
+
+        return jsonify(result), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/notes/page-init", methods=["GET"])
+@supabase_auth_required
+def notes_page_init():
+    """Single endpoint for notes page -- returns profile, standing, favorites, folders, notes, and usage stats."""
+    try:
+        user_id = request.user_id
+        cache_key = f"notes_init:{user_id}"
+
+        if redis_cache:
+            try:
+                cached = redis_cache.get(cache_key)
+                if cached: return jsonify(json.loads(cached)), 200
+            except: pass
+
+        # Profile
+        profile_resp = supabase.table("user_profiles").select(
+            "username, university, subscription_tier, subscription_status, good_standing, permanent_bad_standing, last_verified_upload_date"
+        ).eq("id", user_id).single().execute()
+        profile = profile_resp.data or {}
+
+        # Folders
+        folders_resp = supabase.table("folders").select("*").eq("user_id", user_id).order("created_at", desc=False).execute()
+
+        # Notes
+        from StudyFlow.backend.supabase_client import get_user_notes
+        notes = get_user_notes(user_id)
+        formatted_notes = []
+        for note in notes:
+            formatted_notes.append({
+                "id": note['id'],
+                "filename": note.get('original_filename', ''),
+                "file_type": note.get('file_type'),
+                "file_size": note.get('file_size'),
+                "pages": note.get('page_count'),
+                "uploaded_at": note.get('uploaded_at'),
+                "processed": note.get('processed'),
+                "is_public": note.get('is_public'),
+                "university": note.get('university'),
+                "course_code": note.get('course_code'),
+                "professor": note.get('professor'),
+                "folder_id": note.get('folder_id')
+            })
+
+        # Favorites
+        favs_resp = supabase.table("note_favorites").select("note_id, created_at").eq("user_id", user_id).order("created_at", desc=True).execute()
+
+        # Usage stats
+        usage_stats = {"totalUsage": 0, "weeklyUsage": 0, "activeNotes": 0, "noteUsage": {}}
+        try:
+            note_ids = [n['id'] for n in notes]
+            if note_ids:
+                logs_resp = supabase.table("ai_response_logs").select("sources_used").execute()
+                note_usage = {}
+                for log in (logs_resp.data or []):
+                    sources = log.get('sources_used') or []
+                    for src in sources:
+                        nid = src.get('note_id') if isinstance(src, dict) else src
+                        if nid in note_ids:
+                            note_usage[nid] = note_usage.get(nid, 0) + 1
+                usage_stats["totalUsage"] = sum(note_usage.values())
+                usage_stats["activeNotes"] = len(note_usage)
+                usage_stats["noteUsage"] = note_usage
+        except:
+            pass
+
+        result = {
+            "profile": profile,
+            "folders": folders_resp.data or [],
+            "notes": formatted_notes,
+            "favorites": favs_resp.data or [],
+            "usage_stats": usage_stats
+        }
+
+        if redis_cache:
+            try: redis_cache.setex(cache_key, 120, json.dumps(result))
+            except: pass
+
+        return jsonify(result), 200
+    except Exception as e:
+        debug_log(f"Notes page init error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/warmup", methods=["POST"])
 @supabase_auth_required
 def user_warmup():
