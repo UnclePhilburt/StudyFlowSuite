@@ -4255,6 +4255,172 @@ def toggle_note_visibility(note_id):
         return jsonify({"error": str(e)}), 500
 
 
+## ====== ASSISTANT ======
+
+@app.route("/api/assistant/ask", methods=["POST"])
+@supabase_auth_required
+def assistant_ask():
+    """Lightweight AI assistant endpoint. Sends a message with page context."""
+    try:
+        data = request.get_json()
+        message = data.get("message", "")
+        page_context = data.get("page", "unknown")
+        action = data.get("action", "ask")  # ask, summarize, quiz, tips
+
+        if not message:
+            return jsonify({"error": "Missing message"}), 400
+
+        # Build a context-aware system instruction
+        system_context = f"You are Flo, a friendly study assistant on the StudyFlow platform. The user is currently on the {page_context} page. "
+
+        if action == "summarize":
+            system_context += "Provide a brief, helpful summary. Keep it under 3 sentences."
+        elif action == "quiz":
+            system_context += "Generate a quick 3-question quiz based on the topic. Format each as a question with 4 multiple choice options (A-D) and the correct answer."
+        elif action == "tips":
+            system_context += "Give 2-3 short, practical tips relevant to what the user is doing. Be specific to StudyFlow features."
+        else:
+            system_context += "Be concise and helpful. Keep responses under 3 sentences unless more detail is needed. You can suggest StudyFlow features that might help."
+
+        # Use the existing chat infrastructure
+        from StudyFlow.backend.supabase_client import search_notes_vector, supabase
+        from StudyFlow.backend.embedding_client import generate_embedding
+        import time
+
+        start_time = time.time()
+
+        # Generate embedding for search
+        query_embedding = generate_embedding(message)
+        search_results = []
+        if query_embedding:
+            search_results = search_notes_vector(
+                query_embedding=query_embedding,
+                user_id=request.user_id,
+                limit=3,
+                scope="all"
+            ) or []
+
+        # Build context from search results
+        context_text = ""
+        sources = []
+        for r in search_results[:3]:
+            if r.get("content"):
+                context_text += f"\n---\nFrom {r.get('original_filename', 'a note')}:\n{r['content'][:500]}\n"
+                sources.append({
+                    "filename": r.get("original_filename", "Unknown"),
+                    "similarity": round(r.get("similarity", 0), 2)
+                })
+
+        # Call AI
+        from openai import OpenAI
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+        messages = [{"role": "system", "content": system_context}]
+        if context_text:
+            messages.append({"role": "system", "content": f"Relevant notes from the user's library:\n{context_text}"})
+        messages.append({"role": "user", "content": message})
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=messages,
+            max_tokens=300,
+            temperature=0.7
+        )
+
+        ai_response = response.choices[0].message.content
+        elapsed = int((time.time() - start_time) * 1000)
+
+        # Generate follow-up button suggestions
+        followups = []
+        if action == "ask" and sources:
+            followups.append({"label": "Tell me more", "action": "ask", "message": f"Explain more about: {message}"})
+            followups.append({"label": "Quiz me on this", "action": "quiz", "message": message})
+        elif action == "quiz":
+            followups.append({"label": "Another quiz", "action": "quiz", "message": message})
+        elif action == "tips":
+            followups.append({"label": "More tips", "action": "tips", "message": f"More tips for {page_context}"})
+
+        return jsonify({
+            "response": ai_response,
+            "sources": sources,
+            "followups": followups,
+            "response_time_ms": elapsed
+        }), 200
+
+    except Exception as e:
+        debug_log(f"Assistant ask error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": "Assistant is temporarily unavailable. Try again in a moment."}), 500
+
+
+@app.route("/api/assistant/digest", methods=["GET"])
+@supabase_auth_required
+def assistant_digest():
+    """Get a daily digest for the assistant: events today, notification count, note stats."""
+    try:
+        user_id = request.user_id
+
+        # Today's events
+        today_events = []
+        try:
+            from datetime import datetime
+            today = datetime.utcnow().strftime('%Y-%m-%d')
+            events_res = supabase.table("calendar_events").select("title, event_date, event_time").eq("user_id", user_id).gte("event_date", today).lte("event_date", today).execute()
+            today_events = events_res.data or []
+        except:
+            pass
+
+        # Unread notifications
+        unread_count = 0
+        try:
+            notif_res = supabase.table("notifications").select("id", count="exact").eq("user_id", user_id).eq("read", False).execute()
+            unread_count = notif_res.count or 0
+        except:
+            pass
+
+        # Note stats
+        total_notes = 0
+        shared_notes = 0
+        try:
+            notes_res = supabase.table("notes").select("id", count="exact").eq("user_id", user_id).execute()
+            total_notes = notes_res.count or 0
+            shared_res = supabase.table("shared_notes").select("id", count="exact").eq("user_id", user_id).execute()
+            shared_notes = shared_res.count or 0
+        except:
+            pass
+
+        # Build digest message
+        parts = []
+        hour = datetime.utcnow().hour
+        if hour < 12:
+            greeting = "Good morning"
+        elif hour < 17:
+            greeting = "Good afternoon"
+        else:
+            greeting = "Good evening"
+
+        if today_events:
+            parts.append(f"You have {len(today_events)} event{'s' if len(today_events) != 1 else ''} today")
+        if unread_count > 0:
+            parts.append(f"{unread_count} unread notification{'s' if unread_count != 1 else ''}")
+        if total_notes > 0:
+            parts.append(f"{total_notes} notes in your library")
+
+        summary = f"{greeting}! " + (". ".join(parts) + "." if parts else "Everything looks good!")
+
+        return jsonify({
+            "greeting": greeting,
+            "summary": summary,
+            "events_today": today_events,
+            "unread_notifications": unread_count,
+            "total_notes": total_notes,
+            "shared_notes": shared_notes
+        }), 200
+
+    except Exception as e:
+        debug_log(f"Assistant digest error: {e}\n{traceback.format_exc()}")
+        return jsonify({"summary": "Hi! Ready to help.", "events_today": [], "unread_notifications": 0, "total_notes": 0, "shared_notes": 0}), 200
+
+
 ## ====== NOTE SHARING ======
 
 @app.route("/api/notes/<note_id>/share", methods=["POST"])
