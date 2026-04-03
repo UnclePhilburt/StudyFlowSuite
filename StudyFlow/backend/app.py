@@ -4255,6 +4255,221 @@ def toggle_note_visibility(note_id):
         return jsonify({"error": str(e)}), 500
 
 
+## ====== NOTE SHARING ======
+
+@app.route("/api/notes/<note_id>/share", methods=["POST"])
+@supabase_auth_required
+def create_share_link(note_id):
+    """Create a share link for a note the user owns. Body: { "expires_in": "24h"|"7d"|"30d"|null }"""
+    try:
+        import secrets as _secrets
+
+        # Verify ownership
+        note = supabase.table("notes").select("id, user_id").eq("id", note_id).eq("user_id", request.user_id).execute()
+        if not note.data:
+            return jsonify({"error": "Note not found or not yours"}), 404
+
+        # Check for existing share link
+        existing = supabase.table("shared_notes").select("*").eq("note_id", note_id).eq("user_id", request.user_id).execute()
+        if existing.data:
+            share = existing.data[0]
+            return jsonify({"share_token": share["share_token"], "expires_at": share["expires_at"], "already_existed": True}), 200
+
+        # Parse expiry
+        data = request.get_json() or {}
+        expires_in = data.get("expires_in")
+        expires_at = None
+        if expires_in == "24h":
+            expires_at = (datetime.utcnow() + timedelta(hours=24)).isoformat()
+        elif expires_in == "7d":
+            expires_at = (datetime.utcnow() + timedelta(days=7)).isoformat()
+        elif expires_in == "30d":
+            expires_at = (datetime.utcnow() + timedelta(days=30)).isoformat()
+        # else: no expiry
+
+        token = _secrets.token_urlsafe(16)
+
+        result = supabase.table("shared_notes").insert({
+            "note_id": note_id,
+            "user_id": request.user_id,
+            "share_token": token,
+            "expires_at": expires_at
+        }).execute()
+
+        return jsonify({"share_token": token, "expires_at": expires_at}), 201
+
+    except Exception as e:
+        debug_log(f"Create share link error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/notes/<note_id>/share", methods=["DELETE"])
+@supabase_auth_required
+def revoke_share_link(note_id):
+    """Revoke a share link for a note the user owns."""
+    try:
+        result = supabase.table("shared_notes").delete().eq("note_id", note_id).eq("user_id", request.user_id).execute()
+        return jsonify({"success": True}), 200
+    except Exception as e:
+        debug_log(f"Revoke share link error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/notes/<note_id>/share", methods=["GET"])
+@supabase_auth_required
+def get_share_link(note_id):
+    """Get the share link info for a note the user owns."""
+    try:
+        result = supabase.table("shared_notes").select("*").eq("note_id", note_id).eq("user_id", request.user_id).execute()
+        if not result.data:
+            return jsonify({"shared": False}), 200
+        share = result.data[0]
+        return jsonify({"shared": True, "share_token": share["share_token"], "expires_at": share["expires_at"], "created_at": share["created_at"]}), 200
+    except Exception as e:
+        debug_log(f"Get share link error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/shared/<token>", methods=["GET"])
+def get_shared_note(token):
+    """Public endpoint - get a shared note by token. No auth required."""
+    try:
+        # Look up the share link
+        result = supabase.table("shared_notes").select("*, notes(id, original_filename, filename, file_path, file_type, page_count, uploaded_at, user_id)").eq("share_token", token).execute()
+
+        if not result.data:
+            return jsonify({"error": "Share link not found"}), 404
+
+        share = result.data[0]
+
+        # Check expiry
+        if share.get("expires_at"):
+            expires = datetime.fromisoformat(share["expires_at"].replace("Z", "+00:00"))
+            if datetime.now(expires.tzinfo) > expires:
+                return jsonify({"error": "This share link has expired"}), 410
+
+        note = share.get("notes")
+        if not note:
+            return jsonify({"error": "Note no longer exists"}), 404
+
+        # Get uploader name
+        uploader = supabase.table("user_profiles").select("full_name, email").eq("id", share["user_id"]).execute()
+        uploader_name = "Anonymous"
+        if uploader.data:
+            uploader_name = uploader.data[0].get("full_name") or uploader.data[0].get("email", "").split("@")[0]
+
+        return jsonify({
+            "note_id": note["id"],
+            "filename": note.get("original_filename") or note.get("filename"),
+            "file_type": note.get("file_type"),
+            "page_count": note.get("page_count"),
+            "uploaded_at": note.get("uploaded_at"),
+            "shared_by": uploader_name,
+            "expires_at": share.get("expires_at")
+        }), 200
+
+    except Exception as e:
+        debug_log(f"Get shared note error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/shared/<token>/view-file", methods=["GET"])
+def view_shared_file(token):
+    """Public endpoint - get the actual file for a shared note. No auth required."""
+    try:
+        from flask import redirect
+
+        # Look up the share link
+        result = supabase.table("shared_notes").select("*, notes(id, file_path, original_filename)").eq("share_token", token).execute()
+
+        if not result.data:
+            return jsonify({"error": "Share link not found"}), 404
+
+        share = result.data[0]
+
+        # Check expiry
+        if share.get("expires_at"):
+            expires = datetime.fromisoformat(share["expires_at"].replace("Z", "+00:00"))
+            if datetime.now(expires.tzinfo) > expires:
+                return jsonify({"error": "This share link has expired"}), 410
+
+        note = share.get("notes")
+        if not note or not note.get("file_path"):
+            return jsonify({"error": "File not found"}), 404
+
+        # Generate signed URL
+        signed_url_response = supabase.storage.from_("note-files").create_signed_url(
+            path=note["file_path"],
+            expires_in=3600
+        )
+        file_url = signed_url_response["signedURL"]
+        return redirect(file_url)
+
+    except Exception as e:
+        debug_log(f"View shared file error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/shared/<token>/view-as-images", methods=["GET"])
+def view_shared_as_images(token):
+    """Public endpoint - get shared note pages as images. No auth required."""
+    try:
+        import fitz
+        import base64
+
+        # Look up the share link
+        result = supabase.table("shared_notes").select("*, notes(id, file_path, file_type, page_count)").eq("share_token", token).execute()
+
+        if not result.data:
+            return jsonify({"error": "Share link not found"}), 404
+
+        share = result.data[0]
+
+        # Check expiry
+        if share.get("expires_at"):
+            expires = datetime.fromisoformat(share["expires_at"].replace("Z", "+00:00"))
+            if datetime.now(expires.tzinfo) > expires:
+                return jsonify({"error": "This share link has expired"}), 410
+
+        note = share.get("notes")
+        if not note or not note.get("file_path"):
+            return jsonify({"error": "File not found"}), 404
+
+        file_type = note.get("file_type", "").lower()
+        if file_type != "pdf":
+            return jsonify({"error": "Only PDFs can be viewed as images"}), 400
+
+        file_data = supabase.storage.from_("note-files").download(note["file_path"])
+        doc = fitz.open(stream=file_data, filetype="pdf")
+
+        images = []
+        for page_num in range(len(doc)):
+            page = doc[page_num]
+            mat = fitz.Matrix(2, 2)
+            pix = page.get_pixmap(matrix=mat)
+            img_bytes = pix.tobytes("png")
+            images.append(base64.b64encode(img_bytes).decode("utf-8"))
+
+        doc.close()
+        return jsonify({"images": images, "page_count": len(images)}), 200
+
+    except Exception as e:
+        debug_log(f"View shared as images error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/user/shared-notes", methods=["GET"])
+@supabase_auth_required
+def list_user_shared_notes():
+    """Get all share links created by the current user."""
+    try:
+        result = supabase.table("shared_notes").select("*, notes(id, original_filename, filename)").eq("user_id", request.user_id).execute()
+        return jsonify(result.data or []), 200
+    except Exception as e:
+        debug_log(f"List shared notes error: {e}\n{traceback.format_exc()}")
+        return jsonify([]), 200
+
+
 @app.route("/api/user/send-edu-verification", methods=["POST"])
 @supabase_auth_required
 def send_edu_verification():
