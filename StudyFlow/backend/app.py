@@ -4335,7 +4335,7 @@ def get_shared_note(token):
     """Public endpoint - get a shared note by token. No auth required."""
     try:
         # Look up the share link
-        result = supabase.table("shared_notes").select("*, notes(id, original_filename, filename, file_path, file_type, page_count, uploaded_at, user_id)").eq("share_token", token).execute()
+        result = supabase.table("shared_notes").select("*, notes(id, original_filename, filename, file_path, file_type, page_count, uploaded_at, user_id, university, course_code, professor, semester)").eq("share_token", token).execute()
 
         if not result.data:
             return jsonify({"error": "Share link not found"}), 404
@@ -4352,11 +4352,13 @@ def get_shared_note(token):
         if not note:
             return jsonify({"error": "Note no longer exists"}), 404
 
-        # Get uploader name
+        # Get sharer/uploader info
         uploader = supabase.table("user_profiles").select("full_name, email").eq("id", share["user_id"]).execute()
         uploader_name = "Anonymous"
+        uploader_username = "anonymous"
         if uploader.data:
             uploader_name = uploader.data[0].get("full_name") or uploader.data[0].get("email", "").split("@")[0]
+            uploader_username = uploader.data[0].get("email", "anonymous").split("@")[0]
 
         return jsonify({
             "note_id": note["id"],
@@ -4365,7 +4367,13 @@ def get_shared_note(token):
             "page_count": note.get("page_count"),
             "uploaded_at": note.get("uploaded_at"),
             "shared_by": uploader_name,
-            "expires_at": share.get("expires_at")
+            "shared_by_username": uploader_username,
+            "university": note.get("university"),
+            "course_code": note.get("course_code"),
+            "professor": note.get("professor"),
+            "semester": note.get("semester"),
+            "expires_at": share.get("expires_at"),
+            "share_id": share.get("id", "")[:8]
         }), 200
 
     except Exception as e:
