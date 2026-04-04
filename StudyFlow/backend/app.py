@@ -4563,6 +4563,54 @@ Return ONLY the JSON array, no markdown, no explanation."""}
         return jsonify({"error": "Could not generate quiz right now"}), 500
 
 
+## ====== POMODORO STATS ======
+
+@app.route("/api/pomodoro/complete", methods=["POST"])
+@supabase_auth_required
+def save_pomodoro():
+    """Save a completed pomodoro round."""
+    try:
+        data = request.get_json() or {}
+        work_minutes = data.get("work_minutes", 25)
+
+        supabase.table("pomodoro_completions").insert({
+            "user_id": request.user_id,
+            "work_minutes": work_minutes
+        }).execute()
+
+        # Get total count for response
+        res = supabase.table("pomodoro_completions").select("id", count="exact").eq("user_id", request.user_id).execute()
+        total = res.count or 0
+
+        return jsonify({"success": True, "total_pomodoros": total}), 200
+    except Exception as e:
+        debug_log(f"Save pomodoro error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/pomodoro/stats", methods=["GET"])
+@supabase_auth_required
+def get_pomodoro_stats():
+    """Get pomodoro stats for the user."""
+    try:
+        res = supabase.table("pomodoro_completions").select("work_minutes, completed_at").eq("user_id", request.user_id).execute()
+        completions = res.data or []
+
+        total = len(completions)
+        total_minutes = sum(c.get('work_minutes', 25) for c in completions)
+        today = datetime.utcnow().strftime('%Y-%m-%d')
+        today_count = sum(1 for c in completions if c.get('completed_at', '')[:10] == today)
+
+        return jsonify({
+            "total_pomodoros": total,
+            "total_minutes": total_minutes,
+            "today_pomodoros": today_count
+        }), 200
+    except Exception as e:
+        debug_log(f"Pomodoro stats error: {e}\n{traceback.format_exc()}")
+        return jsonify({"total_pomodoros": 0, "total_minutes": 0, "today_pomodoros": 0}), 200
+
+
 ## ====== ACHIEVEMENTS ======
 
 @app.route("/api/achievements", methods=["GET"])
@@ -4695,6 +4743,15 @@ def get_achievements():
         except:
             stats['ai_messages'] = 0
 
+        # Pomodoros
+        try:
+            res = supabase.table("pomodoro_completions").select("work_minutes", count="exact").eq("user_id", user_id).execute()
+            stats['pomodoros'] = res.count or 0
+            stats['pomodoro_minutes'] = sum(r.get('work_minutes', 25) for r in (res.data or []))
+        except:
+            stats['pomodoros'] = 0
+            stats['pomodoro_minutes'] = 0
+
         # Calendar events
         try:
             res = supabase.table("calendar_events").select("id", count="exact").eq("user_id", user_id).execute()
@@ -4774,6 +4831,13 @@ def get_achievements():
             {"id": "deep_thinker", "name": "Deep Thinker", "desc": "Ask AI 100 questions", "icon": "lightbulb", "category": "AI & Learning", "unlocked": stats['ai_messages'] >= 100, "progress": min(stats['ai_messages'], 100), "goal": 100},
             {"id": "knowledge_seeker", "name": "Knowledge Seeker", "desc": "Have 20 AI conversations", "icon": "telescope", "category": "AI & Learning", "unlocked": stats['conversations'] >= 20, "progress": min(stats['conversations'], 20), "goal": 20},
             {"id": "planner", "name": "Planner", "desc": "Add 10 calendar events", "icon": "calendar", "category": "AI & Learning", "unlocked": stats['calendar_events'] >= 10, "progress": min(stats['calendar_events'], 10), "goal": 10},
+
+            # Focus
+            {"id": "focused", "name": "Focused", "desc": "Complete your first pomodoro", "icon": "timer", "category": "Focus", "unlocked": stats['pomodoros'] >= 1, "progress": min(stats['pomodoros'], 1), "goal": 1},
+            {"id": "in_the_zone", "name": "In the Zone", "desc": "Complete 10 pomodoros", "icon": "fire", "category": "Focus", "unlocked": stats['pomodoros'] >= 10, "progress": min(stats['pomodoros'], 10), "goal": 10},
+            {"id": "deep_work", "name": "Deep Work", "desc": "Complete 50 pomodoros", "icon": "mountain", "category": "Focus", "unlocked": stats['pomodoros'] >= 50, "progress": min(stats['pomodoros'], 50), "goal": 50},
+            {"id": "flow_state", "name": "Flow State", "desc": "Complete 100 pomodoros", "icon": "wave", "category": "Focus", "unlocked": stats['pomodoros'] >= 100, "progress": min(stats['pomodoros'], 100), "goal": 100},
+            {"id": "time_lord", "name": "Time Lord", "desc": "Accumulate 1000 minutes of focus", "icon": "clock", "category": "Focus", "unlocked": stats['pomodoro_minutes'] >= 1000, "progress": min(stats['pomodoro_minutes'], 1000), "goal": 1000},
 
             # Customization
             {"id": "decorator", "name": "Decorator", "desc": "Change your dashboard theme", "icon": "palette", "category": "Customization", "unlocked": stats['has_theme'], "progress": 1 if stats['has_theme'] else 0, "goal": 1},
@@ -4865,6 +4929,14 @@ def get_study_streak():
             for r in (res.data or []):
                 day = r['downloaded_at'][:10]
                 activity[day] = activity.get(day, 0) + 1
+        except: pass
+
+        # Pomodoros
+        try:
+            res = supabase.table("pomodoro_completions").select("completed_at").eq("user_id", user_id).gte("completed_at", one_year_ago).execute()
+            for r in (res.data or []):
+                day = r['completed_at'][:10]
+                activity[day] = activity.get(day, 0) + 2
         except: pass
 
         # Calculate streaks
