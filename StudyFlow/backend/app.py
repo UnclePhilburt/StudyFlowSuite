@@ -4656,9 +4656,21 @@ def get_achievements():
             prefs = (res.data[0].get('preferences') or {}) if res.data else {}
             stats['has_theme'] = bool(prefs.get('theme') and prefs['theme'] != 'default')
             stats['has_flo_custom'] = bool(prefs.get('flo', {}).get('color') and prefs['flo']['color'] != 'sage')
+            stats['has_wallpaper'] = bool(prefs.get('wallpaper'))
+            stats['has_flo_hat'] = bool(prefs.get('flo', {}).get('hat') and prefs['flo']['hat'] != 'none')
+            stats['has_custom_accent'] = bool(prefs.get('accent'))
+            stats['has_custom_font'] = bool(prefs.get('font') and prefs['font'] != 'inter')
+            stats['has_custom_cursor'] = bool(prefs.get('cursor') and prefs['cursor'] != 'default')
+            stats['flo_shape'] = prefs.get('flo', {}).get('shape', 'sphere')
         except:
             stats['has_theme'] = False
             stats['has_flo_custom'] = False
+            stats['has_wallpaper'] = False
+            stats['has_flo_hat'] = False
+            stats['has_custom_accent'] = False
+            stats['has_custom_font'] = False
+            stats['has_custom_cursor'] = False
+            stats['flo_shape'] = 'sphere'
 
         # Dashboard widgets
         try:
@@ -4668,6 +4680,62 @@ def get_achievements():
             stats['widget_count'] = len(widgets) if isinstance(widgets, list) else 0
         except:
             stats['widget_count'] = 0
+
+        # AI chat messages
+        try:
+            res = supabase.table("conversation_messages").select("id", count="exact").eq("role", "user").execute()
+            # This counts all messages, but we want user's. Use conversations table.
+            user_convs = supabase.table("conversations").select("id").eq("user_id", user_id).execute()
+            conv_ids = [c['id'] for c in (user_convs.data or [])]
+            if conv_ids:
+                msgs = supabase.table("conversation_messages").select("id", count="exact").in_("conversation_id", conv_ids[:50]).eq("role", "user").execute()
+                stats['ai_messages'] = msgs.count or 0
+            else:
+                stats['ai_messages'] = 0
+        except:
+            stats['ai_messages'] = 0
+
+        # Calendar events
+        try:
+            res = supabase.table("calendar_events").select("id", count="exact").eq("user_id", user_id).execute()
+            stats['calendar_events'] = res.count or 0
+        except:
+            stats['calendar_events'] = 0
+
+        # Annotations
+        try:
+            res = supabase.table("note_annotations").select("id", count="exact").eq("user_id", user_id).execute()
+            stats['annotations'] = res.count or 0
+        except:
+            stats['annotations'] = 0
+
+        # Downloads
+        try:
+            res = supabase.table("download_transactions").select("id", count="exact").eq("user_id", user_id).execute()
+            stats['downloads'] = res.count or 0
+        except:
+            stats['downloads'] = 0
+
+        # Favorites
+        try:
+            res = supabase.table("note_favorites").select("id", count="exact").eq("user_id", user_id).execute()
+            stats['favorites'] = res.count or 0
+        except:
+            stats['favorites'] = 0
+
+        # Current hour (for time-based achievements)
+        stats['current_hour'] = datetime.utcnow().hour
+
+        # Account age in days
+        try:
+            res = supabase.table("user_profiles").select("created_at").eq("id", user_id).execute()
+            if res.data and res.data[0].get('created_at'):
+                created = datetime.fromisoformat(res.data[0]['created_at'].replace('Z', '+00:00'))
+                stats['account_age_days'] = (datetime.now(created.tzinfo) - created).days
+            else:
+                stats['account_age_days'] = 0
+        except:
+            stats['account_age_days'] = 0
 
         # Define achievements
         achievements = [
@@ -4689,18 +4757,52 @@ def get_achievements():
             # Collecting
             {"id": "collector", "name": "Collector", "desc": "Upload 10 notes", "icon": "folder", "category": "Collecting", "unlocked": stats['notes_uploaded'] >= 10, "progress": min(stats['notes_uploaded'], 10), "goal": 10},
             {"id": "archivist", "name": "Archivist", "desc": "Upload 50 notes", "icon": "archive", "category": "Collecting", "unlocked": stats['notes_uploaded'] >= 50, "progress": min(stats['notes_uploaded'], 50), "goal": 50},
+            {"id": "hoarder", "name": "Hoarder", "desc": "Upload 100 notes", "icon": "box", "category": "Collecting", "unlocked": stats['notes_uploaded'] >= 100, "progress": min(stats['notes_uploaded'], 100), "goal": 100},
             {"id": "organized", "name": "Organized", "desc": "Create 5 folders", "icon": "layers", "category": "Collecting", "unlocked": stats['folders_created'] >= 5, "progress": min(stats['folders_created'], 5), "goal": 5},
+            {"id": "annotator", "name": "Annotator", "desc": "Annotate a note", "icon": "pen", "category": "Collecting", "unlocked": stats['annotations'] >= 1, "progress": min(stats['annotations'], 1), "goal": 1},
+            {"id": "bookmark_lover", "name": "Bookmark Lover", "desc": "Favorite 10 notes", "icon": "bookmark", "category": "Collecting", "unlocked": stats['favorites'] >= 10, "progress": min(stats['favorites'], 10), "goal": 10},
+            {"id": "scholar_reader", "name": "Scholar Reader", "desc": "Download 20 notes", "icon": "download", "category": "Collecting", "unlocked": stats['downloads'] >= 20, "progress": min(stats['downloads'], 20), "goal": 20},
 
             # Social
             {"id": "team_player", "name": "Team Player", "desc": "Send a message in a study group", "icon": "message", "category": "Social", "unlocked": stats['group_messages'] >= 1, "progress": min(stats['group_messages'], 1), "goal": 1},
             {"id": "leader", "name": "Leader", "desc": "Create a study group", "icon": "flag", "category": "Social", "unlocked": stats['groups_created'] >= 1, "progress": min(stats['groups_created'], 1), "goal": 1},
             {"id": "chatterbox", "name": "Chatterbox", "desc": "Send 50 group messages", "icon": "megaphone", "category": "Social", "unlocked": stats['group_messages'] >= 50, "progress": min(stats['group_messages'], 50), "goal": 50},
+            {"id": "social_network", "name": "Social Network", "desc": "Join 5 study groups", "icon": "network", "category": "Social", "unlocked": stats['groups_joined'] >= 5, "progress": min(stats['groups_joined'], 5), "goal": 5},
+
+            # AI & Learning
+            {"id": "curious_mind", "name": "Curious Mind", "desc": "Ask AI 10 questions", "icon": "brain", "category": "AI & Learning", "unlocked": stats['ai_messages'] >= 10, "progress": min(stats['ai_messages'], 10), "goal": 10},
+            {"id": "deep_thinker", "name": "Deep Thinker", "desc": "Ask AI 100 questions", "icon": "lightbulb", "category": "AI & Learning", "unlocked": stats['ai_messages'] >= 100, "progress": min(stats['ai_messages'], 100), "goal": 100},
+            {"id": "knowledge_seeker", "name": "Knowledge Seeker", "desc": "Have 20 AI conversations", "icon": "telescope", "category": "AI & Learning", "unlocked": stats['conversations'] >= 20, "progress": min(stats['conversations'], 20), "goal": 20},
+            {"id": "planner", "name": "Planner", "desc": "Add 10 calendar events", "icon": "calendar", "category": "AI & Learning", "unlocked": stats['calendar_events'] >= 10, "progress": min(stats['calendar_events'], 10), "goal": 10},
 
             # Customization
             {"id": "decorator", "name": "Decorator", "desc": "Change your dashboard theme", "icon": "palette", "category": "Customization", "unlocked": stats['has_theme'], "progress": 1 if stats['has_theme'] else 0, "goal": 1},
+            {"id": "wallpaper_fan", "name": "Wallpaper Fan", "desc": "Set a wallpaper", "icon": "image", "category": "Customization", "unlocked": stats['has_wallpaper'], "progress": 1 if stats['has_wallpaper'] else 0, "goal": 1},
             {"id": "interior_designer", "name": "Interior Designer", "desc": "Add 10 widgets to your dashboard", "icon": "grid", "category": "Customization", "unlocked": stats['widget_count'] >= 10, "progress": min(stats['widget_count'], 10), "goal": 10},
             {"id": "flos_friend", "name": "Flo's Friend", "desc": "Customize Flo's appearance", "icon": "sparkle", "category": "Customization", "unlocked": stats['has_flo_custom'], "progress": 1 if stats['has_flo_custom'] else 0, "goal": 1},
+            {"id": "hat_collector", "name": "Hat Collector", "desc": "Give Flo a hat", "icon": "tophat", "category": "Customization", "unlocked": stats['has_flo_hat'], "progress": 1 if stats['has_flo_hat'] else 0, "goal": 1},
+            {"id": "color_master", "name": "Color Master", "desc": "Set a custom accent color", "icon": "rainbow", "category": "Customization", "unlocked": stats['has_custom_accent'], "progress": 1 if stats['has_custom_accent'] else 0, "goal": 1},
+            {"id": "typographer", "name": "Typographer", "desc": "Change the font", "icon": "type", "category": "Customization", "unlocked": stats['has_custom_font'], "progress": 1 if stats['has_custom_font'] else 0, "goal": 1},
+            {"id": "cursor_crafter", "name": "Cursor Crafter", "desc": "Use a custom cursor", "icon": "cursor", "category": "Customization", "unlocked": stats['has_custom_cursor'], "progress": 1 if stats['has_custom_cursor'] else 0, "goal": 1},
+
+            # Hidden / Secret (shown as ??? until unlocked)
+            {"id": "night_owl", "name": "Night Owl", "desc": "Use StudyFlow between midnight and 4am", "icon": "moon", "category": "Secret", "hidden": True, "unlocked": 0 <= stats['current_hour'] <= 3, "progress": 1 if 0 <= stats['current_hour'] <= 3 else 0, "goal": 1},
+            {"id": "early_bird", "name": "Early Bird", "desc": "Use StudyFlow between 4am and 6am", "icon": "sunrise", "category": "Secret", "hidden": True, "unlocked": 4 <= stats['current_hour'] <= 5, "progress": 1 if 4 <= stats['current_hour'] <= 5 else 0, "goal": 1},
+            {"id": "veteran", "name": "Veteran", "desc": "Have an account for 30 days", "icon": "medal", "category": "Secret", "hidden": True, "unlocked": stats['account_age_days'] >= 30, "progress": min(stats['account_age_days'], 30), "goal": 30},
+            {"id": "old_timer", "name": "Old Timer", "desc": "Have an account for 365 days", "icon": "hourglass", "category": "Secret", "hidden": True, "unlocked": stats['account_age_days'] >= 365, "progress": min(stats['account_age_days'], 365), "goal": 365},
+            {"id": "widget_hoarder", "name": "Widget Hoarder", "desc": "Add 25 widgets to your dashboard", "icon": "infinity", "category": "Secret", "hidden": True, "unlocked": stats['widget_count'] >= 25, "progress": min(stats['widget_count'], 25), "goal": 25},
+            {"id": "sharing_spree", "name": "Sharing Spree", "desc": "Share 10 notes via link", "icon": "share", "category": "Secret", "hidden": True, "unlocked": stats['notes_shared'] >= 10, "progress": min(stats['notes_shared'], 10), "goal": 10},
+            {"id": "ai_addict", "name": "AI Addict", "desc": "Ask AI 500 questions", "icon": "robot", "category": "Secret", "hidden": True, "unlocked": stats['ai_messages'] >= 500, "progress": min(stats['ai_messages'], 500), "goal": 500},
+            {"id": "completionist", "name": "Completionist", "desc": "Unlock every other achievement", "icon": "trophy", "category": "Secret", "hidden": True, "unlocked": False, "progress": 0, "goal": 1},
         ]
+
+        # Check completionist (unlocked if all non-completionist achievements are unlocked)
+        non_completionist = [a for a in achievements if a['id'] != 'completionist']
+        all_unlocked = all(a['unlocked'] for a in non_completionist)
+        for a in achievements:
+            if a['id'] == 'completionist':
+                a['unlocked'] = all_unlocked
+                a['progress'] = 1 if all_unlocked else 0
 
         unlocked_count = sum(1 for a in achievements if a['unlocked'])
 
