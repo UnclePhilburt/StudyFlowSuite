@@ -4818,6 +4818,109 @@ def get_achievements():
         return jsonify({"error": "Could not load achievements"}), 500
 
 
+@app.route("/api/study-streak", methods=["GET"])
+@supabase_auth_required
+def get_study_streak():
+    """Get study activity heatmap data for the past year."""
+    try:
+        user_id = request.user_id
+        one_year_ago = (datetime.utcnow() - timedelta(days=365)).isoformat()
+        activity = {}
+
+        # Notes uploaded
+        try:
+            res = supabase.table("notes").select("uploaded_at").eq("user_id", user_id).gte("uploaded_at", one_year_ago).execute()
+            for r in (res.data or []):
+                day = r['uploaded_at'][:10]
+                activity[day] = activity.get(day, 0) + 2
+        except: pass
+
+        # Conversations started
+        try:
+            res = supabase.table("conversations").select("created_at").eq("user_id", user_id).gte("created_at", one_year_ago).execute()
+            for r in (res.data or []):
+                day = r['created_at'][:10]
+                activity[day] = activity.get(day, 0) + 1
+        except: pass
+
+        # Group messages
+        try:
+            res = supabase.table("study_group_messages").select("created_at").eq("user_id", user_id).gte("created_at", one_year_ago).execute()
+            for r in (res.data or []):
+                day = r['created_at'][:10]
+                activity[day] = activity.get(day, 0) + 1
+        except: pass
+
+        # Note views
+        try:
+            res = supabase.table("note_views").select("viewed_at").eq("user_id", user_id).gte("viewed_at", one_year_ago).execute()
+            for r in (res.data or []):
+                day = r['viewed_at'][:10]
+                activity[day] = activity.get(day, 0) + 1
+        except: pass
+
+        # Downloads
+        try:
+            res = supabase.table("download_transactions").select("downloaded_at").eq("user_id", user_id).gte("downloaded_at", one_year_ago).execute()
+            for r in (res.data or []):
+                day = r['downloaded_at'][:10]
+                activity[day] = activity.get(day, 0) + 1
+        except: pass
+
+        # Calculate streaks
+        today = datetime.utcnow().strftime('%Y-%m-%d')
+        sorted_days = sorted(activity.keys(), reverse=True)
+
+        current_streak = 0
+        longest_streak = 0
+        temp_streak = 0
+        check_date = datetime.utcnow().date()
+
+        for i in range(365):
+            day_str = check_date.strftime('%Y-%m-%d')
+            if day_str in activity:
+                if i == 0 or (i > 0 and temp_streak > 0):
+                    temp_streak += 1
+                else:
+                    temp_streak = 1
+                if current_streak == 0 and i <= 1:
+                    current_streak = temp_streak
+            else:
+                if current_streak == 0 and i == 0:
+                    pass  # today not active yet, check yesterday
+                elif current_streak == 0 and temp_streak > 0:
+                    current_streak = temp_streak
+                longest_streak = max(longest_streak, temp_streak)
+                temp_streak = 0
+            check_date -= timedelta(days=1)
+
+        longest_streak = max(longest_streak, temp_streak)
+        if current_streak == 0:
+            current_streak = temp_streak
+
+        # Recalculate current streak properly
+        current_streak = 0
+        check = datetime.utcnow().date()
+        # Allow today to not have activity yet
+        if check.strftime('%Y-%m-%d') not in activity:
+            check -= timedelta(days=1)
+        while check.strftime('%Y-%m-%d') in activity:
+            current_streak += 1
+            check -= timedelta(days=1)
+
+        return jsonify({
+            "activity": activity,
+            "current_streak": current_streak,
+            "longest_streak": longest_streak,
+            "total_active_days": len(activity),
+            "today": today
+        }), 200
+
+    except Exception as e:
+        debug_log(f"Study streak error: {e}\n{traceback.format_exc()}")
+        return jsonify({"activity": {}, "current_streak": 0, "longest_streak": 0, "total_active_days": 0}), 200
+
+
 ## ====== NOTE SHARING ======
 
 @app.route("/api/notes/<note_id>/share", methods=["POST"])
