@@ -4563,6 +4563,159 @@ Return ONLY the JSON array, no markdown, no explanation."""}
         return jsonify({"error": "Could not generate quiz right now"}), 500
 
 
+## ====== ACHIEVEMENTS ======
+
+@app.route("/api/achievements", methods=["GET"])
+@supabase_auth_required
+def get_achievements():
+    """Compute achievement progress from existing database tables."""
+    try:
+        user_id = request.user_id
+
+        # Gather stats from various tables
+        stats = {}
+
+        # Note counts
+        try:
+            res = supabase.table("notes").select("id, is_public, uploaded_at", count="exact").eq("user_id", user_id).execute()
+            stats['notes_uploaded'] = res.count or 0
+            stats['notes_public'] = len([n for n in (res.data or []) if n.get('is_public')])
+        except:
+            stats['notes_uploaded'] = 0
+            stats['notes_public'] = 0
+
+        # Folders
+        try:
+            res = supabase.table("folders").select("id", count="exact").eq("user_id", user_id).execute()
+            stats['folders_created'] = res.count or 0
+        except:
+            stats['folders_created'] = 0
+
+        # Shared notes
+        try:
+            res = supabase.table("shared_notes").select("id", count="exact").eq("user_id", user_id).execute()
+            stats['notes_shared'] = res.count or 0
+        except:
+            stats['notes_shared'] = 0
+
+        # Conversations
+        try:
+            res = supabase.table("conversations").select("id", count="exact").eq("user_id", user_id).execute()
+            stats['conversations'] = res.count or 0
+        except:
+            stats['conversations'] = 0
+
+        # Study groups
+        try:
+            res = supabase.table("study_group_members").select("group_id", count="exact").eq("user_id", user_id).execute()
+            stats['groups_joined'] = res.count or 0
+        except:
+            stats['groups_joined'] = 0
+
+        # Groups created (owner)
+        try:
+            res = supabase.table("study_groups").select("id", count="exact").eq("owner_id", user_id).execute()
+            stats['groups_created'] = res.count or 0
+        except:
+            stats['groups_created'] = 0
+
+        # Group messages sent
+        try:
+            res = supabase.table("study_group_messages").select("id", count="exact").eq("user_id", user_id).execute()
+            stats['group_messages'] = res.count or 0
+        except:
+            stats['group_messages'] = 0
+
+        # Notes viewed by others (usage/help count)
+        try:
+            res = supabase.table("note_views").select("id", count="exact").eq("note_owner_id", user_id).execute()
+            stats['notes_helped'] = res.count or 0
+        except:
+            try:
+                # Fallback: count views on user's notes
+                user_notes = supabase.table("notes").select("id").eq("user_id", user_id).execute()
+                note_ids = [n['id'] for n in (user_notes.data or [])]
+                if note_ids:
+                    res = supabase.table("note_views").select("id", count="exact").in_("note_id", note_ids).execute()
+                    stats['notes_helped'] = res.count or 0
+                else:
+                    stats['notes_helped'] = 0
+            except:
+                stats['notes_helped'] = 0
+
+        # Edu verified
+        try:
+            res = supabase.table("user_profiles").select("edu_verified").eq("id", user_id).execute()
+            stats['edu_verified'] = bool(res.data and res.data[0].get('edu_verified'))
+        except:
+            stats['edu_verified'] = False
+
+        # Preferences (for customization check)
+        try:
+            res = supabase.table("user_profiles").select("preferences").eq("id", user_id).execute()
+            prefs = (res.data[0].get('preferences') or {}) if res.data else {}
+            stats['has_theme'] = bool(prefs.get('theme') and prefs['theme'] != 'default')
+            stats['has_flo_custom'] = bool(prefs.get('flo', {}).get('color') and prefs['flo']['color'] != 'sage')
+        except:
+            stats['has_theme'] = False
+            stats['has_flo_custom'] = False
+
+        # Dashboard widgets
+        try:
+            res = supabase.table("user_profiles").select("dashboard_layout").eq("id", user_id).execute()
+            layout = (res.data[0].get('dashboard_layout') or {}) if res.data else {}
+            widgets = layout.get('layout', [])
+            stats['widget_count'] = len(widgets) if isinstance(widgets, list) else 0
+        except:
+            stats['widget_count'] = 0
+
+        # Define achievements
+        achievements = [
+            # Getting Started
+            {"id": "first_steps", "name": "First Steps", "desc": "Create your account", "icon": "rocket", "category": "Getting Started", "unlocked": True, "progress": 1, "goal": 1},
+            {"id": "scholar", "name": "Scholar", "desc": "Verify your .edu email", "icon": "graduation", "category": "Getting Started", "unlocked": stats['edu_verified'], "progress": 1 if stats['edu_verified'] else 0, "goal": 1},
+            {"id": "librarian", "name": "Librarian", "desc": "Upload your first note", "icon": "book", "category": "Getting Started", "unlocked": stats['notes_uploaded'] >= 1, "progress": min(stats['notes_uploaded'], 1), "goal": 1},
+            {"id": "social_butterfly", "name": "Social Butterfly", "desc": "Join your first study group", "icon": "users", "category": "Getting Started", "unlocked": stats['groups_joined'] >= 1, "progress": min(stats['groups_joined'], 1), "goal": 1},
+            {"id": "conversationalist", "name": "Conversationalist", "desc": "Start your first AI chat", "icon": "chat", "category": "Getting Started", "unlocked": stats['conversations'] >= 1, "progress": min(stats['conversations'], 1), "goal": 1},
+
+            # Contributing
+            {"id": "sharer", "name": "Sharer", "desc": "Share a note via link", "icon": "link", "category": "Contributing", "unlocked": stats['notes_shared'] >= 1, "progress": min(stats['notes_shared'], 1), "goal": 1},
+            {"id": "open_book", "name": "Open Book", "desc": "Make 5 notes public on the Nexus", "icon": "globe", "category": "Contributing", "unlocked": stats['notes_public'] >= 5, "progress": min(stats['notes_public'], 5), "goal": 5},
+            {"id": "community_pillar", "name": "Community Pillar", "desc": "Make 25 notes public", "icon": "star", "category": "Contributing", "unlocked": stats['notes_public'] >= 25, "progress": min(stats['notes_public'], 25), "goal": 25},
+            {"id": "helping_hand", "name": "Helping Hand", "desc": "Your notes help 10 students", "icon": "heart", "category": "Contributing", "unlocked": stats['notes_helped'] >= 10, "progress": min(stats['notes_helped'], 10), "goal": 10},
+            {"id": "mentor", "name": "Mentor", "desc": "Your notes help 100 students", "icon": "award", "category": "Contributing", "unlocked": stats['notes_helped'] >= 100, "progress": min(stats['notes_helped'], 100), "goal": 100},
+            {"id": "legend", "name": "Legend", "desc": "Your notes help 1000 students", "icon": "crown", "category": "Contributing", "unlocked": stats['notes_helped'] >= 1000, "progress": min(stats['notes_helped'], 1000), "goal": 1000},
+
+            # Collecting
+            {"id": "collector", "name": "Collector", "desc": "Upload 10 notes", "icon": "folder", "category": "Collecting", "unlocked": stats['notes_uploaded'] >= 10, "progress": min(stats['notes_uploaded'], 10), "goal": 10},
+            {"id": "archivist", "name": "Archivist", "desc": "Upload 50 notes", "icon": "archive", "category": "Collecting", "unlocked": stats['notes_uploaded'] >= 50, "progress": min(stats['notes_uploaded'], 50), "goal": 50},
+            {"id": "organized", "name": "Organized", "desc": "Create 5 folders", "icon": "layers", "category": "Collecting", "unlocked": stats['folders_created'] >= 5, "progress": min(stats['folders_created'], 5), "goal": 5},
+
+            # Social
+            {"id": "team_player", "name": "Team Player", "desc": "Send a message in a study group", "icon": "message", "category": "Social", "unlocked": stats['group_messages'] >= 1, "progress": min(stats['group_messages'], 1), "goal": 1},
+            {"id": "leader", "name": "Leader", "desc": "Create a study group", "icon": "flag", "category": "Social", "unlocked": stats['groups_created'] >= 1, "progress": min(stats['groups_created'], 1), "goal": 1},
+            {"id": "chatterbox", "name": "Chatterbox", "desc": "Send 50 group messages", "icon": "megaphone", "category": "Social", "unlocked": stats['group_messages'] >= 50, "progress": min(stats['group_messages'], 50), "goal": 50},
+
+            # Customization
+            {"id": "decorator", "name": "Decorator", "desc": "Change your dashboard theme", "icon": "palette", "category": "Customization", "unlocked": stats['has_theme'], "progress": 1 if stats['has_theme'] else 0, "goal": 1},
+            {"id": "interior_designer", "name": "Interior Designer", "desc": "Add 10 widgets to your dashboard", "icon": "grid", "category": "Customization", "unlocked": stats['widget_count'] >= 10, "progress": min(stats['widget_count'], 10), "goal": 10},
+            {"id": "flos_friend", "name": "Flo's Friend", "desc": "Customize Flo's appearance", "icon": "sparkle", "category": "Customization", "unlocked": stats['has_flo_custom'], "progress": 1 if stats['has_flo_custom'] else 0, "goal": 1},
+        ]
+
+        unlocked_count = sum(1 for a in achievements if a['unlocked'])
+
+        return jsonify({
+            "achievements": achievements,
+            "unlocked": unlocked_count,
+            "total": len(achievements),
+            "stats": stats
+        }), 200
+
+    except Exception as e:
+        debug_log(f"Achievements error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": "Could not load achievements"}), 500
+
+
 ## ====== NOTE SHARING ======
 
 @app.route("/api/notes/<note_id>/share", methods=["POST"])
