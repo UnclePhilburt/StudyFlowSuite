@@ -4421,6 +4421,148 @@ def assistant_digest():
         return jsonify({"summary": "Hi! Ready to help.", "events_today": [], "unread_notifications": 0, "total_notes": 0, "shared_notes": 0}), 200
 
 
+@app.route("/api/assistant/summarize/<note_id>", methods=["GET"])
+@supabase_auth_required
+def assistant_summarize(note_id):
+    """Summarize a note's content using AI."""
+    try:
+        import time
+        start_time = time.time()
+
+        # Get note chunks
+        chunks_res = supabase.table("note_chunks").select("chunk_text, content_summary").eq("note_id", note_id).order("chunk_index").execute()
+
+        if not chunks_res.data:
+            return jsonify({"error": "No content found for this note"}), 404
+
+        # Build full text from chunks
+        full_text = ""
+        for chunk in chunks_res.data:
+            text = chunk.get("content_summary") or chunk.get("chunk_text", "")
+            if text:
+                full_text += text + "\n\n"
+
+        if not full_text.strip():
+            return jsonify({"error": "Note has no readable content"}), 404
+
+        # Truncate to ~6000 chars for the AI call
+        content = full_text[:6000]
+
+        # Get note title
+        note_res = supabase.table("notes").select("original_filename").eq("id", note_id).execute()
+        title = "this note"
+        if note_res.data:
+            title = note_res.data[0].get("original_filename") or "this note"
+
+        from openai import OpenAI
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are a study assistant. Summarize the following note concisely. Highlight the key concepts, main arguments, and important details. Use bullet points. Keep it under 200 words."},
+                {"role": "user", "content": f"Note title: {title}\n\nContent:\n{content}"}
+            ],
+            max_tokens=400,
+            temperature=0.5
+        )
+
+        summary = response.choices[0].message.content
+        elapsed = int((time.time() - start_time) * 1000)
+
+        return jsonify({
+            "summary": summary,
+            "note_title": title,
+            "chunks_used": len(chunks_res.data),
+            "response_time_ms": elapsed
+        }), 200
+
+    except Exception as e:
+        debug_log(f"Assistant summarize error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": "Could not summarize this note right now"}), 500
+
+
+@app.route("/api/assistant/quiz/<note_id>", methods=["GET"])
+@supabase_auth_required
+def assistant_quiz_note(note_id):
+    """Generate a quick quiz from a specific note's content."""
+    try:
+        import time
+        start_time = time.time()
+
+        count = request.args.get("count", 5, type=int)
+        count = min(max(count, 3), 10)
+
+        # Get note chunks
+        chunks_res = supabase.table("note_chunks").select("chunk_text, content_summary").eq("note_id", note_id).order("chunk_index").execute()
+
+        if not chunks_res.data:
+            return jsonify({"error": "No content found for this note"}), 404
+
+        full_text = ""
+        for chunk in chunks_res.data:
+            text = chunk.get("content_summary") or chunk.get("chunk_text", "")
+            if text:
+                full_text += text + "\n\n"
+
+        if not full_text.strip():
+            return jsonify({"error": "Note has no readable content"}), 404
+
+        content = full_text[:6000]
+
+        # Get note title
+        note_res = supabase.table("notes").select("original_filename").eq("id", note_id).execute()
+        title = "this note"
+        if note_res.data:
+            title = note_res.data[0].get("original_filename") or "this note"
+
+        from openai import OpenAI
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are a quiz generator. Create quiz questions that test understanding of the provided study material. Return ONLY valid JSON, no other text."},
+                {"role": "user", "content": f"""Based on this note titled "{title}", generate exactly {count} multiple choice questions.
+
+Note content:
+{content}
+
+Return a JSON array:
+[{{"question": "What is...?", "options": ["A) ...", "B) ...", "C) ...", "D) ..."], "correct": 0, "explanation": "Brief explanation"}}]
+
+The "correct" field is the zero-based index of the correct option.
+Return ONLY the JSON array, no markdown, no explanation."""}
+            ],
+            max_tokens=800,
+            temperature=0.7
+        )
+
+        raw = response.choices[0].message.content.strip()
+        # Clean markdown if present
+        if raw.startswith("```"):
+            raw = raw.split("\n", 1)[1] if "\n" in raw else raw[3:]
+            if raw.endswith("```"):
+                raw = raw[:-3]
+            raw = raw.strip()
+
+        questions = json.loads(raw)
+        elapsed = int((time.time() - start_time) * 1000)
+
+        return jsonify({
+            "questions": questions,
+            "note_title": title,
+            "count": len(questions),
+            "response_time_ms": elapsed
+        }), 200
+
+    except json.JSONDecodeError:
+        return jsonify({"error": "Failed to generate quiz. Try again."}), 500
+    except Exception as e:
+        debug_log(f"Assistant quiz error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": "Could not generate quiz right now"}), 500
+
+
 ## ====== NOTE SHARING ======
 
 @app.route("/api/notes/<note_id>/share", methods=["POST"])
