@@ -14354,6 +14354,110 @@ def get_user_posts(username):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/social/profile/avatar", methods=["POST"])
+@supabase_auth_required
+@account_not_frozen
+def upload_avatar():
+    """Upload and set profile avatar"""
+    try:
+        from StudyFlow.backend.supabase_client import upload_file_to_storage
+        import uuid
+
+        if 'file' not in request.files:
+            return jsonify({"error": "No file uploaded"}), 400
+
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({"error": "No file selected"}), 400
+
+        # Check file type
+        file_ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else ''
+        allowed_extensions = ['jpg', 'jpeg', 'png', 'gif', 'webp']
+        if file_ext not in allowed_extensions:
+            return jsonify({"error": "Invalid file type. Use JPG, PNG, GIF, or WebP"}), 400
+
+        # Check file size (5MB max for avatars)
+        file.seek(0, os.SEEK_END)
+        file_size = file.tell()
+        file.seek(0)
+        if file_size > 5 * 1024 * 1024:
+            return jsonify({"error": "File too large. Maximum 5MB"}), 400
+
+        # Read file
+        file_content = file.read()
+
+        # Upload to Supabase Storage in avatars folder
+        unique_filename = f"avatars/{request.user_id}/{uuid.uuid4()}.{file_ext}"
+        content_type = f'image/{file_ext}' if file_ext != 'jpg' else 'image/jpeg'
+        avatar_url = upload_file_to_storage(file_content, unique_filename, content_type)
+
+        if not avatar_url:
+            return jsonify({"error": "Failed to upload file"}), 500
+
+        # Update user profile
+        response = supabase.table("user_profiles").update({
+            "avatar_url": avatar_url
+        }).eq("id", request.user_id).execute()
+
+        return jsonify({"avatar_url": avatar_url}), 200
+
+    except Exception as e:
+        debug_log(f"Avatar upload error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/social/profile/banner", methods=["POST"])
+@supabase_auth_required
+@account_not_frozen
+def upload_banner():
+    """Upload and set profile banner"""
+    try:
+        from StudyFlow.backend.supabase_client import upload_file_to_storage
+        import uuid
+
+        if 'file' not in request.files:
+            return jsonify({"error": "No file uploaded"}), 400
+
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({"error": "No file selected"}), 400
+
+        # Check file type
+        file_ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else ''
+        allowed_extensions = ['jpg', 'jpeg', 'png', 'gif', 'webp']
+        if file_ext not in allowed_extensions:
+            return jsonify({"error": "Invalid file type. Use JPG, PNG, GIF, or WebP"}), 400
+
+        # Check file size (10MB max for banners)
+        file.seek(0, os.SEEK_END)
+        file_size = file.tell()
+        file.seek(0)
+        if file_size > 10 * 1024 * 1024:
+            return jsonify({"error": "File too large. Maximum 10MB"}), 400
+
+        # Read file
+        file_content = file.read()
+
+        # Upload to Supabase Storage in banners folder
+        unique_filename = f"banners/{request.user_id}/{uuid.uuid4()}.{file_ext}"
+        content_type = f'image/{file_ext}' if file_ext != 'jpg' else 'image/jpeg'
+        banner_url = upload_file_to_storage(file_content, unique_filename, content_type)
+
+        if not banner_url:
+            return jsonify({"error": "Failed to upload file"}), 500
+
+        # Update user profile
+        response = supabase.table("user_profiles").update({
+            "banner_url": banner_url
+        }).eq("id", request.user_id).execute()
+
+        return jsonify({"banner_url": banner_url}), 200
+
+    except Exception as e:
+        debug_log(f"Banner upload error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/social/profile", methods=["PATCH"])
 @supabase_auth_required
 @account_not_frozen
