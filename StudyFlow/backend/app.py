@@ -13497,14 +13497,26 @@ def get_social_feed():
         per_page = 20
         offset = (page - 1) * per_page
 
-        # Get posts from followed users + own posts
-        response = supabase.table("social_posts").select(
-            "*, notes(original_filename, thumbnail_url, file_type)"
-        ).in_("user_id",
-            supabase.table("user_followers").select("following_id").eq("follower_id", user_id)
-        ).order("created_at", desc=True).limit(per_page).offset(offset).execute()
+        # First, get list of users this user follows
+        following_response = supabase.table("user_followers").select("following_id").eq(
+            "follower_id", user_id
+        ).execute()
 
-        posts = response.data or []
+        followed_user_ids = [f["following_id"] for f in (following_response.data or [])]
+        # Add current user to see their own posts
+        followed_user_ids.append(user_id)
+
+        # Get posts from followed users + own posts
+        if followed_user_ids:
+            response = supabase.table("social_posts").select(
+                "*, notes(original_filename, thumbnail_url, file_type)"
+            ).in_("user_id", followed_user_ids).order(
+                "created_at", desc=True
+            ).limit(per_page).offset(offset).execute()
+
+            posts = response.data or []
+        else:
+            posts = []
 
         # Add user interaction flags
         if posts:
