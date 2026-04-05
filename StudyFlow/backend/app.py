@@ -1123,6 +1123,24 @@ def mobile_dashboard():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/folders", methods=["GET"])
+@supabase_auth_required
+def get_user_folders():
+    """Get user's folders for dropdown selection"""
+    try:
+        user_id = request.user_id
+        response = supabase.table("folders").select("id, name").eq(
+            "user_id", user_id
+        ).order("created_at", desc=False).execute()
+
+        folders = response.data or []
+        return jsonify({"folders": folders}), 200
+
+    except Exception as e:
+        debug_log(f"Get folders error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/notes", methods=["GET"])
 @supabase_auth_required
 def get_user_notes_list():
@@ -13657,6 +13675,165 @@ def create_social_post():
 
     except Exception as e:
         debug_log(f"Create post error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/social/upload-note", methods=["POST"])
+@supabase_auth_required
+@account_not_frozen
+def upload_note_from_social():
+    """Upload a note directly from social pages with optional folder assignment"""
+    try:
+        from StudyFlow.backend.supabase_client import (
+            check_page_limit, upload_file_to_storage, create_note_record,
+            increment_page_count, log_upload, get_user_profile
+        )
+        from StudyFlow.backend.tasks import process_note_async
+        import hashlib
+        import uuid
+
+        # Check if file was uploaded
+        if 'file' not in request.files:
+            return jsonify({"error": "No file uploaded"}), 400
+
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({"error": "No file selected"}), 400
+
+        # Get optional folder_id from form
+        folder_id = request.form.get('folder_id')  # Can be null
+
+        # Get user profile
+        user_profile = get_user_profile(request.user_id)
+        username = user_profile.get('username') if user_profile else None
+
+        # Get user's IP address
+        ip_address = request.headers.get('X-Forwarded-For', request.remote_addr)
+        if ip_address and ',' in ip_address:
+            ip_address = ip_address.split(',')[0].strip()
+
+        # Get file info
+        original_filename = file.filename
+        file.seek(0, os.SEEK_END)
+        file_size = file.tell()
+        file.seek(0)
+
+        # Determine file type
+        file_ext = original_filename.rsplit('.', 1)[1].lower() if '.' in original_filename else ''
+        allowed_extensions = ['pdf', 'jpg', 'jpeg', 'png', 'gif', 'bmp', 'tiff', 'webp']
+        if file_ext not in allowed_extensions:
+            return jsonify({"error": "Unsupported file type. Allowed: PDF, images"}), 400
+
+        # Read file content
+        file_content = file.read()
+        file_hash = hashlib.sha256(file_content).hexdigest()
+
+        # Log upload
+        log_upload(
+            user_id=request.user_id,
+            file_name=original_filename,
+            file_hash=file_hash,
+            file_size=file_size,
+            shared_with_nexus=False,  # Social uploads default to private
+            ip_address=ip_address
+        )
+
+        # Extract text for OCR
+        import google.generativeai as genai
+        genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+        model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
+
+        if file_ext in ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'tiff', 'webp']:
+            import PIL.Image
+            import io
+            image = PIL.Image.open(io.BytesIO(file_content))
+            prompt = "Extract ALL text from this image. Return only the extracted text."
+            response = model.generate_content([prompt, image])
+            ocr_text = response.text.strip()
+            page_count = 1
+        elif file_ext == 'pdf':
+            import PyPDF2
+            import io
+            pdf_reader = PyPDF2.PdfReader(io.BytesIO(file_content))
+            page_count = len(pdf_reader.pages)
+            ocr_text = ""
+            for page in pdf_reader.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    ocr_text += page_text + "\n\n"
+            if not ocr_text.strip():
+                ocr_text = f"[PDF document: {page_count} pages]"
+        else:
+            ocr_text = ""
+            page_count = 1
+
+        # Check page limit
+        allowed, message = check_page_limit(request.user_id, page_count)
+        if not allowed:
+            return jsonify({"error": message, "limit_exceeded": True}), 403
+
+        # Convert to PDF if image
+        if file_ext != 'pdf':
+            from StudyFlow.backend.pdf_flatten import convert_to_pdf
+            pdf_data, pdf_filename = convert_to_pdf(file_content, original_filename)
+            if pdf_data is None:
+                return jsonify({"error": "Failed to convert to PDF"}), 500
+            file_content = pdf_data
+            original_filename = pdf_filename
+            file_ext = 'pdf'
+            file_size = len(file_content)
+
+        # Upload to Supabase Storage
+        unique_filename = f"{request.user_id}/{uuid.uuid4()}_{original_filename}"
+        content_type = 'application/pdf'
+        file_url = upload_file_to_storage(file_content, unique_filename, content_type)
+
+        if not file_url:
+            return jsonify({"error": "Failed to upload file to storage"}), 500
+
+        # Create note record with optional folder_id
+        note = create_note_record(
+            user_id=request.user_id,
+            filename=original_filename,
+            file_type=file_ext,
+            file_size=file_size,
+            file_path=unique_filename,
+            page_count=page_count,
+            course_metadata={},
+            username=username
+        )
+
+        if not note:
+            return jsonify({"error": "Failed to create note record"}), 500
+
+        note_id = note['id']
+
+        # Assign to folder if specified
+        if folder_id:
+            try:
+                supabase.table("notes").update({"folder_id": folder_id}).eq("id", note_id).execute()
+                debug_log(f"Note {note_id} assigned to folder {folder_id}")
+            except Exception as e:
+                debug_log(f"Failed to assign folder: {e}")
+
+        # Increment page count
+        increment_page_count(request.user_id, page_count)
+
+        # Trigger background processing
+        process_note_async.delay(note_id, request.user_id, ocr_text, {}, file_hash, username)
+
+        debug_log(f"Social note uploaded: {original_filename} ({file_size} bytes, {page_count} pages)")
+
+        return jsonify({
+            "success": True,
+            "note_id": note_id,
+            "filename": original_filename,
+            "thumbnail_url": note.get('thumbnail_url'),
+            "pages": page_count
+        }), 201
+
+    except Exception as e:
+        debug_log(f"Social upload error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
 
