@@ -13553,25 +13553,30 @@ def get_social_feed():
         # Get posts from followed users + own posts
         if len(followed_user_ids) == 1:
             # Single ID - use .eq() instead of .in_()
-            response = supabase.table("social_posts").select(
-                "*, notes(original_filename, thumbnail_url, file_type)"
-            ).eq("user_id", followed_user_ids[0]).order(
-                "created_at", desc=True
-            ).limit(per_page).offset(offset).execute()
+            response = supabase.table("social_posts").select("*").eq(
+                "user_id", followed_user_ids[0]
+            ).order("created_at", desc=True).limit(per_page).offset(offset).execute()
         elif len(followed_user_ids) > 1:
             # Multiple IDs - use .in_()
-            response = supabase.table("social_posts").select(
-                "*, notes(original_filename, thumbnail_url, file_type)"
-            ).in_("user_id", followed_user_ids).order(
-                "created_at", desc=True
-            ).limit(per_page).offset(offset).execute()
+            response = supabase.table("social_posts").select("*").in_(
+                "user_id", followed_user_ids
+            ).order("created_at", desc=True).limit(per_page).offset(offset).execute()
         else:
             response = None
 
         posts = response.data if response else []
 
-        # Add user interaction flags
+        # Fetch note details separately for posts that have notes
         if posts:
+            note_ids = [p["note_id"] for p in posts if p.get("note_id")]
+            notes_map = {}
+            if note_ids:
+                notes_response = supabase.table("notes").select(
+                    "id, original_filename, thumbnail_url, file_type"
+                ).in_("id", note_ids).execute()
+                notes_map = {n["id"]: n for n in (notes_response.data or [])}
+
+            # Add user interaction flags and note details
             post_ids = [p["id"] for p in posts]
             votes = supabase.table("post_votes").select("post_id, vote_type").eq(
                 "user_id", user_id
@@ -13586,6 +13591,9 @@ def get_social_feed():
             for post in posts:
                 post["user_vote_type"] = votes_map.get(post["id"])
                 post["is_bookmarked"] = post["id"] in bookmark_ids
+                # Add note details if post has a note
+                if post.get("note_id"):
+                    post["notes"] = notes_map.get(post["note_id"])
 
         return jsonify({"posts": posts, "page": page}), 200
 
@@ -13605,13 +13613,23 @@ def get_trending_posts():
         per_page = 20
         offset = (page - 1) * per_page
 
+        # Get posts without join to avoid NULL note_id issues
         response = supabase.table("social_posts").select(
-            "*, notes(original_filename, thumbnail_url, file_type)"
+            "*"
         ).order("score", desc=True).order("created_at", desc=True).limit(per_page).offset(offset).execute()
 
         posts = response.data or []
 
+        # Fetch note details separately for posts that have notes
         if posts:
+            note_ids = [p["note_id"] for p in posts if p.get("note_id")]
+            notes_map = {}
+            if note_ids:
+                notes_response = supabase.table("notes").select(
+                    "id, original_filename, thumbnail_url, file_type"
+                ).in_("id", note_ids).execute()
+                notes_map = {n["id"]: n for n in (notes_response.data or [])}
+
             post_ids = [p["id"] for p in posts]
             votes = supabase.table("post_votes").select("post_id, vote_type").eq(
                 "user_id", user_id
@@ -13626,6 +13644,9 @@ def get_trending_posts():
             for post in posts:
                 post["user_vote_type"] = votes_map.get(post["id"])
                 post["is_bookmarked"] = post["id"] in bookmark_ids
+                # Add note details if post has a note
+                if post.get("note_id"):
+                    post["notes"] = notes_map.get(post["note_id"])
 
         return jsonify({"posts": posts, "page": page}), 200
 
@@ -14240,12 +14261,29 @@ def get_user_profile(username):
         profile_data["is_following"] = bool(follow.data)
         profile_data["is_own_profile"] = current_user_id == profile_user_id
 
+        # Get posts without join to avoid NULL note_id issues
         posts = supabase.table("social_posts").select(
-            "id, post_type, created_at, score, comment_count, "
-            "notes(thumbnail_url, file_type)"
+            "id, post_type, created_at, score, comment_count, note_id"
         ).eq("user_id", profile_user_id).order("created_at", desc=True).limit(12).execute()
 
-        profile_data["recent_posts"] = posts.data or []
+        recent_posts = posts.data or []
+
+        # Fetch note details separately for posts that have notes
+        if recent_posts:
+            note_ids = [p["note_id"] for p in recent_posts if p.get("note_id")]
+            notes_map = {}
+            if note_ids:
+                notes_response = supabase.table("notes").select(
+                    "id, thumbnail_url, file_type"
+                ).in_("id", note_ids).execute()
+                notes_map = {n["id"]: n for n in (notes_response.data or [])}
+
+            # Add note details to posts
+            for post in recent_posts:
+                if post.get("note_id"):
+                    post["notes"] = notes_map.get(post["note_id"])
+
+        profile_data["recent_posts"] = recent_posts
 
         return jsonify({"profile": profile_data}), 200
 
