@@ -14015,6 +14015,28 @@ def vote_on_comment(comment_id):
 
 # --- PROFILES & FOLLOWERS ---
 
+@app.route("/api/user/profile", methods=["GET"])
+@supabase_auth_required
+def get_current_user_profile():
+    """Get current user's basic profile info"""
+    try:
+        user_id = request.user_id
+
+        # Get user's profile
+        response = supabase.table("user_profiles").select(
+            "id, username, display_name, bio, avatar_url, banner_url"
+        ).eq("id", user_id).single().execute()
+
+        if not response.data:
+            return jsonify({"error": "Profile not found"}), 404
+
+        return jsonify({"profile": response.data}), 200
+
+    except Exception as e:
+        debug_log(f"Get current user profile error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/social/profile/<username>", methods=["GET"])
 @supabase_auth_required
 @account_not_frozen
