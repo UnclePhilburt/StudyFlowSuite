@@ -13571,21 +13571,39 @@ def get_social_feed():
             note_ids = [p["note_id"] for p in posts if p.get("note_id")]
             notes_map = {}
             if note_ids:
-                notes_response = supabase.table("notes").select(
-                    "id, original_filename, thumbnail_url, file_type"
-                ).in_("id", note_ids).execute()
+                # Use .eq() for single ID, .in_() for multiple to avoid 400 error
+                if len(note_ids) == 1:
+                    notes_response = supabase.table("notes").select(
+                        "id, original_filename, thumbnail_url, file_type"
+                    ).eq("id", note_ids[0]).execute()
+                else:
+                    notes_response = supabase.table("notes").select(
+                        "id, original_filename, thumbnail_url, file_type"
+                    ).in_("id", note_ids).execute()
                 notes_map = {n["id"]: n for n in (notes_response.data or [])}
 
             # Add user interaction flags and note details
             post_ids = [p["id"] for p in posts]
-            votes = supabase.table("post_votes").select("post_id, vote_type").eq(
-                "user_id", user_id
-            ).in_("post_id", post_ids).execute()
+
+            # Use .eq() for single ID, .in_() for multiple to avoid 400 error
+            if len(post_ids) == 1:
+                votes = supabase.table("post_votes").select("post_id, vote_type").eq(
+                    "user_id", user_id
+                ).eq("post_id", post_ids[0]).execute()
+            else:
+                votes = supabase.table("post_votes").select("post_id, vote_type").eq(
+                    "user_id", user_id
+                ).in_("post_id", post_ids).execute()
             votes_map = {v["post_id"]: v["vote_type"] for v in (votes.data or [])}
 
-            bookmarks = supabase.table("post_bookmarks").select("post_id").eq(
-                "user_id", user_id
-            ).in_("post_id", post_ids).execute()
+            if len(post_ids) == 1:
+                bookmarks = supabase.table("post_bookmarks").select("post_id").eq(
+                    "user_id", user_id
+                ).eq("post_id", post_ids[0]).execute()
+            else:
+                bookmarks = supabase.table("post_bookmarks").select("post_id").eq(
+                    "user_id", user_id
+                ).in_("post_id", post_ids).execute()
             bookmark_ids = {b["post_id"] for b in (bookmarks.data or [])}
 
             for post in posts:
@@ -13625,20 +13643,38 @@ def get_trending_posts():
             note_ids = [p["note_id"] for p in posts if p.get("note_id")]
             notes_map = {}
             if note_ids:
-                notes_response = supabase.table("notes").select(
-                    "id, original_filename, thumbnail_url, file_type"
-                ).in_("id", note_ids).execute()
+                # Use .eq() for single ID, .in_() for multiple to avoid 400 error
+                if len(note_ids) == 1:
+                    notes_response = supabase.table("notes").select(
+                        "id, original_filename, thumbnail_url, file_type"
+                    ).eq("id", note_ids[0]).execute()
+                else:
+                    notes_response = supabase.table("notes").select(
+                        "id, original_filename, thumbnail_url, file_type"
+                    ).in_("id", note_ids).execute()
                 notes_map = {n["id"]: n for n in (notes_response.data or [])}
 
             post_ids = [p["id"] for p in posts]
-            votes = supabase.table("post_votes").select("post_id, vote_type").eq(
-                "user_id", user_id
-            ).in_("post_id", post_ids).execute()
+
+            # Use .eq() for single ID, .in_() for multiple to avoid 400 error
+            if len(post_ids) == 1:
+                votes = supabase.table("post_votes").select("post_id, vote_type").eq(
+                    "user_id", user_id
+                ).eq("post_id", post_ids[0]).execute()
+            else:
+                votes = supabase.table("post_votes").select("post_id, vote_type").eq(
+                    "user_id", user_id
+                ).in_("post_id", post_ids).execute()
             votes_map = {v["post_id"]: v["vote_type"] for v in (votes.data or [])}
 
-            bookmarks = supabase.table("post_bookmarks").select("post_id").eq(
-                "user_id", user_id
-            ).in_("post_id", post_ids).execute()
+            if len(post_ids) == 1:
+                bookmarks = supabase.table("post_bookmarks").select("post_id").eq(
+                    "user_id", user_id
+                ).eq("post_id", post_ids[0]).execute()
+            else:
+                bookmarks = supabase.table("post_bookmarks").select("post_id").eq(
+                    "user_id", user_id
+                ).in_("post_id", post_ids).execute()
             bookmark_ids = {b["post_id"] for b in (bookmarks.data or [])}
 
             for post in posts:
@@ -14273,9 +14309,15 @@ def get_user_profile(username):
             note_ids = [p["note_id"] for p in recent_posts if p.get("note_id")]
             notes_map = {}
             if note_ids:
-                notes_response = supabase.table("notes").select(
-                    "id, thumbnail_url, file_type"
-                ).in_("id", note_ids).execute()
+                # Use .eq() for single ID, .in_() for multiple to avoid 400 error
+                if len(note_ids) == 1:
+                    notes_response = supabase.table("notes").select(
+                        "id, thumbnail_url, file_type"
+                    ).eq("id", note_ids[0]).execute()
+                else:
+                    notes_response = supabase.table("notes").select(
+                        "id, thumbnail_url, file_type"
+                    ).in_("id", note_ids).execute()
                 notes_map = {n["id"]: n for n in (notes_response.data or [])}
 
             # Add note details to posts
@@ -14323,21 +14365,39 @@ def get_user_posts(username):
             note_ids = [p["note_id"] for p in posts if p.get("note_id")]
             notes_map = {}
             if note_ids:
-                notes_response = supabase.table("notes").select(
-                    "id, original_filename, thumbnail_url, file_type"
-                ).in_("id", note_ids).execute()
+                # Use .eq() for single ID, .in_() for multiple to avoid 400 error
+                if len(note_ids) == 1:
+                    notes_response = supabase.table("notes").select(
+                        "id, original_filename, thumbnail_url, file_type"
+                    ).eq("id", note_ids[0]).execute()
+                else:
+                    notes_response = supabase.table("notes").select(
+                        "id, original_filename, thumbnail_url, file_type"
+                    ).in_("id", note_ids).execute()
                 notes_map = {n["id"]: n for n in (notes_response.data or [])}
 
             # Get user interactions
             post_ids = [p["id"] for p in posts]
-            votes = supabase.table("post_votes").select("post_id, vote_type").eq(
-                "user_id", user_id
-            ).in_("post_id", post_ids).execute()
+
+            # Use .eq() for single ID, .in_() for multiple to avoid 400 error
+            if len(post_ids) == 1:
+                votes = supabase.table("post_votes").select("post_id, vote_type").eq(
+                    "user_id", user_id
+                ).eq("post_id", post_ids[0]).execute()
+            else:
+                votes = supabase.table("post_votes").select("post_id, vote_type").eq(
+                    "user_id", user_id
+                ).in_("post_id", post_ids).execute()
             votes_map = {v["post_id"]: v["vote_type"] for v in (votes.data or [])}
 
-            bookmarks = supabase.table("post_bookmarks").select("post_id").eq(
-                "user_id", user_id
-            ).in_("post_id", post_ids).execute()
+            if len(post_ids) == 1:
+                bookmarks = supabase.table("post_bookmarks").select("post_id").eq(
+                    "user_id", user_id
+                ).eq("post_id", post_ids[0]).execute()
+            else:
+                bookmarks = supabase.table("post_bookmarks").select("post_id").eq(
+                    "user_id", user_id
+                ).in_("post_id", post_ids).execute()
             bookmark_ids = {b["post_id"] for b in (bookmarks.data or [])}
 
             for post in posts:
