@@ -62,7 +62,7 @@ CREATE OR REPLACE FUNCTION update_feature_request_timestamp()
 RETURNS TRIGGER AS $$
 BEGIN
     NEW.updated_at = NOW();
-    IF NEW.status = 'completed' AND OLD.status != 'completed' THEN
+    IF NEW.status = 'completed' AND (OLD.status IS NULL OR OLD.status != 'completed') THEN
         NEW.completed_at = NOW();
     END IF;
     RETURN NEW;
@@ -88,15 +88,11 @@ CREATE POLICY "Users can create feature requests"
     ON feature_requests FOR INSERT
     WITH CHECK (auth.uid() = user_id);
 
--- Users can update their own requests (only title/description, not status)
+-- Users can update their own requests (backend validates they only update title/description)
 CREATE POLICY "Users can update own requests"
     ON feature_requests FOR UPDATE
     USING (auth.uid() = user_id)
-    WITH CHECK (
-        auth.uid() = user_id
-        AND status = OLD.status  -- Cannot change status
-        AND admin_response = OLD.admin_response  -- Cannot change admin response
-    );
+    WITH CHECK (auth.uid() = user_id);
 
 -- Service role (backend/admin) can update any request
 CREATE POLICY "Service role can update any request"
