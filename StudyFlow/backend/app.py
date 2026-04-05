@@ -13533,16 +13533,24 @@ def get_social_feed():
         followed_user_ids.append(user_id)
 
         # Get posts from followed users + own posts
-        if followed_user_ids:
+        if len(followed_user_ids) == 1:
+            # Single ID - use .eq() instead of .in_()
+            response = supabase.table("social_posts").select(
+                "*, notes(original_filename, thumbnail_url, file_type)"
+            ).eq("user_id", followed_user_ids[0]).order(
+                "created_at", desc=True
+            ).limit(per_page).offset(offset).execute()
+        elif len(followed_user_ids) > 1:
+            # Multiple IDs - use .in_()
             response = supabase.table("social_posts").select(
                 "*, notes(original_filename, thumbnail_url, file_type)"
             ).in_("user_id", followed_user_ids).order(
                 "created_at", desc=True
             ).limit(per_page).offset(offset).execute()
-
-            posts = response.data or []
         else:
-            posts = []
+            response = None
+
+        posts = response.data if response else []
 
         # Add user interaction flags
         if posts:
