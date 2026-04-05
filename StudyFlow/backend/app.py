@@ -14292,6 +14292,68 @@ def get_user_profile(username):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/social/profile/<username>/posts", methods=["GET"])
+@supabase_auth_required
+@account_not_frozen
+def get_user_posts(username):
+    """Get posts for a specific user with pagination"""
+    try:
+        user_id = request.user_id
+        page = int(request.args.get("page", 1))
+        per_page = 20
+        offset = (page - 1) * per_page
+
+        # Get user ID from username
+        profile = supabase.table("user_profiles").select("id").eq("username", username).single().execute()
+
+        if not profile.data:
+            return jsonify({"error": "User not found"}), 404
+
+        profile_user_id = profile.data["id"]
+
+        # Get posts without join to avoid NULL note_id issues
+        response = supabase.table("social_posts").select("*").eq(
+            "user_id", profile_user_id
+        ).order("created_at", desc=True).limit(per_page).offset(offset).execute()
+
+        posts = response.data or []
+
+        # Fetch note details separately for posts that have notes
+        if posts:
+            note_ids = [p["note_id"] for p in posts if p.get("note_id")]
+            notes_map = {}
+            if note_ids:
+                notes_response = supabase.table("notes").select(
+                    "id, original_filename, thumbnail_url, file_type"
+                ).in_("id", note_ids).execute()
+                notes_map = {n["id"]: n for n in (notes_response.data or [])}
+
+            # Get user interactions
+            post_ids = [p["id"] for p in posts]
+            votes = supabase.table("post_votes").select("post_id, vote_type").eq(
+                "user_id", user_id
+            ).in_("post_id", post_ids).execute()
+            votes_map = {v["post_id"]: v["vote_type"] for v in (votes.data or [])}
+
+            bookmarks = supabase.table("post_bookmarks").select("post_id").eq(
+                "user_id", user_id
+            ).in_("post_id", post_ids).execute()
+            bookmark_ids = {b["post_id"] for b in (bookmarks.data or [])}
+
+            for post in posts:
+                post["user_vote_type"] = votes_map.get(post["id"])
+                post["is_bookmarked"] = post["id"] in bookmark_ids
+                # Add note details if post has a note
+                if post.get("note_id"):
+                    post["notes"] = notes_map.get(post["note_id"])
+
+        return jsonify({"posts": posts, "page": page}), 200
+
+    except Exception as e:
+        debug_log(f"Get user posts error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/social/profile", methods=["PATCH"])
 @supabase_auth_required
 @account_not_frozen
