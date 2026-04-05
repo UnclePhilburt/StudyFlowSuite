@@ -1123,6 +1123,32 @@ def mobile_dashboard():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/notes", methods=["GET"])
+@supabase_auth_required
+def get_user_notes_list():
+    """Get list of user's notes for dropdowns/selection"""
+    try:
+        user_id = request.user_id
+        from StudyFlow.backend.supabase_client import get_user_notes
+        notes = get_user_notes(user_id)
+
+        formatted_notes = []
+        for note in notes:
+            formatted_notes.append({
+                "id": note['id'],
+                "original_filename": note.get('original_filename', ''),
+                "file_type": note.get('file_type'),
+                "thumbnail_url": note.get('thumbnail_url'),
+                "uploaded_at": note.get('uploaded_at'),
+                "processed": note.get('processed')
+            })
+
+        return jsonify({"notes": formatted_notes}), 200
+    except Exception as e:
+        debug_log(f"Get notes list error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/notes/page-init", methods=["GET"])
 @supabase_auth_required
 def notes_page_init():
