@@ -13574,16 +13574,20 @@ def get_social_feed():
                 try:
                     # Use .eq() for single ID, .in_() for multiple to avoid 400 error
                     if len(note_ids) == 1:
+                        debug_log(f"[FEED] Fetching single note: {note_ids[0]}")
                         notes_response = supabase.table("notes").select(
                             "id, original_filename, thumbnail_url, file_type"
                         ).eq("id", note_ids[0]).execute()
+                        debug_log(f"[FEED] Note response: {notes_response}")
                     else:
+                        debug_log(f"[FEED] Fetching multiple notes: {note_ids}")
                         notes_response = supabase.table("notes").select(
                             "id, original_filename, thumbnail_url, file_type"
                         ).in_("id", note_ids).execute()
                     notes_map = {n["id"]: n for n in (notes_response.data or [])}
+                    debug_log(f"[FEED] Fetched {len(notes_map)} notes successfully")
                 except Exception as e:
-                    debug_log(f"Error fetching notes for feed: {e}")
+                    debug_log(f"[FEED] Error fetching notes: {e}\n{traceback.format_exc()}")
                     notes_map = {}
 
             # Add user interaction flags and note details
