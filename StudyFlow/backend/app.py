@@ -4421,6 +4421,578 @@ def assistant_digest():
         return jsonify({"summary": "Hi! Ready to help.", "events_today": [], "unread_notifications": 0, "total_notes": 0, "shared_notes": 0}), 200
 
 
+@app.route("/api/assistant/summarize/<note_id>", methods=["GET"])
+@supabase_auth_required
+def assistant_summarize(note_id):
+    """Summarize a note's content using AI."""
+    try:
+        import time
+        start_time = time.time()
+
+        # Get note chunks
+        chunks_res = supabase.table("note_chunks").select("chunk_text, content_summary").eq("note_id", note_id).order("chunk_index").execute()
+
+        if not chunks_res.data:
+            return jsonify({"error": "No content found for this note"}), 404
+
+        # Build full text from chunks
+        full_text = ""
+        for chunk in chunks_res.data:
+            text = chunk.get("content_summary") or chunk.get("chunk_text", "")
+            if text:
+                full_text += text + "\n\n"
+
+        if not full_text.strip():
+            return jsonify({"error": "Note has no readable content"}), 404
+
+        # Truncate to ~6000 chars for the AI call
+        content = full_text[:6000]
+
+        # Get note title
+        note_res = supabase.table("notes").select("original_filename").eq("id", note_id).execute()
+        title = "this note"
+        if note_res.data:
+            title = note_res.data[0].get("original_filename") or "this note"
+
+        from openai import OpenAI
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are a study assistant. Summarize the following note concisely. Highlight the key concepts, main arguments, and important details. Use bullet points. Keep it under 200 words."},
+                {"role": "user", "content": f"Note title: {title}\n\nContent:\n{content}"}
+            ],
+            max_tokens=400,
+            temperature=0.5
+        )
+
+        summary = response.choices[0].message.content
+        elapsed = int((time.time() - start_time) * 1000)
+
+        return jsonify({
+            "summary": summary,
+            "note_title": title,
+            "chunks_used": len(chunks_res.data),
+            "response_time_ms": elapsed
+        }), 200
+
+    except Exception as e:
+        debug_log(f"Assistant summarize error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": "Could not summarize this note right now"}), 500
+
+
+@app.route("/api/assistant/quiz/<note_id>", methods=["GET"])
+@supabase_auth_required
+def assistant_quiz_note(note_id):
+    """Generate a quick quiz from a specific note's content."""
+    try:
+        import time
+        start_time = time.time()
+
+        count = request.args.get("count", 5, type=int)
+        count = min(max(count, 3), 10)
+
+        # Get note chunks
+        chunks_res = supabase.table("note_chunks").select("chunk_text, content_summary").eq("note_id", note_id).order("chunk_index").execute()
+
+        if not chunks_res.data:
+            return jsonify({"error": "No content found for this note"}), 404
+
+        full_text = ""
+        for chunk in chunks_res.data:
+            text = chunk.get("content_summary") or chunk.get("chunk_text", "")
+            if text:
+                full_text += text + "\n\n"
+
+        if not full_text.strip():
+            return jsonify({"error": "Note has no readable content"}), 404
+
+        content = full_text[:6000]
+
+        # Get note title
+        note_res = supabase.table("notes").select("original_filename").eq("id", note_id).execute()
+        title = "this note"
+        if note_res.data:
+            title = note_res.data[0].get("original_filename") or "this note"
+
+        from openai import OpenAI
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are a quiz generator. Create quiz questions that test understanding of the provided study material. Return ONLY valid JSON, no other text."},
+                {"role": "user", "content": f"""Based on this note titled "{title}", generate exactly {count} multiple choice questions.
+
+Note content:
+{content}
+
+Return a JSON array:
+[{{"question": "What is...?", "options": ["A) ...", "B) ...", "C) ...", "D) ..."], "correct": 0, "explanation": "Brief explanation"}}]
+
+The "correct" field is the zero-based index of the correct option.
+Return ONLY the JSON array, no markdown, no explanation."""}
+            ],
+            max_tokens=800,
+            temperature=0.7
+        )
+
+        raw = response.choices[0].message.content.strip()
+        # Clean markdown if present
+        if raw.startswith("```"):
+            raw = raw.split("\n", 1)[1] if "\n" in raw else raw[3:]
+            if raw.endswith("```"):
+                raw = raw[:-3]
+            raw = raw.strip()
+
+        questions = json.loads(raw)
+        elapsed = int((time.time() - start_time) * 1000)
+
+        return jsonify({
+            "questions": questions,
+            "note_title": title,
+            "count": len(questions),
+            "response_time_ms": elapsed
+        }), 200
+
+    except json.JSONDecodeError:
+        return jsonify({"error": "Failed to generate quiz. Try again."}), 500
+    except Exception as e:
+        debug_log(f"Assistant quiz error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": "Could not generate quiz right now"}), 500
+
+
+## ====== POMODORO STATS ======
+
+@app.route("/api/pomodoro/complete", methods=["POST"])
+@supabase_auth_required
+def save_pomodoro():
+    """Save a completed pomodoro round."""
+    try:
+        data = request.get_json() or {}
+        work_minutes = data.get("work_minutes", 25)
+
+        supabase.table("pomodoro_completions").insert({
+            "user_id": request.user_id,
+            "work_minutes": work_minutes
+        }).execute()
+
+        # Get total count for response
+        res = supabase.table("pomodoro_completions").select("id", count="exact").eq("user_id", request.user_id).execute()
+        total = res.count or 0
+
+        return jsonify({"success": True, "total_pomodoros": total}), 200
+    except Exception as e:
+        debug_log(f"Save pomodoro error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/pomodoro/stats", methods=["GET"])
+@supabase_auth_required
+def get_pomodoro_stats():
+    """Get pomodoro stats for the user."""
+    try:
+        res = supabase.table("pomodoro_completions").select("work_minutes, completed_at").eq("user_id", request.user_id).execute()
+        completions = res.data or []
+
+        total = len(completions)
+        total_minutes = sum(c.get('work_minutes', 25) for c in completions)
+        today = datetime.utcnow().strftime('%Y-%m-%d')
+        today_count = sum(1 for c in completions if c.get('completed_at', '')[:10] == today)
+
+        return jsonify({
+            "total_pomodoros": total,
+            "total_minutes": total_minutes,
+            "today_pomodoros": today_count
+        }), 200
+    except Exception as e:
+        debug_log(f"Pomodoro stats error: {e}\n{traceback.format_exc()}")
+        return jsonify({"total_pomodoros": 0, "total_minutes": 0, "today_pomodoros": 0}), 200
+
+
+## ====== ACHIEVEMENTS ======
+
+@app.route("/api/achievements", methods=["GET"])
+@supabase_auth_required
+def get_achievements():
+    """Compute achievement progress from existing database tables."""
+    try:
+        user_id = request.user_id
+
+        # Gather stats from various tables
+        stats = {}
+
+        # Note counts
+        try:
+            res = supabase.table("notes").select("id, is_public, uploaded_at", count="exact").eq("user_id", user_id).execute()
+            stats['notes_uploaded'] = res.count or 0
+            stats['notes_public'] = len([n for n in (res.data or []) if n.get('is_public')])
+        except:
+            stats['notes_uploaded'] = 0
+            stats['notes_public'] = 0
+
+        # Folders
+        try:
+            res = supabase.table("folders").select("id", count="exact").eq("user_id", user_id).execute()
+            stats['folders_created'] = res.count or 0
+        except:
+            stats['folders_created'] = 0
+
+        # Shared notes
+        try:
+            res = supabase.table("shared_notes").select("id", count="exact").eq("user_id", user_id).execute()
+            stats['notes_shared'] = res.count or 0
+        except:
+            stats['notes_shared'] = 0
+
+        # Conversations
+        try:
+            res = supabase.table("conversations").select("id", count="exact").eq("user_id", user_id).execute()
+            stats['conversations'] = res.count or 0
+        except:
+            stats['conversations'] = 0
+
+        # Study groups
+        try:
+            res = supabase.table("study_group_members").select("group_id", count="exact").eq("user_id", user_id).execute()
+            stats['groups_joined'] = res.count or 0
+        except:
+            stats['groups_joined'] = 0
+
+        # Groups created (owner)
+        try:
+            res = supabase.table("study_groups").select("id", count="exact").eq("owner_id", user_id).execute()
+            stats['groups_created'] = res.count or 0
+        except:
+            stats['groups_created'] = 0
+
+        # Group messages sent
+        try:
+            res = supabase.table("study_group_messages").select("id", count="exact").eq("user_id", user_id).execute()
+            stats['group_messages'] = res.count or 0
+        except:
+            stats['group_messages'] = 0
+
+        # Notes viewed by others (usage/help count)
+        try:
+            res = supabase.table("note_views").select("id", count="exact").eq("note_owner_id", user_id).execute()
+            stats['notes_helped'] = res.count or 0
+        except:
+            try:
+                # Fallback: count views on user's notes
+                user_notes = supabase.table("notes").select("id").eq("user_id", user_id).execute()
+                note_ids = [n['id'] for n in (user_notes.data or [])]
+                if note_ids:
+                    res = supabase.table("note_views").select("id", count="exact").in_("note_id", note_ids).execute()
+                    stats['notes_helped'] = res.count or 0
+                else:
+                    stats['notes_helped'] = 0
+            except:
+                stats['notes_helped'] = 0
+
+        # Edu verified
+        try:
+            res = supabase.table("user_profiles").select("edu_verified").eq("id", user_id).execute()
+            stats['edu_verified'] = bool(res.data and res.data[0].get('edu_verified'))
+        except:
+            stats['edu_verified'] = False
+
+        # Preferences (for customization check)
+        try:
+            res = supabase.table("user_profiles").select("preferences").eq("id", user_id).execute()
+            prefs = (res.data[0].get('preferences') or {}) if res.data else {}
+            stats['has_theme'] = bool(prefs.get('theme') and prefs['theme'] != 'default')
+            stats['has_flo_custom'] = bool(prefs.get('flo', {}).get('color') and prefs['flo']['color'] != 'sage')
+            stats['has_wallpaper'] = bool(prefs.get('wallpaper'))
+            stats['has_flo_hat'] = bool(prefs.get('flo', {}).get('hat') and prefs['flo']['hat'] != 'none')
+            stats['has_custom_accent'] = bool(prefs.get('accent'))
+            stats['has_custom_font'] = bool(prefs.get('font') and prefs['font'] != 'inter')
+            stats['has_custom_cursor'] = bool(prefs.get('cursor') and prefs['cursor'] != 'default')
+            stats['flo_shape'] = prefs.get('flo', {}).get('shape', 'sphere')
+        except:
+            stats['has_theme'] = False
+            stats['has_flo_custom'] = False
+            stats['has_wallpaper'] = False
+            stats['has_flo_hat'] = False
+            stats['has_custom_accent'] = False
+            stats['has_custom_font'] = False
+            stats['has_custom_cursor'] = False
+            stats['flo_shape'] = 'sphere'
+
+        # Dashboard widgets
+        try:
+            res = supabase.table("user_profiles").select("dashboard_layout").eq("id", user_id).execute()
+            layout = (res.data[0].get('dashboard_layout') or {}) if res.data else {}
+            widgets = layout.get('layout', [])
+            stats['widget_count'] = len(widgets) if isinstance(widgets, list) else 0
+        except:
+            stats['widget_count'] = 0
+
+        # AI chat messages
+        try:
+            res = supabase.table("conversation_messages").select("id", count="exact").eq("role", "user").execute()
+            # This counts all messages, but we want user's. Use conversations table.
+            user_convs = supabase.table("conversations").select("id").eq("user_id", user_id).execute()
+            conv_ids = [c['id'] for c in (user_convs.data or [])]
+            if conv_ids:
+                msgs = supabase.table("conversation_messages").select("id", count="exact").in_("conversation_id", conv_ids[:50]).eq("role", "user").execute()
+                stats['ai_messages'] = msgs.count or 0
+            else:
+                stats['ai_messages'] = 0
+        except:
+            stats['ai_messages'] = 0
+
+        # Pomodoros
+        try:
+            res = supabase.table("pomodoro_completions").select("work_minutes", count="exact").eq("user_id", user_id).execute()
+            stats['pomodoros'] = res.count or 0
+            stats['pomodoro_minutes'] = sum(r.get('work_minutes', 25) for r in (res.data or []))
+        except:
+            stats['pomodoros'] = 0
+            stats['pomodoro_minutes'] = 0
+
+        # Calendar events
+        try:
+            res = supabase.table("calendar_events").select("id", count="exact").eq("user_id", user_id).execute()
+            stats['calendar_events'] = res.count or 0
+        except:
+            stats['calendar_events'] = 0
+
+        # Annotations
+        try:
+            res = supabase.table("note_annotations").select("id", count="exact").eq("user_id", user_id).execute()
+            stats['annotations'] = res.count or 0
+        except:
+            stats['annotations'] = 0
+
+        # Downloads
+        try:
+            res = supabase.table("download_transactions").select("id", count="exact").eq("user_id", user_id).execute()
+            stats['downloads'] = res.count or 0
+        except:
+            stats['downloads'] = 0
+
+        # Favorites
+        try:
+            res = supabase.table("note_favorites").select("id", count="exact").eq("user_id", user_id).execute()
+            stats['favorites'] = res.count or 0
+        except:
+            stats['favorites'] = 0
+
+        # Current hour (for time-based achievements)
+        stats['current_hour'] = datetime.utcnow().hour
+
+        # Account age in days
+        try:
+            res = supabase.table("user_profiles").select("created_at").eq("id", user_id).execute()
+            if res.data and res.data[0].get('created_at'):
+                created = datetime.fromisoformat(res.data[0]['created_at'].replace('Z', '+00:00'))
+                stats['account_age_days'] = (datetime.now(created.tzinfo) - created).days
+            else:
+                stats['account_age_days'] = 0
+        except:
+            stats['account_age_days'] = 0
+
+        # Define achievements
+        achievements = [
+            # Getting Started
+            {"id": "first_steps", "name": "First Steps", "desc": "Create your account", "icon": "rocket", "category": "Getting Started", "unlocked": True, "progress": 1, "goal": 1},
+            {"id": "scholar", "name": "Scholar", "desc": "Verify your .edu email", "icon": "graduation", "category": "Getting Started", "unlocked": stats['edu_verified'], "progress": 1 if stats['edu_verified'] else 0, "goal": 1},
+            {"id": "librarian", "name": "Librarian", "desc": "Upload your first note", "icon": "book", "category": "Getting Started", "unlocked": stats['notes_uploaded'] >= 1, "progress": min(stats['notes_uploaded'], 1), "goal": 1},
+            {"id": "social_butterfly", "name": "Social Butterfly", "desc": "Join your first study group", "icon": "users", "category": "Getting Started", "unlocked": stats['groups_joined'] >= 1, "progress": min(stats['groups_joined'], 1), "goal": 1},
+            {"id": "conversationalist", "name": "Conversationalist", "desc": "Start your first AI chat", "icon": "chat", "category": "Getting Started", "unlocked": stats['conversations'] >= 1, "progress": min(stats['conversations'], 1), "goal": 1},
+
+            # Contributing
+            {"id": "sharer", "name": "Sharer", "desc": "Share a note via link", "icon": "link", "category": "Contributing", "unlocked": stats['notes_shared'] >= 1, "progress": min(stats['notes_shared'], 1), "goal": 1},
+            {"id": "open_book", "name": "Open Book", "desc": "Make 5 notes public on the Nexus", "icon": "globe", "category": "Contributing", "unlocked": stats['notes_public'] >= 5, "progress": min(stats['notes_public'], 5), "goal": 5},
+            {"id": "community_pillar", "name": "Community Pillar", "desc": "Make 25 notes public", "icon": "star", "category": "Contributing", "unlocked": stats['notes_public'] >= 25, "progress": min(stats['notes_public'], 25), "goal": 25},
+            {"id": "helping_hand", "name": "Helping Hand", "desc": "Your notes help 10 students", "icon": "heart", "category": "Contributing", "unlocked": stats['notes_helped'] >= 10, "progress": min(stats['notes_helped'], 10), "goal": 10},
+            {"id": "mentor", "name": "Mentor", "desc": "Your notes help 100 students", "icon": "award", "category": "Contributing", "unlocked": stats['notes_helped'] >= 100, "progress": min(stats['notes_helped'], 100), "goal": 100},
+            {"id": "legend", "name": "Legend", "desc": "Your notes help 1000 students", "icon": "crown", "category": "Contributing", "unlocked": stats['notes_helped'] >= 1000, "progress": min(stats['notes_helped'], 1000), "goal": 1000},
+
+            # Collecting
+            {"id": "collector", "name": "Collector", "desc": "Upload 10 notes", "icon": "folder", "category": "Collecting", "unlocked": stats['notes_uploaded'] >= 10, "progress": min(stats['notes_uploaded'], 10), "goal": 10},
+            {"id": "archivist", "name": "Archivist", "desc": "Upload 50 notes", "icon": "archive", "category": "Collecting", "unlocked": stats['notes_uploaded'] >= 50, "progress": min(stats['notes_uploaded'], 50), "goal": 50},
+            {"id": "hoarder", "name": "Hoarder", "desc": "Upload 100 notes", "icon": "box", "category": "Collecting", "unlocked": stats['notes_uploaded'] >= 100, "progress": min(stats['notes_uploaded'], 100), "goal": 100},
+            {"id": "organized", "name": "Organized", "desc": "Create 5 folders", "icon": "layers", "category": "Collecting", "unlocked": stats['folders_created'] >= 5, "progress": min(stats['folders_created'], 5), "goal": 5},
+            {"id": "annotator", "name": "Annotator", "desc": "Annotate a note", "icon": "pen", "category": "Collecting", "unlocked": stats['annotations'] >= 1, "progress": min(stats['annotations'], 1), "goal": 1},
+            {"id": "bookmark_lover", "name": "Bookmark Lover", "desc": "Favorite 10 notes", "icon": "bookmark", "category": "Collecting", "unlocked": stats['favorites'] >= 10, "progress": min(stats['favorites'], 10), "goal": 10},
+            {"id": "scholar_reader", "name": "Scholar Reader", "desc": "Download 20 notes", "icon": "download", "category": "Collecting", "unlocked": stats['downloads'] >= 20, "progress": min(stats['downloads'], 20), "goal": 20},
+
+            # Social
+            {"id": "team_player", "name": "Team Player", "desc": "Send a message in a study group", "icon": "message", "category": "Social", "unlocked": stats['group_messages'] >= 1, "progress": min(stats['group_messages'], 1), "goal": 1},
+            {"id": "leader", "name": "Leader", "desc": "Create a study group", "icon": "flag", "category": "Social", "unlocked": stats['groups_created'] >= 1, "progress": min(stats['groups_created'], 1), "goal": 1},
+            {"id": "chatterbox", "name": "Chatterbox", "desc": "Send 50 group messages", "icon": "megaphone", "category": "Social", "unlocked": stats['group_messages'] >= 50, "progress": min(stats['group_messages'], 50), "goal": 50},
+            {"id": "social_network", "name": "Social Network", "desc": "Join 5 study groups", "icon": "network", "category": "Social", "unlocked": stats['groups_joined'] >= 5, "progress": min(stats['groups_joined'], 5), "goal": 5},
+
+            # AI & Learning
+            {"id": "curious_mind", "name": "Curious Mind", "desc": "Ask AI 10 questions", "icon": "brain", "category": "AI & Learning", "unlocked": stats['ai_messages'] >= 10, "progress": min(stats['ai_messages'], 10), "goal": 10},
+            {"id": "deep_thinker", "name": "Deep Thinker", "desc": "Ask AI 100 questions", "icon": "lightbulb", "category": "AI & Learning", "unlocked": stats['ai_messages'] >= 100, "progress": min(stats['ai_messages'], 100), "goal": 100},
+            {"id": "knowledge_seeker", "name": "Knowledge Seeker", "desc": "Have 20 AI conversations", "icon": "telescope", "category": "AI & Learning", "unlocked": stats['conversations'] >= 20, "progress": min(stats['conversations'], 20), "goal": 20},
+            {"id": "planner", "name": "Planner", "desc": "Add 10 calendar events", "icon": "calendar", "category": "AI & Learning", "unlocked": stats['calendar_events'] >= 10, "progress": min(stats['calendar_events'], 10), "goal": 10},
+
+            # Focus
+            {"id": "focused", "name": "Focused", "desc": "Complete your first pomodoro", "icon": "timer", "category": "Focus", "unlocked": stats['pomodoros'] >= 1, "progress": min(stats['pomodoros'], 1), "goal": 1},
+            {"id": "in_the_zone", "name": "In the Zone", "desc": "Complete 10 pomodoros", "icon": "fire", "category": "Focus", "unlocked": stats['pomodoros'] >= 10, "progress": min(stats['pomodoros'], 10), "goal": 10},
+            {"id": "deep_work", "name": "Deep Work", "desc": "Complete 50 pomodoros", "icon": "mountain", "category": "Focus", "unlocked": stats['pomodoros'] >= 50, "progress": min(stats['pomodoros'], 50), "goal": 50},
+            {"id": "flow_state", "name": "Flow State", "desc": "Complete 100 pomodoros", "icon": "wave", "category": "Focus", "unlocked": stats['pomodoros'] >= 100, "progress": min(stats['pomodoros'], 100), "goal": 100},
+            {"id": "time_lord", "name": "Time Lord", "desc": "Accumulate 1000 minutes of focus", "icon": "clock", "category": "Focus", "unlocked": stats['pomodoro_minutes'] >= 1000, "progress": min(stats['pomodoro_minutes'], 1000), "goal": 1000},
+
+            # Customization
+            {"id": "decorator", "name": "Decorator", "desc": "Change your dashboard theme", "icon": "palette", "category": "Customization", "unlocked": stats['has_theme'], "progress": 1 if stats['has_theme'] else 0, "goal": 1},
+            {"id": "wallpaper_fan", "name": "Wallpaper Fan", "desc": "Set a wallpaper", "icon": "image", "category": "Customization", "unlocked": stats['has_wallpaper'], "progress": 1 if stats['has_wallpaper'] else 0, "goal": 1},
+            {"id": "interior_designer", "name": "Interior Designer", "desc": "Add 10 widgets to your dashboard", "icon": "grid", "category": "Customization", "unlocked": stats['widget_count'] >= 10, "progress": min(stats['widget_count'], 10), "goal": 10},
+            {"id": "flos_friend", "name": "Flo's Friend", "desc": "Customize Flo's appearance", "icon": "sparkle", "category": "Customization", "unlocked": stats['has_flo_custom'], "progress": 1 if stats['has_flo_custom'] else 0, "goal": 1},
+            {"id": "hat_collector", "name": "Hat Collector", "desc": "Give Flo a hat", "icon": "tophat", "category": "Customization", "unlocked": stats['has_flo_hat'], "progress": 1 if stats['has_flo_hat'] else 0, "goal": 1},
+            {"id": "color_master", "name": "Color Master", "desc": "Set a custom accent color", "icon": "rainbow", "category": "Customization", "unlocked": stats['has_custom_accent'], "progress": 1 if stats['has_custom_accent'] else 0, "goal": 1},
+            {"id": "typographer", "name": "Typographer", "desc": "Change the font", "icon": "type", "category": "Customization", "unlocked": stats['has_custom_font'], "progress": 1 if stats['has_custom_font'] else 0, "goal": 1},
+            {"id": "cursor_crafter", "name": "Cursor Crafter", "desc": "Use a custom cursor", "icon": "cursor", "category": "Customization", "unlocked": stats['has_custom_cursor'], "progress": 1 if stats['has_custom_cursor'] else 0, "goal": 1},
+
+            # Hidden / Secret (shown as ??? until unlocked)
+            {"id": "night_owl", "name": "Night Owl", "desc": "Use StudyFlow between midnight and 4am", "icon": "moon", "category": "Secret", "hidden": True, "unlocked": 0 <= stats['current_hour'] <= 3, "progress": 1 if 0 <= stats['current_hour'] <= 3 else 0, "goal": 1},
+            {"id": "early_bird", "name": "Early Bird", "desc": "Use StudyFlow between 4am and 6am", "icon": "sunrise", "category": "Secret", "hidden": True, "unlocked": 4 <= stats['current_hour'] <= 5, "progress": 1 if 4 <= stats['current_hour'] <= 5 else 0, "goal": 1},
+            {"id": "veteran", "name": "Veteran", "desc": "Have an account for 30 days", "icon": "medal", "category": "Secret", "hidden": True, "unlocked": stats['account_age_days'] >= 30, "progress": min(stats['account_age_days'], 30), "goal": 30},
+            {"id": "old_timer", "name": "Old Timer", "desc": "Have an account for 365 days", "icon": "hourglass", "category": "Secret", "hidden": True, "unlocked": stats['account_age_days'] >= 365, "progress": min(stats['account_age_days'], 365), "goal": 365},
+            {"id": "widget_hoarder", "name": "Widget Hoarder", "desc": "Add 25 widgets to your dashboard", "icon": "infinity", "category": "Secret", "hidden": True, "unlocked": stats['widget_count'] >= 25, "progress": min(stats['widget_count'], 25), "goal": 25},
+            {"id": "sharing_spree", "name": "Sharing Spree", "desc": "Share 10 notes via link", "icon": "share", "category": "Secret", "hidden": True, "unlocked": stats['notes_shared'] >= 10, "progress": min(stats['notes_shared'], 10), "goal": 10},
+            {"id": "ai_addict", "name": "AI Addict", "desc": "Ask AI 500 questions", "icon": "robot", "category": "Secret", "hidden": True, "unlocked": stats['ai_messages'] >= 500, "progress": min(stats['ai_messages'], 500), "goal": 500},
+            {"id": "completionist", "name": "Completionist", "desc": "Unlock every other achievement", "icon": "trophy", "category": "Secret", "hidden": True, "unlocked": False, "progress": 0, "goal": 1},
+        ]
+
+        # Check completionist (unlocked if all non-completionist achievements are unlocked)
+        non_completionist = [a for a in achievements if a['id'] != 'completionist']
+        all_unlocked = all(a['unlocked'] for a in non_completionist)
+        for a in achievements:
+            if a['id'] == 'completionist':
+                a['unlocked'] = all_unlocked
+                a['progress'] = 1 if all_unlocked else 0
+
+        unlocked_count = sum(1 for a in achievements if a['unlocked'])
+
+        return jsonify({
+            "achievements": achievements,
+            "unlocked": unlocked_count,
+            "total": len(achievements),
+            "stats": stats
+        }), 200
+
+    except Exception as e:
+        debug_log(f"Achievements error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": "Could not load achievements"}), 500
+
+
+@app.route("/api/study-streak", methods=["GET"])
+@supabase_auth_required
+def get_study_streak():
+    """Get study activity heatmap data for the past year."""
+    try:
+        user_id = request.user_id
+        one_year_ago = (datetime.utcnow() - timedelta(days=365)).isoformat()
+        activity = {}
+
+        # Notes uploaded
+        try:
+            res = supabase.table("notes").select("uploaded_at").eq("user_id", user_id).gte("uploaded_at", one_year_ago).execute()
+            for r in (res.data or []):
+                day = r['uploaded_at'][:10]
+                activity[day] = activity.get(day, 0) + 2
+        except: pass
+
+        # Conversations started
+        try:
+            res = supabase.table("conversations").select("created_at").eq("user_id", user_id).gte("created_at", one_year_ago).execute()
+            for r in (res.data or []):
+                day = r['created_at'][:10]
+                activity[day] = activity.get(day, 0) + 1
+        except: pass
+
+        # Group messages
+        try:
+            res = supabase.table("study_group_messages").select("created_at").eq("user_id", user_id).gte("created_at", one_year_ago).execute()
+            for r in (res.data or []):
+                day = r['created_at'][:10]
+                activity[day] = activity.get(day, 0) + 1
+        except: pass
+
+        # Note views
+        try:
+            res = supabase.table("note_views").select("viewed_at").eq("user_id", user_id).gte("viewed_at", one_year_ago).execute()
+            for r in (res.data or []):
+                day = r['viewed_at'][:10]
+                activity[day] = activity.get(day, 0) + 1
+        except: pass
+
+        # Downloads
+        try:
+            res = supabase.table("download_transactions").select("downloaded_at").eq("user_id", user_id).gte("downloaded_at", one_year_ago).execute()
+            for r in (res.data or []):
+                day = r['downloaded_at'][:10]
+                activity[day] = activity.get(day, 0) + 1
+        except: pass
+
+        # Pomodoros
+        try:
+            res = supabase.table("pomodoro_completions").select("completed_at").eq("user_id", user_id).gte("completed_at", one_year_ago).execute()
+            for r in (res.data or []):
+                day = r['completed_at'][:10]
+                activity[day] = activity.get(day, 0) + 2
+        except: pass
+
+        # Calculate streaks
+        today = datetime.utcnow().strftime('%Y-%m-%d')
+        sorted_days = sorted(activity.keys(), reverse=True)
+
+        current_streak = 0
+        longest_streak = 0
+        temp_streak = 0
+        check_date = datetime.utcnow().date()
+
+        for i in range(365):
+            day_str = check_date.strftime('%Y-%m-%d')
+            if day_str in activity:
+                if i == 0 or (i > 0 and temp_streak > 0):
+                    temp_streak += 1
+                else:
+                    temp_streak = 1
+                if current_streak == 0 and i <= 1:
+                    current_streak = temp_streak
+            else:
+                if current_streak == 0 and i == 0:
+                    pass  # today not active yet, check yesterday
+                elif current_streak == 0 and temp_streak > 0:
+                    current_streak = temp_streak
+                longest_streak = max(longest_streak, temp_streak)
+                temp_streak = 0
+            check_date -= timedelta(days=1)
+
+        longest_streak = max(longest_streak, temp_streak)
+        if current_streak == 0:
+            current_streak = temp_streak
+
+        # Recalculate current streak properly
+        current_streak = 0
+        check = datetime.utcnow().date()
+        # Allow today to not have activity yet
+        if check.strftime('%Y-%m-%d') not in activity:
+            check -= timedelta(days=1)
+        while check.strftime('%Y-%m-%d') in activity:
+            current_streak += 1
+            check -= timedelta(days=1)
+
+        return jsonify({
+            "activity": activity,
+            "current_streak": current_streak,
+            "longest_streak": longest_streak,
+            "total_active_days": len(activity),
+            "today": today
+        }), 200
+
+    except Exception as e:
+        debug_log(f"Study streak error: {e}\n{traceback.format_exc()}")
+        return jsonify({"activity": {}, "current_streak": 0, "longest_streak": 0, "total_active_days": 0}), 200
+
+
 ## ====== NOTE SHARING ======
 
 @app.route("/api/notes/<note_id>/share", methods=["POST"])
