@@ -13574,20 +13574,26 @@ def get_social_feed():
                 try:
                     # Use .eq() for single ID, .in_() for multiple to avoid 400 error
                     if len(note_ids) == 1:
-                        debug_log(f"[FEED] Fetching single note: {note_ids[0]}")
+                        print(f"[FEED DEBUG] Fetching single note ID: {note_ids[0]}")
+                        print(f"[FEED DEBUG] Using service role client: {type(supabase)}")
                         notes_response = supabase.table("notes").select(
                             "id, original_filename, thumbnail_url, file_type"
                         ).eq("id", note_ids[0]).execute()
-                        debug_log(f"[FEED] Note response: {notes_response}")
+                        print(f"[FEED DEBUG] Response data: {notes_response.data}")
+                        print(f"[FEED DEBUG] Response count: {notes_response.count}")
                     else:
-                        debug_log(f"[FEED] Fetching multiple notes: {note_ids}")
+                        print(f"[FEED DEBUG] Fetching multiple notes: {len(note_ids)} notes")
                         notes_response = supabase.table("notes").select(
                             "id, original_filename, thumbnail_url, file_type"
                         ).in_("id", note_ids).execute()
                     notes_map = {n["id"]: n for n in (notes_response.data or [])}
-                    debug_log(f"[FEED] Fetched {len(notes_map)} notes successfully")
+                    print(f"[FEED DEBUG] Successfully mapped {len(notes_map)} notes")
                 except Exception as e:
-                    debug_log(f"[FEED] Error fetching notes: {e}\n{traceback.format_exc()}")
+                    print(f"[FEED ERROR] Exception type: {type(e)}")
+                    print(f"[FEED ERROR] Exception message: {str(e)}")
+                    print(f"[FEED ERROR] Full traceback:")
+                    import traceback
+                    traceback.print_exc()
                     notes_map = {}
 
             # Add user interaction flags and note details
