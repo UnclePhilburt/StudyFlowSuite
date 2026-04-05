@@ -13571,16 +13571,20 @@ def get_social_feed():
             note_ids = [p["note_id"] for p in posts if p.get("note_id")]
             notes_map = {}
             if note_ids:
-                # Use .eq() for single ID, .in_() for multiple to avoid 400 error
-                if len(note_ids) == 1:
-                    notes_response = supabase.table("notes").select(
-                        "id, original_filename, thumbnail_url, file_type"
-                    ).eq("id", note_ids[0]).execute()
-                else:
-                    notes_response = supabase.table("notes").select(
-                        "id, original_filename, thumbnail_url, file_type"
-                    ).in_("id", note_ids).execute()
-                notes_map = {n["id"]: n for n in (notes_response.data or [])}
+                try:
+                    # Use .eq() for single ID, .in_() for multiple to avoid 400 error
+                    if len(note_ids) == 1:
+                        notes_response = supabase.table("notes").select(
+                            "id, original_filename, thumbnail_url, file_type"
+                        ).eq("id", note_ids[0]).execute()
+                    else:
+                        notes_response = supabase.table("notes").select(
+                            "id, original_filename, thumbnail_url, file_type"
+                        ).in_("id", note_ids).execute()
+                    notes_map = {n["id"]: n for n in (notes_response.data or [])}
+                except Exception as e:
+                    debug_log(f"Error fetching notes for feed: {e}")
+                    notes_map = {}
 
             # Add user interaction flags and note details
             post_ids = [p["id"] for p in posts]
@@ -13643,16 +13647,20 @@ def get_trending_posts():
             note_ids = [p["note_id"] for p in posts if p.get("note_id")]
             notes_map = {}
             if note_ids:
-                # Use .eq() for single ID, .in_() for multiple to avoid 400 error
-                if len(note_ids) == 1:
-                    notes_response = supabase.table("notes").select(
-                        "id, original_filename, thumbnail_url, file_type"
-                    ).eq("id", note_ids[0]).execute()
-                else:
-                    notes_response = supabase.table("notes").select(
-                        "id, original_filename, thumbnail_url, file_type"
-                    ).in_("id", note_ids).execute()
-                notes_map = {n["id"]: n for n in (notes_response.data or [])}
+                try:
+                    # Use .eq() for single ID, .in_() for multiple to avoid 400 error
+                    if len(note_ids) == 1:
+                        notes_response = supabase.table("notes").select(
+                            "id, original_filename, thumbnail_url, file_type"
+                        ).eq("id", note_ids[0]).execute()
+                    else:
+                        notes_response = supabase.table("notes").select(
+                            "id, original_filename, thumbnail_url, file_type"
+                        ).in_("id", note_ids).execute()
+                    notes_map = {n["id"]: n for n in (notes_response.data or [])}
+                except Exception as e:
+                    debug_log(f"Error fetching notes for feed: {e}")
+                    notes_map = {}
 
             post_ids = [p["id"] for p in posts]
 
@@ -14365,16 +14373,20 @@ def get_user_posts(username):
             note_ids = [p["note_id"] for p in posts if p.get("note_id")]
             notes_map = {}
             if note_ids:
-                # Use .eq() for single ID, .in_() for multiple to avoid 400 error
-                if len(note_ids) == 1:
-                    notes_response = supabase.table("notes").select(
-                        "id, original_filename, thumbnail_url, file_type"
-                    ).eq("id", note_ids[0]).execute()
-                else:
-                    notes_response = supabase.table("notes").select(
-                        "id, original_filename, thumbnail_url, file_type"
-                    ).in_("id", note_ids).execute()
-                notes_map = {n["id"]: n for n in (notes_response.data or [])}
+                try:
+                    # Use .eq() for single ID, .in_() for multiple to avoid 400 error
+                    if len(note_ids) == 1:
+                        notes_response = supabase.table("notes").select(
+                            "id, original_filename, thumbnail_url, file_type"
+                        ).eq("id", note_ids[0]).execute()
+                    else:
+                        notes_response = supabase.table("notes").select(
+                            "id, original_filename, thumbnail_url, file_type"
+                        ).in_("id", note_ids).execute()
+                    notes_map = {n["id"]: n for n in (notes_response.data or [])}
+                except Exception as e:
+                    debug_log(f"Error fetching notes for feed: {e}")
+                    notes_map = {}
 
             # Get user interactions
             post_ids = [p["id"] for p in posts]
