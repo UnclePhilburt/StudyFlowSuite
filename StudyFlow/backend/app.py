@@ -1454,6 +1454,7 @@ def get_current_user():
             "subscription_status": profile.get("subscription_tier", "free"),
             "edu_verified": profile.get("edu_email_verified", False),
             "is_beta": False,
+            "avatar_url": profile.get("avatar_url"),
             "created_at": profile.get("created_at")
         }), 200
 
@@ -11043,6 +11044,122 @@ def get_personalized_feed():
     except Exception as e:
         debug_log(f"Personalized feed error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/social/activity", methods=["GET"])
+@supabase_auth_required
+def get_social_activity():
+    """Get recent social activity for the user (likes on their posts, new comments, new followers)."""
+    try:
+        user_id = request.user_id
+        activities = []
+
+        # Recent votes on user's posts
+        try:
+            user_posts = supabase.table("social_posts").select("id").eq("user_id", user_id).execute()
+            post_ids = [p["id"] for p in (user_posts.data or [])]
+            if post_ids:
+                query = supabase.table("post_votes").select("user_id, post_id, vote_type, created_at")
+                if len(post_ids) == 1:
+                    query = query.eq("post_id", post_ids[0])
+                else:
+                    query = query.in_("post_id", post_ids[:20])
+                votes = query.neq("user_id", user_id).order("created_at", desc=True).limit(10).execute()
+                for v in (votes.data or []):
+                    activities.append({
+                        "type": "vote",
+                        "user_id": v["user_id"],
+                        "post_id": v["post_id"],
+                        "detail": v["vote_type"],
+                        "created_at": v["created_at"]
+                    })
+        except:
+            pass
+
+        # Recent comments on user's posts
+        try:
+            if post_ids:
+                query = supabase.table("post_comments").select("user_id, username, post_id, text_content, created_at")
+                if len(post_ids) == 1:
+                    query = query.eq("post_id", post_ids[0])
+                else:
+                    query = query.in_("post_id", post_ids[:20])
+                comments = query.neq("user_id", user_id).order("created_at", desc=True).limit(10).execute()
+                for c in (comments.data or []):
+                    activities.append({
+                        "type": "comment",
+                        "user_id": c["user_id"],
+                        "username": c.get("username"),
+                        "post_id": c["post_id"],
+                        "detail": (c.get("text_content") or "")[:60],
+                        "created_at": c["created_at"]
+                    })
+        except:
+            pass
+
+        # Recent new followers
+        try:
+            followers = supabase.table("user_followers").select("follower_id, created_at").eq("following_id", user_id).order("created_at", desc=True).limit(10).execute()
+            for f in (followers.data or []):
+                activities.append({
+                    "type": "follow",
+                    "user_id": f["follower_id"],
+                    "created_at": f["created_at"]
+                })
+        except:
+            pass
+
+        # Sort all by time and limit
+        activities.sort(key=lambda a: a.get("created_at", ""), reverse=True)
+        activities = activities[:15]
+
+        # Get usernames for all user_ids
+        all_user_ids = list(set(a.get("user_id") for a in activities if a.get("user_id")))
+        username_map = {}
+        if all_user_ids:
+            try:
+                if len(all_user_ids) == 1:
+                    u = supabase.table("user_profiles").select("id, username, avatar_url").eq("id", all_user_ids[0]).execute()
+                else:
+                    u = supabase.table("user_profiles").select("id, username, avatar_url").in_("id", all_user_ids).execute()
+                username_map = {x["id"]: {"username": x.get("username", "Someone"), "avatar_url": x.get("avatar_url")} for x in (u.data or [])}
+            except:
+                pass
+
+        for a in activities:
+            info = username_map.get(a.get("user_id"), {})
+            a["username"] = a.get("username") or info.get("username", "Someone")
+            a["avatar_url"] = info.get("avatar_url")
+
+        return jsonify({"activities": activities}), 200
+
+    except Exception as e:
+        debug_log(f"Social activity error: {e}\n{traceback.format_exc()}")
+        return jsonify({"activities": []}), 200
+
+
+@app.route("/api/social/my-stats", methods=["GET"])
+@supabase_auth_required
+def get_my_social_stats():
+    """Get social stats for the current user."""
+    try:
+        user_id = request.user_id
+        profile = supabase.table("user_profiles").select(
+            "username, follower_count, following_count, post_count"
+        ).eq("id", user_id).execute()
+
+        if not profile.data:
+            return jsonify({"posts": 0, "followers": 0, "following": 0}), 200
+
+        p = profile.data[0]
+        return jsonify({
+            "username": p.get("username"),
+            "posts": p.get("post_count", 0),
+            "followers": p.get("follower_count", 0),
+            "following": p.get("following_count", 0)
+        }), 200
+    except:
+        return jsonify({"posts": 0, "followers": 0, "following": 0}), 200
 
 
 ## ====== SOCIAL GROUPS (separate from Study Groups) ======
