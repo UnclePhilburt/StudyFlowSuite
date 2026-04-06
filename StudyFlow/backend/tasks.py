@@ -359,7 +359,7 @@ def keep_warm():
     """Periodic ping to prevent Render cold starts."""
     try:
         import urllib.request
-        backend_url = os.getenv("RENDER_EXTERNAL_URL", "https://studyflowsuite.onrender.com")
+        backend_url = "https://studyflowsuite.onrender.com"
         urllib.request.urlopen(backend_url + "/health", timeout=10)
         print("Server warm ping OK")
     except Exception as e:
