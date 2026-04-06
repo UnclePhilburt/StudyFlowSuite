@@ -14159,7 +14159,7 @@ def upload_note_from_social():
             file_name=original_filename,
             file_hash=file_hash,
             file_size=file_size,
-            shared_with_nexus=False,  # Social uploads default to private
+            shared_with_nexus=True,  # Social uploads are public
             ip_address=ip_address
         )
 
