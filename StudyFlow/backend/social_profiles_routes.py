@@ -43,6 +43,54 @@ def get_user_profile(username):
 
         profile_data["recent_posts"] = posts.data or []
 
+        # Get most upvoted post
+        try:
+            top_post = supabase.table("social_posts").select(
+                "id, text_content, score, upvotes, created_at"
+            ).eq("user_id", profile_user_id).order("score", desc=True).limit(1).execute()
+
+            if top_post.data and len(top_post.data) > 0:
+                profile_data["top_post"] = top_post.data[0]
+            else:
+                profile_data["top_post"] = None
+        except:
+            profile_data["top_post"] = None
+
+        # Get user interests from onboarding
+        try:
+            interests = supabase.table("user_interests").select(
+                "degree, subjects, content_prefs"
+            ).eq("user_id", profile_user_id).single().execute()
+
+            if interests.data:
+                profile_data["interests"] = interests.data
+            else:
+                profile_data["interests"] = None
+        except:
+            profile_data["interests"] = None
+
+        # Calculate leaderboard rank (based on post_count and follower_count combined)
+        try:
+            # Simple ranking: order by follower_count DESC, then by post_count DESC
+            all_users = supabase.table("user_profiles").select(
+                "id"
+            ).order("follower_count", desc=True).order("post_count", desc=True).execute()
+
+            if all_users.data:
+                rank = 1
+                for user in all_users.data:
+                    if user["id"] == profile_user_id:
+                        profile_data["leaderboard_rank"] = rank
+                        break
+                    rank += 1
+
+                if "leaderboard_rank" not in profile_data:
+                    profile_data["leaderboard_rank"] = None
+            else:
+                profile_data["leaderboard_rank"] = None
+        except:
+            profile_data["leaderboard_rank"] = None
+
         return jsonify({"profile": profile_data}), 200
 
     except Exception as e:
