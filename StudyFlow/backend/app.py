@@ -13720,7 +13720,7 @@ def create_social_post():
 
         post_type = data.get("post_type")
         note_id = data.get("note_id")
-        text_content = data.get("text_content", "").strip()
+        text_content = (data.get("text_content") or "").strip()
         group_id = data.get("group_id")
 
         if post_type not in ["note", "text", "group_invite"]:
