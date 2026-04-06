@@ -13542,6 +13542,116 @@ def delete_feature_request(request_id):
 
 # --- POSTS & FEED ---
 
+## ====== ADMIN SOCIAL MODERATION ======
+
+@app.route("/admin/social/posts", methods=["GET"])
+def admin_get_social_posts():
+    """Admin: get all social posts for moderation."""
+    try:
+        admin_key = request.args.get("key", "")
+        if admin_key != os.getenv("ADMIN_KEY", "change_me_in_production"):
+            return jsonify({"error": "Unauthorized"}), 403
+
+        status_filter = request.args.get("status", "all")  # all, approved, denied
+        page = int(request.args.get("page", 0))
+        limit = int(request.args.get("limit", 50))
+
+        query = supabase.table("social_posts").select(
+            "id, user_id, username, post_type, text_content, note_id, "
+            "upvote_count, downvote_count, score, comment_count, "
+            "created_at, moderation_status"
+        ).order("created_at", desc=True).range(page * limit, (page + 1) * limit - 1)
+
+        if status_filter == "approved":
+            query = query.eq("moderation_status", "approved")
+        elif status_filter == "denied":
+            query = query.eq("moderation_status", "denied")
+        elif status_filter == "pending":
+            query = query.is_("moderation_status", "null")
+
+        result = query.execute()
+        posts = result.data or []
+
+        # Enrich with note filenames
+        note_ids = [p['note_id'] for p in posts if p.get('note_id')]
+        note_names = {}
+        if note_ids:
+            try:
+                notes_res = supabase.table("notes").select("id, original_filename").in_("id", note_ids).execute()
+                note_names = {n['id']: n.get('original_filename', 'Unknown') for n in (notes_res.data or [])}
+            except:
+                pass
+
+        for p in posts:
+            if p.get('note_id'):
+                p['note_filename'] = note_names.get(p['note_id'], 'Unknown')
+            if not p.get('moderation_status'):
+                p['moderation_status'] = 'approved'  # default
+
+        return jsonify({"posts": posts, "count": len(posts)}), 200
+
+    except Exception as e:
+        debug_log(f"Admin social posts error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/admin/social/posts/<post_id>", methods=["POST"])
+def admin_moderate_post(post_id):
+    """Admin: approve or deny a social post."""
+    try:
+        data = request.get_json()
+        admin_key = data.get("key", "")
+        if admin_key != os.getenv("ADMIN_KEY", "change_me_in_production"):
+            return jsonify({"error": "Unauthorized"}), 403
+
+        action = data.get("action")
+        if action not in ("approve", "deny"):
+            return jsonify({"error": "Action must be 'approve' or 'deny'"}), 400
+
+        reason = data.get("reason", "")
+
+        if action == "deny":
+            # Get post info for notification
+            post_res = supabase.table("social_posts").select("user_id, username, post_type, text_content, note_id").eq("id", post_id).execute()
+            if not post_res.data:
+                return jsonify({"error": "Post not found"}), 404
+
+            post = post_res.data[0]
+
+            # Delete the post
+            supabase.table("social_posts").delete().eq("id", post_id).execute()
+
+            # Notify the user
+            post_desc = post.get('text_content', '')[:50] if post.get('text_content') else 'your post'
+            msg = f"Your social post was removed by a moderator."
+            if reason:
+                msg += f" Reason: {reason}"
+
+            try:
+                create_notification(
+                    user_id=post["user_id"],
+                    notif_type="post_removed",
+                    title="Post Removed",
+                    message=msg,
+                )
+            except:
+                pass
+
+            debug_log(f"[Moderation] Denied and deleted post {post_id}: {reason}")
+        else:
+            # Mark as explicitly approved
+            supabase.table("social_posts").update({
+                "moderation_status": "approved"
+            }).eq("id", post_id).execute()
+            debug_log(f"[Moderation] Approved post {post_id}")
+
+        return jsonify({"success": True, "action": action}), 200
+
+    except Exception as e:
+        debug_log(f"Admin moderate post error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/social/feed", methods=["GET"])
 @supabase_auth_required
 @account_not_frozen
