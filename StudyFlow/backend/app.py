@@ -13542,6 +13542,54 @@ def delete_feature_request(request_id):
 
 # --- POSTS & FEED ---
 
+## ====== POST REPORTING ======
+
+@app.route("/api/social/posts/<post_id>/report", methods=["POST"])
+@supabase_auth_required
+@account_not_frozen
+def report_post(post_id):
+    """Report a social post for moderation."""
+    try:
+        data = request.get_json() or {}
+        reason = data.get("reason", "").strip()
+        details = data.get("details", "").strip()
+
+        if not reason:
+            return jsonify({"error": "Reason is required"}), 400
+
+        valid_reasons = ["spam", "harassment", "inappropriate", "misinformation", "copyright", "other"]
+        if reason not in valid_reasons:
+            return jsonify({"error": f"Reason must be one of: {', '.join(valid_reasons)}"}), 400
+
+        # Check post exists
+        post = supabase.table("social_posts").select("id, user_id").eq("id", post_id).execute()
+        if not post.data:
+            return jsonify({"error": "Post not found"}), 404
+
+        # Can't report own post
+        if post.data[0]["user_id"] == request.user_id:
+            return jsonify({"error": "You cannot report your own post"}), 400
+
+        # Insert report (unique constraint prevents duplicate reports)
+        try:
+            supabase.table("post_reports").insert({
+                "post_id": post_id,
+                "reporter_id": request.user_id,
+                "reason": reason,
+                "details": details or None
+            }).execute()
+        except Exception as e:
+            if "duplicate" in str(e).lower() or "unique" in str(e).lower():
+                return jsonify({"error": "You have already reported this post"}), 409
+            raise
+
+        return jsonify({"success": True, "message": "Report submitted. We'll review it shortly."}), 201
+
+    except Exception as e:
+        debug_log(f"Report post error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 ## ====== ADMIN SOCIAL MODERATION ======
 
 @app.route("/admin/social/posts", methods=["GET"])
@@ -13582,11 +13630,35 @@ def admin_get_social_posts():
             except:
                 pass
 
+        # Enrich with report data
+        post_ids = [p['id'] for p in posts]
+        reports_map = {}
+        if post_ids:
+            try:
+                if len(post_ids) == 1:
+                    reports_res = supabase.table("post_reports").select("post_id, reason, details, reporter_id, created_at, status").eq("post_id", post_ids[0]).execute()
+                else:
+                    reports_res = supabase.table("post_reports").select("post_id, reason, details, reporter_id, created_at, status").in_("post_id", post_ids).execute()
+                for r in (reports_res.data or []):
+                    pid = r['post_id']
+                    if pid not in reports_map:
+                        reports_map[pid] = []
+                    reports_map[pid].append(r)
+            except:
+                pass
+
         for p in posts:
             if p.get('note_id'):
                 p['note_filename'] = note_names.get(p['note_id'], 'Unknown')
             if not p.get('moderation_status'):
-                p['moderation_status'] = 'approved'  # default
+                p['moderation_status'] = 'approved'
+            p['reports'] = reports_map.get(p['id'], [])
+            p['report_count'] = len(p['reports'])
+
+        # Sort: reported posts first, then by date
+        posts.sort(key=lambda p: (-p['report_count'], p['created_at']), reverse=False)
+        # Actually: reported first (descending by report count), then newest first
+        posts.sort(key=lambda p: (-p['report_count'], ''), reverse=False)
 
         return jsonify({"posts": posts, "count": len(posts)}), 200
 
