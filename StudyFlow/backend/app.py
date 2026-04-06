@@ -15632,6 +15632,45 @@ def vote_on_post(post_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/social/posts/<post_id>/view", methods=["POST"])
+@supabase_auth_required
+@account_not_frozen
+def track_post_view(post_id):
+    """Track a post view (only counts once per user per post)"""
+    try:
+        user_id = request.user_id
+
+        # Check if user already viewed this post
+        existing = supabase.table("post_views").select("id").eq(
+            "user_id", user_id
+        ).eq("post_id", post_id).execute()
+
+        if existing.data:
+            # Already viewed, don't count again
+            post = supabase.table("social_posts").select("view_count").eq("id", post_id).single().execute()
+            return jsonify({"message": "Already viewed", "view_count": post.data.get("view_count", 0)}), 200
+
+        # Insert new view record
+        supabase.table("post_views").insert({
+            "user_id": user_id,
+            "post_id": post_id
+        }).execute()
+
+        # Increment view count on the post
+        post = supabase.table("social_posts").select("view_count").eq("id", post_id).single().execute()
+        new_count = (post.data.get("view_count") or 0) + 1
+
+        supabase.table("social_posts").update({
+            "view_count": new_count
+        }).eq("id", post_id).execute()
+
+        return jsonify({"message": "View tracked", "view_count": new_count}), 201
+
+    except Exception as e:
+        debug_log(f"View tracking error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/social/posts/<post_id>/bookmark", methods=["POST"])
 @supabase_auth_required
 @account_not_frozen
