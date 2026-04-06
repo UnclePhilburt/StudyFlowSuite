@@ -14708,6 +14708,176 @@ def search_by_hashtag(tag):
         return jsonify({"posts": [], "hashtag": tag}), 200
 
 
+## ====== WHO TO FOLLOW / PIN / BLOCK / MUTE ======
+
+@app.route("/api/social/who-to-follow", methods=["GET"])
+@supabase_auth_required
+def who_to_follow():
+    """Suggest users based on mutual followers."""
+    try:
+        user_id = request.user_id
+        limit = int(request.args.get("limit", 5))
+
+        # Get who I follow
+        my_following = supabase.table("user_followers").select("following_id").eq("follower_id", user_id).execute()
+        my_following_ids = set(f["following_id"] for f in (my_following.data or []))
+        my_following_ids.add(user_id)
+
+        # Get who my followings follow (friends of friends)
+        suggestions = {}
+        for fid in list(my_following_ids)[:20]:
+            if fid == user_id:
+                continue
+            their_following = supabase.table("user_followers").select("following_id").eq("follower_id", fid).limit(20).execute()
+            for f in (their_following.data or []):
+                tid = f["following_id"]
+                if tid not in my_following_ids:
+                    suggestions[tid] = suggestions.get(tid, 0) + 1
+
+        # Sort by mutual count
+        sorted_suggestions = sorted(suggestions.items(), key=lambda x: x[1], reverse=True)[:limit]
+        suggest_ids = [s[0] for s in sorted_suggestions]
+        mutual_counts = {s[0]: s[1] for s in sorted_suggestions}
+
+        if not suggest_ids:
+            return jsonify({"suggestions": []}), 200
+
+        # Get profiles
+        if len(suggest_ids) == 1:
+            profiles = supabase.table("user_profiles").select("id, username, display_name, avatar_url, bio").eq("id", suggest_ids[0]).execute()
+        else:
+            profiles = supabase.table("user_profiles").select("id, username, display_name, avatar_url, bio").in_("id", suggest_ids).execute()
+
+        result = []
+        for p in (profiles.data or []):
+            if p.get("username"):
+                p["mutual_count"] = mutual_counts.get(p["id"], 0)
+                p["reason"] = f"{p['mutual_count']} mutual{'s' if p['mutual_count'] != 1 else ''}"
+                result.append(p)
+
+        result.sort(key=lambda x: x["mutual_count"], reverse=True)
+        return jsonify({"suggestions": result}), 200
+
+    except Exception as e:
+        debug_log(f"Who to follow error: {e}\n{traceback.format_exc()}")
+        return jsonify({"suggestions": []}), 200
+
+
+@app.route("/api/social/posts/<post_id>/pin", methods=["POST"])
+@supabase_auth_required
+def pin_post(post_id):
+    """Pin/unpin a post on your profile."""
+    try:
+        user_id = request.user_id
+
+        post = supabase.table("social_posts").select("user_id, is_pinned").eq("id", post_id).single().execute()
+        if not post.data:
+            return jsonify({"error": "Post not found"}), 404
+        if post.data["user_id"] != user_id:
+            return jsonify({"error": "You can only pin your own posts"}), 403
+
+        new_state = not post.data.get("is_pinned", False)
+
+        # Unpin all other posts first
+        if new_state:
+            supabase.table("social_posts").update({"is_pinned": False}).eq("user_id", user_id).eq("is_pinned", True).execute()
+
+        supabase.table("social_posts").update({"is_pinned": new_state}).eq("id", post_id).execute()
+
+        return jsonify({"success": True, "is_pinned": new_state}), 200
+    except Exception as e:
+        debug_log(f"Pin post error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/social/block", methods=["POST"])
+@supabase_auth_required
+def block_or_mute_user():
+    """Block or mute a user."""
+    try:
+        user_id = request.user_id
+        data = request.json
+        target_id = data.get("target_id")
+        block_type = data.get("type", "block")  # block or mute
+
+        if not target_id:
+            return jsonify({"error": "target_id required"}), 400
+        if target_id == user_id:
+            return jsonify({"error": "Can't block yourself"}), 400
+        if block_type not in ("block", "mute"):
+            return jsonify({"error": "Type must be block or mute"}), 400
+
+        try:
+            supabase.table("user_blocks").insert({
+                "user_id": user_id,
+                "blocked_id": target_id,
+                "block_type": block_type
+            }).execute()
+        except Exception as e:
+            if "unique" in str(e).lower() or "duplicate" in str(e).lower():
+                # Update type if already exists
+                supabase.table("user_blocks").update({"block_type": block_type}).eq("user_id", user_id).eq("blocked_id", target_id).execute()
+            else:
+                raise
+
+        # If blocking, also unfollow them
+        if block_type == "block":
+            try:
+                supabase.table("user_followers").delete().eq("follower_id", user_id).eq("following_id", target_id).execute()
+                supabase.table("user_followers").delete().eq("follower_id", target_id).eq("following_id", user_id).execute()
+            except:
+                pass
+
+        return jsonify({"success": True, "type": block_type}), 200
+    except Exception as e:
+        debug_log(f"Block/mute error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/social/unblock", methods=["POST"])
+@supabase_auth_required
+def unblock_user():
+    """Unblock or unmute a user."""
+    try:
+        data = request.json
+        target_id = data.get("target_id")
+        if not target_id:
+            return jsonify({"error": "target_id required"}), 400
+
+        supabase.table("user_blocks").delete().eq("user_id", request.user_id).eq("blocked_id", target_id).execute()
+        return jsonify({"success": True}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/social/blocked", methods=["GET"])
+@supabase_auth_required
+def get_blocked_users():
+    """Get list of blocked/muted users."""
+    try:
+        result = supabase.table("user_blocks").select("blocked_id, block_type, created_at").eq("user_id", request.user_id).execute()
+
+        if not result.data:
+            return jsonify({"users": []}), 200
+
+        blocked_ids = [b["blocked_id"] for b in result.data]
+        block_map = {b["blocked_id"]: b["block_type"] for b in result.data}
+
+        if len(blocked_ids) == 1:
+            profiles = supabase.table("user_profiles").select("id, username, display_name, avatar_url").eq("id", blocked_ids[0]).execute()
+        else:
+            profiles = supabase.table("user_profiles").select("id, username, display_name, avatar_url").in_("id", blocked_ids).execute()
+
+        users = []
+        for p in (profiles.data or []):
+            p["block_type"] = block_map.get(p["id"], "block")
+            users.append(p)
+
+        return jsonify({"users": users}), 200
+    except Exception as e:
+        return jsonify({"users": []}), 200
+
+
 @app.route("/api/social/trending-hashtags", methods=["GET"])
 @supabase_auth_required
 def get_trending_hashtags():
