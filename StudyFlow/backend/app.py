@@ -13880,15 +13880,15 @@ def upload_note_from_social():
             if len(pdf_doc) > 0:
                 # Render first page to pixmap (image)
                 page = pdf_doc[0]
-                # Render at 150 DPI (2.08x zoom since PDF is 72 DPI)
-                mat = fitz.Matrix(2.08, 2.08)
+                # Render at 200 DPI (2.78x zoom since PDF is 72 DPI) for high quality
+                mat = fitz.Matrix(2.78, 2.78)
                 pix = page.get_pixmap(matrix=mat, alpha=False)
 
                 # Convert to PIL Image
                 img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
 
-                # Resize to thumbnail (400x300)
-                img.thumbnail((400, 300), Image.Resampling.LANCZOS)
+                # Resize to larger thumbnail (1000x1000 max) for crisp display
+                img.thumbnail((1000, 1000), Image.Resampling.LANCZOS)
 
                 print(f"[THUMBNAIL] Rendered page: {pix.width}x{pix.height} -> {img.width}x{img.height}")
 
