@@ -14559,6 +14559,24 @@ def get_social_feed():
                 if post.get("note_id"):
                     post["notes"] = notes_map.get(post["note_id"])
 
+            # Enrich reposts with original post data
+            repost_ids = [p["repost_of"] for p in posts if p.get("repost_of")]
+            if repost_ids:
+                try:
+                    if len(repost_ids) == 1:
+                        orig = supabase.table("social_posts").select("id, username, post_type, text_content, note_id, score, comment_count").eq("id", repost_ids[0]).execute()
+                    else:
+                        orig = supabase.table("social_posts").select("id, username, post_type, text_content, note_id, score, comment_count").in_("id", repost_ids).execute()
+                    orig_map = {o["id"]: o for o in (orig.data or [])}
+                    for post in posts:
+                        if post.get("repost_of"):
+                            post["original_post"] = orig_map.get(post["repost_of"])
+                            # Get original note details
+                            if post["original_post"] and post["original_post"].get("note_id"):
+                                post["original_post"]["notes"] = notes_map.get(post["original_post"]["note_id"])
+                except:
+                    pass
+
         return jsonify({"posts": posts, "page": page}), 200
 
     except Exception as e:
@@ -14688,6 +14706,77 @@ def search_by_hashtag(tag):
     except Exception as e:
         debug_log(f"Hashtag search error: {e}\n{traceback.format_exc()}")
         return jsonify({"posts": [], "hashtag": tag}), 200
+
+
+@app.route("/api/social/posts/<post_id>/repost", methods=["POST"])
+@supabase_auth_required
+@account_not_frozen
+def repost(post_id):
+    """Repost or quote-repost someone's post."""
+    try:
+        user_id = request.user_id
+        data = request.json or {}
+        quote_text = (data.get("text") or "").strip()
+
+        # Get original post
+        original = supabase.table("social_posts").select("id, user_id, username, post_type, text_content, note_id").eq("id", post_id).execute()
+        if not original.data:
+            return jsonify({"error": "Post not found"}), 404
+
+        orig = original.data[0]
+
+        # Can't repost your own post
+        if orig["user_id"] == user_id:
+            return jsonify({"error": "You can't repost your own post"}), 400
+
+        # Check if already reposted
+        existing = supabase.table("social_posts").select("id").eq("user_id", user_id).eq("repost_of", post_id).execute()
+        if existing.data:
+            return jsonify({"error": "You already reposted this"}), 409
+
+        # Get reposter's profile
+        profile = supabase.table("user_profiles").select("username").eq("id", user_id).execute()
+        username = profile.data[0].get("username", "Anonymous") if profile.data else "Anonymous"
+
+        # Create repost
+        repost_data = {
+            "user_id": user_id,
+            "username": username,
+            "post_type": "text",
+            "repost_of": post_id,
+            "repost_text": quote_text if quote_text else None,
+            "text_content": quote_text if quote_text else None
+        }
+
+        result = supabase.table("social_posts").insert(repost_data).execute()
+        if not result.data:
+            return jsonify({"error": "Failed to repost"}), 500
+
+        # Increment share_count on original
+        try:
+            supabase.table("social_posts").update({
+                "share_count": orig.get("share_count", 0) + 1 if "share_count" in orig else 1
+            }).eq("id", post_id).execute()
+        except:
+            pass
+
+        # Notify original poster
+        try:
+            if orig["user_id"] != user_id:
+                create_notification(
+                    user_id=orig["user_id"],
+                    notif_type="repost",
+                    title=f"@{username} reposted your post",
+                    message=quote_text[:80] if quote_text else ""
+                )
+        except:
+            pass
+
+        return jsonify({"message": "Reposted!", "post": result.data[0]}), 201
+
+    except Exception as e:
+        debug_log(f"Repost error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/social/posts", methods=["POST"])
