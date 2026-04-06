@@ -14708,6 +14708,102 @@ def search_by_hashtag(tag):
         return jsonify({"posts": [], "hashtag": tag}), 200
 
 
+## ====== STORIES ======
+
+@app.route("/api/social/stories", methods=["GET"])
+@supabase_auth_required
+def get_stories():
+    """Get stories from followed users (last 24 hours)."""
+    try:
+        user_id = request.user_id
+        cutoff = (datetime.utcnow() - timedelta(hours=24)).isoformat()
+
+        # Get followed users + self
+        following = supabase.table("user_followers").select("following_id").eq("follower_id", user_id).execute()
+        follow_ids = [f["following_id"] for f in (following.data or [])]
+        follow_ids.append(user_id)
+
+        # Get stories
+        if len(follow_ids) == 1:
+            stories = supabase.table("social_posts").select("*").eq("user_id", follow_ids[0]).eq("is_story", True).gte("created_at", cutoff).order("created_at", desc=True).execute()
+        else:
+            stories = supabase.table("social_posts").select("*").in_("user_id", follow_ids).eq("is_story", True).gte("created_at", cutoff).order("created_at", desc=True).execute()
+
+        story_list = stories.data or []
+
+        # Group by user
+        user_stories = {}
+        for s in story_list:
+            uid = s["user_id"]
+            if uid not in user_stories:
+                user_stories[uid] = {"user_id": uid, "username": s.get("username"), "stories": []}
+            user_stories[uid]["stories"].append(s)
+
+        # Get avatars
+        user_ids = list(user_stories.keys())
+        if user_ids:
+            try:
+                if len(user_ids) == 1:
+                    av = supabase.table("user_profiles").select("id, avatar_url, username").eq("id", user_ids[0]).execute()
+                else:
+                    av = supabase.table("user_profiles").select("id, avatar_url, username").in_("id", user_ids).execute()
+                for a in (av.data or []):
+                    if a["id"] in user_stories:
+                        user_stories[a["id"]]["avatar_url"] = a.get("avatar_url")
+                        user_stories[a["id"]]["username"] = a.get("username") or user_stories[a["id"]]["username"]
+            except:
+                pass
+
+        # Sort: current user first, then by most recent story
+        result = sorted(user_stories.values(), key=lambda x: (x["user_id"] != user_id, -len(x["stories"])))
+
+        return jsonify({"stories": result}), 200
+    except Exception as e:
+        debug_log(f"Get stories error: {e}\n{traceback.format_exc()}")
+        return jsonify({"stories": []}), 200
+
+
+@app.route("/api/social/stories", methods=["POST"])
+@supabase_auth_required
+@account_not_frozen
+def create_story():
+    """Create a story (24-hour post)."""
+    try:
+        user_id = request.user_id
+        data = request.json or {}
+        text = (data.get("text") or "").strip()
+        image_url = data.get("image_url")
+        bg = data.get("bg", "linear-gradient(135deg, #667eea, #764ba2)")
+
+        if not text and not image_url:
+            return jsonify({"error": "Story must have text or an image"}), 400
+
+        profile = supabase.table("user_profiles").select("username").eq("id", user_id).execute()
+        username = profile.data[0].get("username", "Anonymous") if profile.data else "Anonymous"
+
+        story_data = {
+            "user_id": user_id,
+            "username": username,
+            "post_type": "text",
+            "is_story": True,
+            "text_content": text if text else None,
+            "story_bg": bg
+        }
+
+        if image_url:
+            story_data["images"] = [image_url]
+            story_data["post_type"] = "text"
+
+        result = supabase.table("social_posts").insert(story_data).execute()
+        if not result.data:
+            return jsonify({"error": "Failed to create story"}), 500
+
+        return jsonify({"message": "Story posted!", "story": result.data[0]}), 201
+    except Exception as e:
+        debug_log(f"Create story error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 ## ====== WHO TO FOLLOW / PIN / BLOCK / MUTE ======
 
 @app.route("/api/social/who-to-follow", methods=["GET"])
