@@ -14708,6 +14708,31 @@ def search_by_hashtag(tag):
         return jsonify({"posts": [], "hashtag": tag}), 200
 
 
+@app.route("/api/social/trending-hashtags", methods=["GET"])
+@supabase_auth_required
+def get_trending_hashtags():
+    """Get trending hashtags from recent posts."""
+    try:
+        # Get recent posts with hashtags
+        res = supabase.table("social_posts").select("hashtags, score, created_at").order("created_at", desc=True).limit(200).execute()
+
+        from collections import Counter
+        tag_scores = Counter()
+
+        for post in (res.data or []):
+            tags = post.get("hashtags") or []
+            score = max(post.get("score", 0), 0) + 1  # min 1 so every post counts
+            for tag in tags:
+                tag_scores[tag.lower()] += score
+
+        trending = [{"tag": tag, "score": count} for tag, count in tag_scores.most_common(10)]
+
+        return jsonify({"hashtags": trending}), 200
+    except Exception as e:
+        debug_log(f"Trending hashtags error: {e}\n{traceback.format_exc()}")
+        return jsonify({"hashtags": []}), 200
+
+
 @app.route("/api/social/posts/<post_id>/repost", methods=["POST"])
 @supabase_auth_required
 @account_not_frozen
