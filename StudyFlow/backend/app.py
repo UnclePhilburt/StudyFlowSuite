@@ -13742,9 +13742,22 @@ def get_social_feed():
                 ).in_("post_id", post_ids).execute()
             bookmark_ids = {b["post_id"] for b in (bookmarks.data or [])}
 
+            # Fetch avatar URLs for post authors
+            author_ids = list(set(p["user_id"] for p in posts))
+            avatars_map = {}
+            try:
+                if len(author_ids) == 1:
+                    av_res = supabase.table("user_profiles").select("id, avatar_url").eq("id", author_ids[0]).execute()
+                else:
+                    av_res = supabase.table("user_profiles").select("id, avatar_url").in_("id", author_ids).execute()
+                avatars_map = {a["id"]: a.get("avatar_url") for a in (av_res.data or [])}
+            except:
+                pass
+
             for post in posts:
                 post["user_vote_type"] = votes_map.get(post["id"])
                 post["is_bookmarked"] = post["id"] in bookmark_ids
+                post["avatar_url"] = avatars_map.get(post["user_id"])
                 # Add note details if post has a note
                 if post.get("note_id"):
                     post["notes"] = notes_map.get(post["note_id"])
@@ -13817,10 +13830,22 @@ def get_trending_posts():
                 ).in_("post_id", post_ids).execute()
             bookmark_ids = {b["post_id"] for b in (bookmarks.data or [])}
 
+            # Fetch avatar URLs for post authors
+            author_ids = list(set(p["user_id"] for p in posts))
+            avatars_map = {}
+            try:
+                if len(author_ids) == 1:
+                    av_res = supabase.table("user_profiles").select("id, avatar_url").eq("id", author_ids[0]).execute()
+                else:
+                    av_res = supabase.table("user_profiles").select("id, avatar_url").in_("id", author_ids).execute()
+                avatars_map = {a["id"]: a.get("avatar_url") for a in (av_res.data or [])}
+            except:
+                pass
+
             for post in posts:
                 post["user_vote_type"] = votes_map.get(post["id"])
                 post["is_bookmarked"] = post["id"] in bookmark_ids
-                # Add note details if post has a note
+                post["avatar_url"] = avatars_map.get(post["user_id"])
                 if post.get("note_id"):
                     post["notes"] = notes_map.get(post["note_id"])
 
