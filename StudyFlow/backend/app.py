@@ -10854,26 +10854,87 @@ def office_shared_with_me():
 # Study Groups Endpoints
 # ──────────────────────────────────────────────
 
-@app.route("/api/groups/discover", methods=["GET"])
+## ====== SOCIAL GROUPS (separate from Study Groups) ======
+
+@app.route("/api/social-groups", methods=["GET"])
 @supabase_auth_required
-def discover_groups():
-    """Get public groups the user hasn't joined yet."""
+def get_my_social_groups():
+    """Get social groups the user is a member of."""
+    try:
+        user_id = request.user_id
+        memberships = supabase.table("social_group_members").select("group_id").eq("user_id", user_id).execute()
+        group_ids = [m["group_id"] for m in (memberships.data or [])]
+
+        if not group_ids:
+            return jsonify({"groups": []}), 200
+
+        if len(group_ids) == 1:
+            groups = supabase.table("social_groups").select("*").eq("id", group_ids[0]).execute()
+        else:
+            groups = supabase.table("social_groups").select("*").in_("id", group_ids).execute()
+
+        return jsonify({"groups": groups.data or []}), 200
+    except Exception as e:
+        debug_log(f"My social groups error: {e}\n{traceback.format_exc()}")
+        return jsonify({"groups": []}), 200
+
+
+@app.route("/api/social-groups", methods=["POST"])
+@supabase_auth_required
+@account_not_frozen
+def create_social_group():
+    """Create a new social group."""
+    try:
+        user_id = request.user_id
+        data = request.json
+        name = (data.get("name") or "").strip()
+        description = (data.get("description") or "").strip()
+
+        if not name:
+            return jsonify({"error": "Group name is required"}), 400
+
+        result = supabase.table("social_groups").insert({
+            "name": name,
+            "description": description or None,
+            "owner_id": user_id,
+            "is_public": True,
+            "member_count": 1
+        }).execute()
+
+        if not result.data:
+            return jsonify({"error": "Failed to create group"}), 500
+
+        group_id = result.data[0]["id"]
+
+        # Add owner as member
+        supabase.table("social_group_members").insert({
+            "group_id": group_id,
+            "user_id": user_id,
+            "role": "owner"
+        }).execute()
+
+        return jsonify({"success": True, "group": result.data[0]}), 201
+    except Exception as e:
+        debug_log(f"Create social group error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/social-groups/discover", methods=["GET"])
+@supabase_auth_required
+def discover_social_groups():
+    """Get public social groups the user hasn't joined."""
     try:
         user_id = request.user_id
 
-        # Get groups user is already in
-        my_groups = supabase.table("study_group_members").select("group_id").eq("user_id", user_id).execute()
+        my_groups = supabase.table("social_group_members").select("group_id").eq("user_id", user_id).execute()
         my_group_ids = [g["group_id"] for g in (my_groups.data or [])]
 
-        # Get public groups
-        query = supabase.table("study_groups").select(
+        result = supabase.table("social_groups").select(
             "id, name, description, cover_url, member_count, category, owner_id, created_at"
-        ).eq("is_public", True).order("member_count", desc=True).limit(20)
+        ).eq("is_public", True).order("member_count", desc=True).limit(20).execute()
 
-        result = query.execute()
         groups = [g for g in (result.data or []) if g["id"] not in my_group_ids]
 
-        # Get owner usernames
         owner_ids = list(set(g["owner_id"] for g in groups))
         owners_map = {}
         if owner_ids:
@@ -10887,40 +10948,60 @@ def discover_groups():
             g["owner_username"] = owners_map.get(g["owner_id"], "Unknown")
 
         return jsonify({"groups": groups}), 200
-
     except Exception as e:
-        debug_log(f"Discover groups error: {e}\n{traceback.format_exc()}")
+        debug_log(f"Discover social groups error: {e}\n{traceback.format_exc()}")
         return jsonify({"groups": []}), 200
 
 
-@app.route("/api/groups/<group_id>/feed", methods=["GET"])
+@app.route("/api/social-groups/<group_id>/join", methods=["POST"])
 @supabase_auth_required
-def get_group_feed(group_id):
-    """Get posts from a specific group."""
+def join_social_group(group_id):
+    """Join a public social group."""
     try:
         user_id = request.user_id
 
-        # Verify membership
-        member = supabase.table("study_group_members").select("id").eq("group_id", group_id).eq("user_id", user_id).execute()
+        group = supabase.table("social_groups").select("id, is_public, name").eq("id", group_id).execute()
+        if not group.data:
+            return jsonify({"error": "Group not found"}), 404
+        if not group.data[0].get("is_public", True):
+            return jsonify({"error": "This group is private"}), 403
+
+        try:
+            supabase.table("social_group_members").insert({
+                "group_id": group_id, "user_id": user_id, "role": "member"
+            }).execute()
+        except Exception as e:
+            if "unique" in str(e).lower() or "duplicate" in str(e).lower():
+                return jsonify({"error": "Already a member"}), 409
+            raise
+
+        try:
+            members = supabase.table("social_group_members").select("id", count="exact").eq("group_id", group_id).execute()
+            supabase.table("social_groups").update({"member_count": members.count or 1}).eq("id", group_id).execute()
+        except:
+            pass
+
+        return jsonify({"success": True, "group_name": group.data[0]["name"]}), 200
+    except Exception as e:
+        debug_log(f"Join social group error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/social-groups/<group_id>/feed", methods=["GET"])
+@supabase_auth_required
+def get_social_group_feed(group_id):
+    """Get posts from a social group."""
+    try:
+        user_id = request.user_id
+
+        member = supabase.table("social_group_members").select("id").eq("group_id", group_id).eq("user_id", user_id).execute()
         if not member.data:
-            return jsonify({"error": "Not a member of this group"}), 403
+            return jsonify({"error": "Not a member"}), 403
 
-        # Get posts for this group
-        posts = supabase.table("social_posts").select("*").eq("group_id", group_id).order("created_at", desc=True).limit(50).execute()
-
+        posts = supabase.table("social_posts").select("*").eq("social_group_id", group_id).order("created_at", desc=True).limit(50).execute()
         post_list = posts.data or []
 
-        # Enrich with note details and avatars
         if post_list:
-            note_ids = [p["note_id"] for p in post_list if p.get("note_id")]
-            notes_map = {}
-            if note_ids:
-                try:
-                    notes_res = supabase.table("notes").select("id, original_filename, thumbnail_url, file_type").in_("id", note_ids).execute()
-                    notes_map = {n["id"]: n for n in (notes_res.data or [])}
-                except:
-                    pass
-
             author_ids = list(set(p["user_id"] for p in post_list))
             avatars_map = {}
             try:
@@ -10930,31 +11011,27 @@ def get_group_feed(group_id):
                 pass
 
             for post in post_list:
-                author_info = avatars_map.get(post["user_id"], {})
-                post["avatar_url"] = author_info.get("avatar_url")
-                post["is_verified"] = author_info.get("is_verified", False)
-                if post.get("note_id"):
-                    post["notes"] = notes_map.get(post["note_id"])
+                info = avatars_map.get(post["user_id"], {})
+                post["avatar_url"] = info.get("avatar_url")
+                post["is_verified"] = info.get("is_verified", False)
 
         return jsonify({"posts": post_list}), 200
-
     except Exception as e:
-        debug_log(f"Group feed error: {e}\n{traceback.format_exc()}")
+        debug_log(f"Social group feed error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/api/groups/<group_id>/post", methods=["POST"])
+@app.route("/api/social-groups/<group_id>/post", methods=["POST"])
 @supabase_auth_required
 @account_not_frozen
-def create_group_post(group_id):
-    """Create a post within a group."""
+def post_to_social_group(group_id):
+    """Post to a social group."""
     try:
         user_id = request.user_id
 
-        # Verify membership
-        member = supabase.table("study_group_members").select("id").eq("group_id", group_id).eq("user_id", user_id).execute()
+        member = supabase.table("social_group_members").select("id").eq("group_id", group_id).eq("user_id", user_id).execute()
         if not member.data:
-            return jsonify({"error": "Not a member of this group"}), 403
+            return jsonify({"error": "Not a member"}), 403
 
         data = request.json
         text_content = (data.get("text_content") or "").strip()
@@ -10966,65 +11043,22 @@ def create_group_post(group_id):
         profile = supabase.table("user_profiles").select("username").eq("id", user_id).execute()
         username = profile.data[0].get("username", "Anonymous") if profile.data else "Anonymous"
 
-        post_type = "note" if note_id else "text"
         post_data = {
             "user_id": user_id,
             "username": username,
-            "post_type": post_type,
-            "text_content": text_content if text_content else None,
+            "post_type": "note" if note_id else "text",
+            "text_content": text_content or None,
             "note_id": note_id,
-            "group_id": group_id
+            "social_group_id": group_id
         }
 
         result = supabase.table("social_posts").insert(post_data).execute()
-
         if not result.data:
-            return jsonify({"error": "Failed to create post"}), 500
+            return jsonify({"error": "Failed to post"}), 500
 
-        return jsonify({"message": "Posted to group", "post": result.data[0]}), 201
-
+        return jsonify({"message": "Posted", "post": result.data[0]}), 201
     except Exception as e:
-        debug_log(f"Group post error: {e}\n{traceback.format_exc()}")
-        return jsonify({"error": str(e)}), 500
-
-
-@app.route("/api/groups/<group_id>/join", methods=["POST"])
-@supabase_auth_required
-def join_public_group(group_id):
-    """Join a public group directly."""
-    try:
-        user_id = request.user_id
-
-        # Check group is public
-        group = supabase.table("study_groups").select("id, is_public, name").eq("id", group_id).execute()
-        if not group.data:
-            return jsonify({"error": "Group not found"}), 404
-        if not group.data[0].get("is_public", True):
-            return jsonify({"error": "This group is private. You need an invite."}), 403
-
-        # Join
-        try:
-            supabase.table("study_group_members").insert({
-                "group_id": group_id,
-                "user_id": user_id,
-                "role": "member"
-            }).execute()
-        except Exception as e:
-            if "unique" in str(e).lower() or "duplicate" in str(e).lower():
-                return jsonify({"error": "Already a member"}), 409
-            raise
-
-        # Update member count
-        try:
-            members = supabase.table("study_group_members").select("id", count="exact").eq("group_id", group_id).execute()
-            supabase.table("study_groups").update({"member_count": members.count or 1}).eq("id", group_id).execute()
-        except:
-            pass
-
-        return jsonify({"success": True, "group_name": group.data[0]["name"]}), 200
-
-    except Exception as e:
-        debug_log(f"Join group error: {e}\n{traceback.format_exc()}")
+        debug_log(f"Social group post error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
 
