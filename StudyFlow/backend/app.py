@@ -10854,6 +10854,197 @@ def office_shared_with_me():
 # Study Groups Endpoints
 # ──────────────────────────────────────────────
 
+## ====== SOCIAL PERSONALIZATION ======
+
+@app.route("/api/social/interests", methods=["GET"])
+@supabase_auth_required
+def get_social_interests():
+    """Get user's social interests."""
+    try:
+        res = supabase.table("user_profiles").select("social_interests").eq("id", request.user_id).execute()
+        interests = (res.data[0].get("social_interests") or {}) if res.data else {}
+        return jsonify(interests), 200
+    except Exception as e:
+        return jsonify({}), 200
+
+
+@app.route("/api/social/interests", methods=["POST"])
+@supabase_auth_required
+def save_social_interests():
+    """Save user's social interests from onboarding."""
+    try:
+        data = request.json
+        supabase.table("user_profiles").update({
+            "social_interests": data
+        }).eq("id", request.user_id).execute()
+        return jsonify({"success": True}), 200
+    except Exception as e:
+        debug_log(f"Save interests error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/social/engage", methods=["POST"])
+@supabase_auth_required
+def track_engagement():
+    """Track user engagement with a post (view, upvote, comment, click)."""
+    try:
+        data = request.json
+        post_id = data.get("post_id")
+        action = data.get("action")
+        author_id = data.get("author_id")
+
+        if not post_id or not action or action not in ('view', 'upvote', 'comment', 'click'):
+            return jsonify({"error": "Invalid"}), 400
+
+        if not author_id:
+            # Look up author
+            post = supabase.table("social_posts").select("user_id").eq("id", post_id).execute()
+            author_id = post.data[0]["user_id"] if post.data else request.user_id
+
+        supabase.table("social_engagement").insert({
+            "user_id": request.user_id,
+            "post_id": post_id,
+            "author_id": author_id,
+            "action": action
+        }).execute()
+
+        return jsonify({"success": True}), 200
+    except:
+        return jsonify({"success": True}), 200  # Don't fail on tracking errors
+
+
+@app.route("/api/social/posts/personalized", methods=["GET"])
+@supabase_auth_required
+def get_personalized_feed():
+    """Get trending posts ranked by user interests and engagement history."""
+    try:
+        user_id = request.user_id
+        page = int(request.args.get("page", 1))
+        per_page = 20
+        offset = (page - 1) * per_page
+
+        # Get user interests
+        profile = supabase.table("user_profiles").select("social_interests, university").eq("id", user_id).execute()
+        interests = (profile.data[0].get("social_interests") or {}) if profile.data else {}
+        user_uni = profile.data[0].get("university") if profile.data else None
+        user_subjects = interests.get("subjects", [])
+        user_degree = interests.get("degree", "")
+
+        # Get users this person engages with most (top 10)
+        engaged_authors = set()
+        try:
+            eng = supabase.table("social_engagement").select("author_id").eq("user_id", user_id).order("created_at", desc=True).limit(100).execute()
+            from collections import Counter
+            author_counts = Counter(e["author_id"] for e in (eng.data or []))
+            engaged_authors = set(a for a, _ in author_counts.most_common(10))
+        except:
+            pass
+
+        # Get recent posts (more than we need, then rank)
+        response = supabase.table("social_posts").select(
+            "*"
+        ).order("created_at", desc=True).limit(100).execute()
+
+        posts = response.data or []
+
+        # Score each post
+        now = datetime.utcnow()
+        scored_posts = []
+        for post in posts:
+            score = post.get("score", 0)  # base engagement score
+
+            # Boost if author is someone user engages with
+            if post["user_id"] in engaged_authors:
+                score += 8
+
+            # Boost if from same university
+            # (would need post author's university - skip for now, use username matching)
+
+            # Recency: newer posts get a boost
+            try:
+                post_time = datetime.fromisoformat(post["created_at"].replace("Z", "+00:00"))
+                hours_old = (now.replace(tzinfo=post_time.tzinfo) - post_time).total_seconds() / 3600
+                score -= hours_old * 0.3  # decay
+            except:
+                pass
+
+            # Don't show user's own posts in trending
+            if post["user_id"] == user_id:
+                score -= 20
+
+            scored_posts.append((score, post))
+
+        # Sort by score descending
+        scored_posts.sort(key=lambda x: x[0], reverse=True)
+        ranked_posts = [p for _, p in scored_posts[offset:offset + per_page]]
+
+        # Enrich with notes, avatars, votes, bookmarks (same as regular feed)
+        if ranked_posts:
+            note_ids = [p["note_id"] for p in ranked_posts if p.get("note_id")]
+            notes_map = {}
+            if note_ids:
+                try:
+                    if len(note_ids) == 1:
+                        nr = supabase.table("notes").select("id, original_filename, thumbnail_url, file_type").eq("id", note_ids[0]).execute()
+                    else:
+                        nr = supabase.table("notes").select("id, original_filename, thumbnail_url, file_type").in_("id", note_ids).execute()
+                    notes_map = {n["id"]: n for n in (nr.data or [])}
+                except:
+                    pass
+
+            post_ids = [p["id"] for p in ranked_posts]
+            votes_map = {}
+            bookmark_ids = set()
+            try:
+                if len(post_ids) == 1:
+                    v = supabase.table("post_votes").select("post_id, vote_type").eq("user_id", user_id).eq("post_id", post_ids[0]).execute()
+                    b = supabase.table("post_bookmarks").select("post_id").eq("user_id", user_id).eq("post_id", post_ids[0]).execute()
+                else:
+                    v = supabase.table("post_votes").select("post_id, vote_type").eq("user_id", user_id).in_("post_id", post_ids).execute()
+                    b = supabase.table("post_bookmarks").select("post_id").eq("user_id", user_id).in_("post_id", post_ids).execute()
+                votes_map = {x["post_id"]: x["vote_type"] for x in (v.data or [])}
+                bookmark_ids = {x["post_id"] for x in (b.data or [])}
+            except:
+                pass
+
+            author_ids = list(set(p["user_id"] for p in ranked_posts))
+            avatars_map = {}
+            try:
+                if len(author_ids) == 1:
+                    av = supabase.table("user_profiles").select("id, avatar_url, is_verified").eq("id", author_ids[0]).execute()
+                else:
+                    av = supabase.table("user_profiles").select("id, avatar_url, is_verified").in_("id", author_ids).execute()
+                avatars_map = {a["id"]: {"avatar_url": a.get("avatar_url"), "is_verified": a.get("is_verified", False)} for a in (av.data or [])}
+            except:
+                pass
+
+            # Comments preview
+            comments_map = {}
+            try:
+                for pid in post_ids[:20]:
+                    cr = supabase.table("post_comments").select("id, user_id, username, text_content, created_at").eq("post_id", pid).order("created_at", desc=True).limit(2).execute()
+                    if cr.data:
+                        comments_map[pid] = list(reversed(cr.data))
+            except:
+                pass
+
+            for post in ranked_posts:
+                info = avatars_map.get(post["user_id"], {})
+                post["avatar_url"] = info.get("avatar_url") if isinstance(info, dict) else None
+                post["is_verified"] = info.get("is_verified", False) if isinstance(info, dict) else False
+                post["user_vote_type"] = votes_map.get(post["id"])
+                post["is_bookmarked"] = post["id"] in bookmark_ids
+                post["recent_comments"] = comments_map.get(post["id"], [])
+                if post.get("note_id"):
+                    post["notes"] = notes_map.get(post["note_id"])
+
+        return jsonify({"posts": ranked_posts, "page": page}), 200
+
+    except Exception as e:
+        debug_log(f"Personalized feed error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 ## ====== SOCIAL GROUPS (separate from Study Groups) ======
 
 @app.route("/api/social-groups", methods=["GET"])
