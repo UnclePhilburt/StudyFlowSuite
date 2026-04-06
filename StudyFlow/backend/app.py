@@ -14125,8 +14125,9 @@ def upload_note_from_social():
         if file.filename == '':
             return jsonify({"error": "No file selected"}), 400
 
-        # Get optional folder_id from form
+        # Get optional folder_id and content type from form
         folder_id = request.form.get('folder_id')  # Can be null
+        content_type = request.form.get('content_type', 'note')  # note, photo, resource
 
         # Get user profile
         user_profile = get_user_profile(request.user_id)
@@ -14159,7 +14160,7 @@ def upload_note_from_social():
             file_name=original_filename,
             file_hash=file_hash,
             file_size=file_size,
-            shared_with_nexus=True,  # Social uploads are public
+            shared_with_nexus=(content_type in ('note', 'resource')),
             ip_address=ip_address
         )
 
@@ -14278,6 +14279,14 @@ def upload_note_from_social():
             return jsonify({"error": "Failed to create note record"}), 500
 
         note_id = note['id']
+
+        # Only notes go to Nexus (public). Photos and other types stay private.
+        is_nexus = content_type in ('note', 'resource')
+        if not is_nexus:
+            try:
+                supabase.table("notes").update({"is_public": False}).eq("id", note_id).execute()
+            except:
+                pass
 
         # Assign to folder if specified
         if folder_id:
