@@ -12637,6 +12637,14 @@ def review_note(note_id):
             reason = data.get("reason", "Does not meet quality standards")
             filename = note.get("original_filename", "your note")
 
+            # Check if note has a social post (will be cascade-deleted)
+            had_social_post = False
+            try:
+                social_check = supabase.table("social_posts").select("id").eq("note_id", note_id).execute()
+                had_social_post = bool(social_check.data)
+            except Exception:
+                pass
+
             # Delete file from storage
             if note.get("file_path"):
                 try:
@@ -12650,18 +12658,22 @@ def review_note(note_id):
             except Exception:
                 pass
 
-            # Delete note record
+            # Delete note record (cascade-deletes social post + comments/votes)
             supabase.table("notes").delete().eq("id", note_id).execute()
 
             # Notify the user
+            message = f"Your note '{filename}' was removed: {reason}"
+            if had_social_post:
+                message += " The associated social post has also been removed."
+
             create_notification(
                 user_id=note["user_id"],
                 notif_type="note_removed",
                 title="Note Removed",
-                message=f"Your note '{filename}' was removed: {reason}",
+                message=message,
             )
 
-            debug_log(f"[Review] Rejected and deleted note {note_id}: {reason}")
+            debug_log(f"[Review] Rejected and deleted note {note_id} (social post: {had_social_post}): {reason}")
 
         return jsonify({"success": True, "action": action}), 200
 
