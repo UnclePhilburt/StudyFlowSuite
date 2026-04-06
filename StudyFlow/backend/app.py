@@ -14014,10 +14014,10 @@ def get_social_feed():
             avatars_map = {}
             try:
                 if len(author_ids) == 1:
-                    av_res = supabase.table("user_profiles").select("id, avatar_url").eq("id", author_ids[0]).execute()
+                    av_res = supabase.table("user_profiles").select("id, avatar_url, is_verified").eq("id", author_ids[0]).execute()
                 else:
-                    av_res = supabase.table("user_profiles").select("id, avatar_url").in_("id", author_ids).execute()
-                avatars_map = {a["id"]: a.get("avatar_url") for a in (av_res.data or [])}
+                    av_res = supabase.table("user_profiles").select("id, avatar_url, is_verified").in_("id", author_ids).execute()
+                avatars_map = {a["id"]: {"avatar_url": a.get("avatar_url"), "is_verified": a.get("is_verified", False)} for a in (av_res.data or [])}
             except:
                 pass
 
@@ -14036,7 +14036,9 @@ def get_social_feed():
             for post in posts:
                 post["user_vote_type"] = votes_map.get(post["id"])
                 post["is_bookmarked"] = post["id"] in bookmark_ids
-                post["avatar_url"] = avatars_map.get(post["user_id"])
+                author_info = avatars_map.get(post["user_id"], {})
+                post["avatar_url"] = author_info.get("avatar_url") if isinstance(author_info, dict) else author_info
+                post["is_verified"] = author_info.get("is_verified", False) if isinstance(author_info, dict) else False
                 post["recent_comments"] = comments_map.get(post["id"], [])
                 if post.get("note_id"):
                     post["notes"] = notes_map.get(post["note_id"])
@@ -14114,17 +14116,19 @@ def get_trending_posts():
             avatars_map = {}
             try:
                 if len(author_ids) == 1:
-                    av_res = supabase.table("user_profiles").select("id, avatar_url").eq("id", author_ids[0]).execute()
+                    av_res = supabase.table("user_profiles").select("id, avatar_url, is_verified").eq("id", author_ids[0]).execute()
                 else:
-                    av_res = supabase.table("user_profiles").select("id, avatar_url").in_("id", author_ids).execute()
-                avatars_map = {a["id"]: a.get("avatar_url") for a in (av_res.data or [])}
+                    av_res = supabase.table("user_profiles").select("id, avatar_url, is_verified").in_("id", author_ids).execute()
+                avatars_map = {a["id"]: {"avatar_url": a.get("avatar_url"), "is_verified": a.get("is_verified", False)} for a in (av_res.data or [])}
             except:
                 pass
 
             for post in posts:
                 post["user_vote_type"] = votes_map.get(post["id"])
                 post["is_bookmarked"] = post["id"] in bookmark_ids
-                post["avatar_url"] = avatars_map.get(post["user_id"])
+                author_info = avatars_map.get(post["user_id"], {})
+                post["avatar_url"] = author_info.get("avatar_url") if isinstance(author_info, dict) else author_info
+                post["is_verified"] = author_info.get("is_verified", False) if isinstance(author_info, dict) else False
                 if post.get("note_id"):
                     post["notes"] = notes_map.get(post["note_id"])
 
@@ -14807,7 +14811,7 @@ def get_user_profile(username):
 
         profile = supabase.table("user_profiles").select(
             "id, username, display_name, bio, avatar_url, banner_url, "
-            "follower_count, following_count, post_count, is_public, created_at"
+            "follower_count, following_count, post_count, is_public, is_verified, created_at"
         ).eq("username", username).single().execute()
 
         if not profile.data:
