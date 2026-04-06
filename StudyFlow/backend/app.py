@@ -14974,6 +14974,46 @@ def repost(post_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/social/upload-images", methods=["POST"])
+@supabase_auth_required
+@account_not_frozen
+def upload_social_images():
+    """Upload multiple images for a social post. Returns array of URLs."""
+    try:
+        from StudyFlow.backend.supabase_client import upload_file_to_storage
+        import uuid
+
+        files = request.files.getlist('files')
+        if not files or len(files) == 0:
+            return jsonify({"error": "No files uploaded"}), 400
+        if len(files) > 10:
+            return jsonify({"error": "Maximum 10 images per post"}), 400
+
+        urls = []
+        for file in files:
+            if not file.filename:
+                continue
+            ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else ''
+            if ext not in ['jpg', 'jpeg', 'png', 'gif', 'webp']:
+                continue
+
+            file_content = file.read()
+            if len(file_content) > 5 * 1024 * 1024:
+                continue  # Skip files > 5MB
+
+            unique_name = f"social-images/{request.user_id}/{uuid.uuid4()}.{ext}"
+            content_type = f"image/{ext}" if ext != 'jpg' else 'image/jpeg'
+            url = upload_file_to_storage(file_content, unique_name, content_type)
+            if url:
+                urls.append(url)
+
+        return jsonify({"urls": urls, "count": len(urls)}), 200
+
+    except Exception as e:
+        debug_log(f"Upload images error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/social/posts", methods=["POST"])
 @supabase_auth_required
 @account_not_frozen
@@ -15005,6 +15045,11 @@ def create_social_post():
             post_data["note_id"] = note_id
         elif post_type == "group_invite":
             post_data["group_id"] = group_id
+
+        # Multi-image support
+        images = data.get("images", [])
+        if images and isinstance(images, list):
+            post_data["images"] = images[:10]
 
         # Parse hashtags and mentions from text
         import re
