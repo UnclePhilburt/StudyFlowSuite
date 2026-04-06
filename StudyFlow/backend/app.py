@@ -15380,6 +15380,64 @@ def get_user_profile(username):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/social/profile/<username>/followers", methods=["GET"])
+@supabase_auth_required
+@account_not_frozen
+def get_user_followers(username):
+    """Get followers list for a user."""
+    try:
+        # Get user ID from username
+        user = supabase.table("user_profiles").select("id").eq("username", username).execute()
+        if not user.data:
+            return jsonify({"users": []}), 200
+        user_id = user.data[0]["id"]
+
+        # Get followers
+        followers = supabase.table("user_followers").select("follower_id").eq("following_id", user_id).order("created_at", desc=True).limit(50).execute()
+        follower_ids = [f["follower_id"] for f in (followers.data or [])]
+
+        if not follower_ids:
+            return jsonify({"users": []}), 200
+
+        if len(follower_ids) == 1:
+            profiles = supabase.table("user_profiles").select("id, username, display_name, avatar_url, bio").eq("id", follower_ids[0]).execute()
+        else:
+            profiles = supabase.table("user_profiles").select("id, username, display_name, avatar_url, bio").in_("id", follower_ids).execute()
+
+        return jsonify({"users": profiles.data or []}), 200
+    except Exception as e:
+        debug_log(f"Get followers error: {e}\n{traceback.format_exc()}")
+        return jsonify({"users": []}), 200
+
+
+@app.route("/api/social/profile/<username>/following", methods=["GET"])
+@supabase_auth_required
+@account_not_frozen
+def get_user_following(username):
+    """Get following list for a user."""
+    try:
+        user = supabase.table("user_profiles").select("id").eq("username", username).execute()
+        if not user.data:
+            return jsonify({"users": []}), 200
+        user_id = user.data[0]["id"]
+
+        following = supabase.table("user_followers").select("following_id").eq("follower_id", user_id).order("created_at", desc=True).limit(50).execute()
+        following_ids = [f["following_id"] for f in (following.data or [])]
+
+        if not following_ids:
+            return jsonify({"users": []}), 200
+
+        if len(following_ids) == 1:
+            profiles = supabase.table("user_profiles").select("id, username, display_name, avatar_url, bio").eq("id", following_ids[0]).execute()
+        else:
+            profiles = supabase.table("user_profiles").select("id, username, display_name, avatar_url, bio").in_("id", following_ids).execute()
+
+        return jsonify({"users": profiles.data or []}), 200
+    except Exception as e:
+        debug_log(f"Get following error: {e}\n{traceback.format_exc()}")
+        return jsonify({"users": []}), 200
+
+
 @app.route("/api/social/profile/<username>/posts", methods=["GET"])
 @supabase_auth_required
 @account_not_frozen
