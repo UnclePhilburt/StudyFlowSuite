@@ -13767,6 +13767,82 @@ def admin_moderate_post(post_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/social/suggested-users", methods=["GET"])
+@supabase_auth_required
+def get_suggested_users():
+    """Get suggested users to follow based on same university and activity."""
+    try:
+        user_id = request.user_id
+        limit = int(request.args.get("limit", 5))
+
+        # Get current user's university
+        user_profile = supabase.table("user_profiles").select("university, edu_email").eq("id", user_id).execute()
+        user_uni = user_profile.data[0].get("university") if user_profile.data else None
+
+        # Get who the user already follows
+        following_res = supabase.table("user_followers").select("following_id").eq("follower_id", user_id).execute()
+        following_ids = set(f["following_id"] for f in (following_res.data or []))
+        following_ids.add(user_id)  # Exclude self
+
+        suggestions = []
+
+        # Strategy 1: Users from same university
+        if user_uni:
+            try:
+                uni_users = supabase.table("user_profiles").select(
+                    "id, username, display_name, avatar_url, bio"
+                ).eq("university", user_uni).limit(20).execute()
+
+                for u in (uni_users.data or []):
+                    if u["id"] not in following_ids and u.get("username"):
+                        suggestions.append({
+                            "user_id": u["id"],
+                            "username": u["username"],
+                            "display_name": u.get("display_name") or u["username"],
+                            "avatar_url": u.get("avatar_url"),
+                            "bio": (u.get("bio") or "")[:80],
+                            "reason": user_uni
+                        })
+            except:
+                pass
+
+        # Strategy 2: Active posters (most posts recently)
+        if len(suggestions) < limit:
+            try:
+                active = supabase.table("social_posts").select(
+                    "user_id, username"
+                ).order("created_at", desc=True).limit(50).execute()
+
+                seen = set(s["user_id"] for s in suggestions)
+                for p in (active.data or []):
+                    if p["user_id"] not in following_ids and p["user_id"] not in seen and p.get("username"):
+                        # Get profile
+                        prof = supabase.table("user_profiles").select(
+                            "id, username, display_name, avatar_url, bio"
+                        ).eq("id", p["user_id"]).execute()
+                        if prof.data:
+                            u = prof.data[0]
+                            suggestions.append({
+                                "user_id": u["id"],
+                                "username": u.get("username") or p["username"],
+                                "display_name": u.get("display_name") or u.get("username") or p["username"],
+                                "avatar_url": u.get("avatar_url"),
+                                "bio": (u.get("bio") or "")[:80],
+                                "reason": "Active poster"
+                            })
+                            seen.add(p["user_id"])
+                        if len(suggestions) >= limit:
+                            break
+            except:
+                pass
+
+        return jsonify({"suggestions": suggestions[:limit]}), 200
+
+    except Exception as e:
+        debug_log(f"Suggested users error: {e}\n{traceback.format_exc()}")
+        return jsonify({"suggestions": []}), 200
+
+
 @app.route("/api/social/feed", methods=["GET"])
 @supabase_auth_required
 @account_not_frozen
