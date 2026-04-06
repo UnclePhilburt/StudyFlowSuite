@@ -13562,15 +13562,58 @@ def report_post(post_id):
             return jsonify({"error": f"Reason must be one of: {', '.join(valid_reasons)}"}), 400
 
         # Check post exists
-        post = supabase.table("social_posts").select("id, user_id").eq("id", post_id).execute()
+        post = supabase.table("social_posts").select("id, user_id, note_id, post_type").eq("id", post_id).execute()
         if not post.data:
             return jsonify({"error": "Post not found"}), 404
 
+        post_data = post.data[0]
+
         # Can't report own post
-        if post.data[0]["user_id"] == request.user_id:
+        if post_data["user_id"] == request.user_id:
             return jsonify({"error": "You cannot report your own post"}), 400
 
-        # Insert report (unique constraint prevents duplicate reports)
+        # Copyright reports on note posts -> route to DMCA system
+        if reason == "copyright" and post_data.get("note_id"):
+            try:
+                # Get reporter info
+                reporter = supabase.table("user_profiles").select("email, full_name").eq("id", request.user_id).execute()
+                reporter_email = reporter.data[0].get("email", "unknown") if reporter.data else "unknown"
+                reporter_name = reporter.data[0].get("full_name", "") if reporter.data else ""
+
+                # Get note filename
+                note = supabase.table("notes").select("original_filename, user_id").eq("id", post_data["note_id"]).execute()
+                note_filename = note.data[0].get("original_filename", "Unknown") if note.data else "Unknown"
+
+                # Create DMCA takedown record
+                supabase.table("dmca_takedown_requests").insert({
+                    "note_id": post_data["note_id"],
+                    "reporter_email": reporter_email,
+                    "reporter_name": reporter_name,
+                    "reason": details or "Copyright violation reported via social feed",
+                    "status": "pending",
+                    "note_owner_id": note.data[0]["user_id"] if note.data else None,
+                    "note_filename": note_filename
+                }).execute()
+
+                # Also create a regular report for the admin social page
+                try:
+                    supabase.table("post_reports").insert({
+                        "post_id": post_id,
+                        "reporter_id": request.user_id,
+                        "reason": reason,
+                        "details": (details or "") + " [Routed to DMCA system]"
+                    }).execute()
+                except:
+                    pass
+
+                debug_log(f"Copyright report on social post {post_id} routed to DMCA for note {post_data['note_id']}")
+                return jsonify({"success": True, "message": "Copyright report submitted and routed to our DMCA process. We'll review it within 24 hours."}), 201
+
+            except Exception as dmca_err:
+                debug_log(f"DMCA routing failed, falling back to regular report: {dmca_err}")
+                # Fall through to regular report
+
+        # Insert regular report (unique constraint prevents duplicate reports)
         try:
             supabase.table("post_reports").insert({
                 "post_id": post_id,
