@@ -15380,7 +15380,7 @@ def get_user_profile(username):
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/api/social/profile/<username>/followers", methods=["GET"])
+@app.route("/api/social/profile/<username>/followers", methods=["GET", "OPTIONS"])
 @supabase_auth_required
 @account_not_frozen
 def get_user_followers(username):
@@ -15389,25 +15389,30 @@ def get_user_followers(username):
         # Get user ID from username
         user = supabase.table("user_profiles").select("id").eq("username", username).execute()
         if not user.data:
+            debug_log(f"[Followers] Username not found: {username}")
             return jsonify({"users": []}), 200
         user_id = user.data[0]["id"]
+        debug_log(f"[Followers] Looking up followers for {username} ({user_id})")
 
-        # Get followers
-        followers = supabase.table("user_followers").select("follower_id").eq("following_id", user_id).order("created_at", desc=True).limit(50).execute()
+        # Get followers - query the join table
+        followers = supabase.table("user_followers").select("follower_id, created_at").eq("following_id", user_id).order("created_at", desc=True).limit(50).execute()
+        debug_log(f"[Followers] Found {len(followers.data or [])} follower records")
         follower_ids = [f["follower_id"] for f in (followers.data or [])]
 
         if not follower_ids:
             return jsonify({"users": []}), 200
 
+        # Get profiles
         if len(follower_ids) == 1:
             profiles = supabase.table("user_profiles").select("id, username, display_name, avatar_url, bio").eq("id", follower_ids[0]).execute()
         else:
             profiles = supabase.table("user_profiles").select("id, username, display_name, avatar_url, bio").in_("id", follower_ids).execute()
 
+        debug_log(f"[Followers] Returning {len(profiles.data or [])} profiles")
         return jsonify({"users": profiles.data or []}), 200
     except Exception as e:
         debug_log(f"Get followers error: {e}\n{traceback.format_exc()}")
-        return jsonify({"users": []}), 200
+        return jsonify({"users": [], "error": str(e)}), 200
 
 
 @app.route("/api/social/profile/<username>/following", methods=["GET"])
