@@ -1,10 +1,12 @@
 """
-PDF Flattening & Social Attribution for StudyFlow Suite
+PDF Flattening & Minimal Social Attribution for StudyFlow Suite
 
 Rasterizes PDF pages so text cannot be copied/edited,
-then adds clean header/footer bars with social attribution
-(username, download ID, timestamp) instead of diagonal watermarks.
-Also handles image files by converting them to attributed PDFs.
+then adds a subtle attribution badge - like a seal of quality.
+Designed to make notes look premium and shareable, not watermarked.
+
+The attribution is minimal: just "@username · StudyFlow" in the bottom-right corner
+with a thin accent line. Students want to show off these notes.
 """
 
 import io
@@ -22,7 +24,6 @@ from PIL import Image, ImageDraw, ImageFont
 
 
 DPI = 150  # Resolution for rasterizing pages (150 = good quality, reasonable size)
-FOOTER_HEIGHT = 30  # pixels for the footer bar (header is fixed at 35px)
 
 
 def _get_font(size):
@@ -37,68 +38,59 @@ def _get_font(size):
 
 
 def _add_watermark(img, username, transaction_code):
-    """Add social attribution header and footer bars to a Pillow Image."""
+    """Add minimal, elegant attribution badge to a Pillow Image - like a seal of quality."""
     width, height = img.size
 
     # Convert to RGBA for overlays
     if img.mode != 'RGBA':
         img = img.convert('RGBA')
 
-    # Create overlay for header and footer
+    # Create overlay
     overlay = Image.new('RGBA', (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
 
-    # Font sizes
-    header_font = _get_font(max(14, width // 70))
-    footer_font = _get_font(max(12, width // 80))
+    # Very subtle footer line - just a tasteful accent
+    footer_line_height = 1
+    footer_y = height - 25
 
-    # Header bar (top)
-    header_height = 35
+    # Thin accent line (very subtle)
     draw.rectangle(
-        [(0, 0), (width, header_height)],
-        fill=(45, 45, 45, 200)
+        [(0, footer_y), (width, footer_y + footer_line_height)],
+        fill=(180, 180, 180, 60)  # Very subtle gray line
     )
 
-    # Header text - Left side: username, Right side: StudyFlow Suite
-    header_left = f"Shared by @{username}"
-    header_right = "StudyFlow Suite"
+    # Minimal attribution text - small, tasteful, bottom-right corner
+    font_size = max(9, width // 120)  # Very small font
+    footer_font = _get_font(font_size)
 
-    draw.text(
-        (15, 10),
-        header_left,
-        fill=(220, 220, 220, 255),
-        font=header_font
-    )
+    # Just the essentials - make it look like a quality badge
+    attribution_text = f"@{username} · StudyFlow"
 
-    # Calculate right-aligned text position
+    # Calculate text width for right-alignment
     try:
-        right_text_bbox = draw.textbbox((0, 0), header_right, font=header_font)
-        right_text_width = right_text_bbox[2] - right_text_bbox[0]
+        text_bbox = draw.textbbox((0, 0), attribution_text, font=footer_font)
+        text_width = text_bbox[2] - text_bbox[0]
     except:
-        right_text_width = len(header_right) * 8  # Fallback estimate
+        text_width = len(attribution_text) * 6
 
+    # Bottom-right corner, subtle and elegant
+    text_x = width - text_width - 15
+    text_y = footer_y + 6
+
+    # Add subtle shadow for readability without being obtrusive
+    shadow_offset = 1
     draw.text(
-        (width - right_text_width - 15, 10),
-        header_right,
-        fill=(100, 149, 237, 255),  # Cornflower blue accent
-        font=header_font
+        (text_x + shadow_offset, text_y + shadow_offset),
+        attribution_text,
+        fill=(0, 0, 0, 40),  # Very subtle shadow
+        font=footer_font
     )
 
-    # Footer bar (bottom)
-    footer_y = height - FOOTER_HEIGHT
-    draw.rectangle(
-        [(0, footer_y), (width, height)],
-        fill=(45, 45, 45, 200)
-    )
-
-    # Footer text
-    timestamp = datetime.utcnow().strftime("%b %d, %Y %H:%M UTC")
-    footer_text = f"Download ID: {transaction_code}  |  {timestamp}  |  studyflowsuite.com"
-
+    # Main text - muted gray, not bright white
     draw.text(
-        (15, footer_y + 8),
-        footer_text,
-        fill=(180, 180, 180, 255),
+        (text_x, text_y),
+        attribution_text,
+        fill=(140, 140, 140, 180),  # Muted gray, feels premium
         font=footer_font
     )
 
