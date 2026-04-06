@@ -13633,50 +13633,6 @@ def report_post(post_id):
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/admin/note/<note_id>/preview", methods=["GET"])
-def admin_note_preview(note_id):
-    """Admin: get note page images bypassing public check."""
-    try:
-        admin_key = request.args.get("key", "")
-        if admin_key != os.getenv("ADMIN_KEY", "change_me_in_production"):
-            return jsonify({"error": "Unauthorized"}), 403
-
-        import fitz
-        import base64
-
-        note = supabase.table("notes").select("id, file_path, file_type").eq("id", note_id).execute()
-        if not note.data:
-            return jsonify({"error": "Note not found"}), 404
-
-        file_path = note.data[0].get("file_path")
-        file_type = (note.data[0].get("file_type") or "").lower()
-
-        if not file_path:
-            return jsonify({"error": "No file path"}), 404
-
-        if file_type != "pdf":
-            return jsonify({"images": [], "message": "Only PDFs can be previewed"}), 200
-
-        file_data = supabase.storage.from_("note-files").download(file_path)
-        doc = fitz.open(stream=file_data, filetype="pdf")
-
-        images = []
-        # Only first 3 pages for preview
-        for page_num in range(min(len(doc), 3)):
-            page = doc[page_num]
-            mat = fitz.Matrix(2, 2)
-            pix = page.get_pixmap(matrix=mat)
-            img_bytes = pix.tobytes("png")
-            images.append(base64.b64encode(img_bytes).decode("utf-8"))
-
-        doc.close()
-        return jsonify({"images": images, "page_count": len(doc)}), 200
-
-    except Exception as e:
-        debug_log(f"Admin note preview error: {e}\n{traceback.format_exc()}")
-        return jsonify({"error": str(e)}), 500
-
-
 ## ====== ADMIN SOCIAL MODERATION ======
 
 @app.route("/admin/social/posts", methods=["GET"])
