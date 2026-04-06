@@ -14655,6 +14655,41 @@ def get_trending_posts():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/social/hashtag/<tag>", methods=["GET"])
+@supabase_auth_required
+def search_by_hashtag(tag):
+    """Get posts with a specific hashtag."""
+    try:
+        response = supabase.table("social_posts").select("*").contains("hashtags", [tag.lower()]).order("created_at", desc=True).limit(50).execute()
+        posts = response.data or []
+
+        # Also search case-insensitive in text_content as fallback
+        if not posts:
+            response = supabase.table("social_posts").select("*").ilike("text_content", f"%#{tag}%").order("created_at", desc=True).limit(50).execute()
+            posts = response.data or []
+
+        # Enrich with avatars
+        if posts:
+            author_ids = list(set(p["user_id"] for p in posts))
+            try:
+                if len(author_ids) == 1:
+                    av = supabase.table("user_profiles").select("id, avatar_url, is_verified").eq("id", author_ids[0]).execute()
+                else:
+                    av = supabase.table("user_profiles").select("id, avatar_url, is_verified").in_("id", author_ids).execute()
+                av_map = {a["id"]: {"avatar_url": a.get("avatar_url"), "is_verified": a.get("is_verified", False)} for a in (av.data or [])}
+                for p in posts:
+                    info = av_map.get(p["user_id"], {})
+                    p["avatar_url"] = info.get("avatar_url")
+                    p["is_verified"] = info.get("is_verified", False)
+            except:
+                pass
+
+        return jsonify({"posts": posts, "hashtag": tag}), 200
+    except Exception as e:
+        debug_log(f"Hashtag search error: {e}\n{traceback.format_exc()}")
+        return jsonify({"posts": [], "hashtag": tag}), 200
+
+
 @app.route("/api/social/posts", methods=["POST"])
 @supabase_auth_required
 @account_not_frozen
@@ -14687,10 +14722,37 @@ def create_social_post():
         elif post_type == "group_invite":
             post_data["group_id"] = group_id
 
+        # Parse hashtags and mentions from text
+        import re
+        mentions = re.findall(r'@(\w{3,20})', text_content) if text_content else []
+        hashtags = re.findall(r'#(\w{2,30})', text_content) if text_content else []
+
+        if hashtags:
+            post_data["hashtags"] = hashtags
+        if mentions:
+            post_data["mentions"] = mentions
+
         response = supabase.table("social_posts").insert(post_data).execute()
 
         if not response.data:
             return jsonify({"error": "Failed to create post"}), 500
+
+        post_id = response.data[0]["id"]
+
+        # Notify mentioned users
+        if mentions:
+            try:
+                for mentioned_username in mentions[:10]:  # Max 10 mentions per post
+                    mentioned_user = supabase.table("user_profiles").select("id").eq("username", mentioned_username).execute()
+                    if mentioned_user.data and mentioned_user.data[0]["id"] != user_id:
+                        create_notification(
+                            user_id=mentioned_user.data[0]["id"],
+                            notif_type="mention",
+                            title=f"@{username} mentioned you",
+                            message=f"in a post: {text_content[:80]}{'...' if len(text_content) > 80 else ''}"
+                        )
+            except Exception as mention_err:
+                debug_log(f"Mention notification error (non-fatal): {mention_err}")
 
         return jsonify({"message": "Post created", "post": response.data[0]}), 201
 
