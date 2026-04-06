@@ -151,7 +151,7 @@ def upload_file_to_storage(file_content: bytes, file_path: str, content_type: st
 
 
 def create_note_record(user_id: str, filename: str, file_type: str, file_size: int,
-                       file_path: str, page_count: int, course_metadata: dict = None, username: str = None) -> dict:
+                       file_path: str, page_count: int, course_metadata: dict = None, username: str = None, thumbnail_url: str = None) -> dict:
     """Create a note record in the database"""
     try:
         note_data = {
@@ -163,7 +163,8 @@ def create_note_record(user_id: str, filename: str, file_type: str, file_size: i
             "page_count": page_count,
             "processed": False,
             "is_public": True,  # Default to public for note sharing
-            "username": username
+            "username": username,
+            "thumbnail_url": thumbnail_url
         }
 
         # Add course metadata if provided

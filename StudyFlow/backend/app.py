@@ -13866,6 +13866,33 @@ def upload_note_from_social():
         if not file_url:
             return jsonify({"error": "Failed to upload file to storage"}), 500
 
+        # Generate thumbnail from first page
+        thumbnail_url = None
+        try:
+            import io
+            from pdf2image import convert_from_bytes
+            from PIL import Image
+
+            # Convert first page of PDF to image
+            images = convert_from_bytes(file_content, first_page=1, last_page=1, dpi=150)
+            if images:
+                # Resize to thumbnail (400x300)
+                img = images[0]
+                img.thumbnail((400, 300), Image.Resampling.LANCZOS)
+
+                # Save as JPEG
+                thumb_io = io.BytesIO()
+                img.convert('RGB').save(thumb_io, format='JPEG', quality=85)
+                thumb_data = thumb_io.getvalue()
+
+                # Upload thumbnail
+                thumb_filename = f"thumbnails/{request.user_id}/{uuid.uuid4()}_thumb.jpg"
+                thumbnail_url = upload_file_to_storage(thumb_data, thumb_filename, 'image/jpeg')
+                debug_log(f"Generated thumbnail: {thumbnail_url}")
+        except Exception as e:
+            debug_log(f"Thumbnail generation failed (non-fatal): {e}")
+            # Continue without thumbnail
+
         # Create note record with optional folder_id
         note = create_note_record(
             user_id=request.user_id,
@@ -13875,7 +13902,8 @@ def upload_note_from_social():
             file_path=unique_filename,
             page_count=page_count,
             course_metadata={},
-            username=username
+            username=username,
+            thumbnail_url=thumbnail_url
         )
 
         if not note:
