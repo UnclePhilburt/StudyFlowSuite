@@ -15222,6 +15222,57 @@ def toggle_bookmark(post_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/social/posts/<post_id>", methods=["PATCH"])
+@supabase_auth_required
+@account_not_frozen
+def edit_post(post_id):
+    """Edit own post text content."""
+    try:
+        user_id = request.user_id
+        data = request.json
+
+        post = supabase.table("social_posts").select("user_id, created_at").eq("id", post_id).single().execute()
+
+        if not post.data:
+            return jsonify({"error": "Post not found"}), 404
+
+        if post.data["user_id"] != user_id:
+            return jsonify({"error": "You can only edit your own posts"}), 403
+
+        # Only allow editing within 24 hours
+        from datetime import datetime, timedelta
+        created = datetime.fromisoformat(post.data["created_at"].replace("Z", "+00:00"))
+        if datetime.now(created.tzinfo) - created > timedelta(hours=24):
+            return jsonify({"error": "Posts can only be edited within 24 hours"}), 400
+
+        text_content = (data.get("text_content") or "").strip()
+        if not text_content:
+            return jsonify({"error": "Text content is required"}), 400
+
+        # Parse updated hashtags and mentions
+        import re
+        hashtags = re.findall(r'#(\w{2,30})', text_content)
+        mentions = re.findall(r'@(\w{3,20})', text_content)
+
+        update_data = {
+            "text_content": text_content,
+            "hashtags": hashtags if hashtags else [],
+            "mentions": mentions if mentions else [],
+            "updated_at": datetime.utcnow().isoformat()
+        }
+
+        result = supabase.table("social_posts").update(update_data).eq("id", post_id).execute()
+
+        if not result.data:
+            return jsonify({"error": "Failed to update post"}), 500
+
+        return jsonify({"message": "Post updated", "post": result.data[0]}), 200
+
+    except Exception as e:
+        debug_log(f"Edit post error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/social/posts/<post_id>", methods=["DELETE"])
 @supabase_auth_required
 @account_not_frozen
