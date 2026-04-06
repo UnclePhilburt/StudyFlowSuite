@@ -12682,6 +12682,57 @@ def review_note(note_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/admin/classification-queue", methods=["GET"])
+def admin_classification_queue():
+    """Admin: get recent uploads with their AI classification for review."""
+    try:
+        admin_key = request.args.get("key", "")
+        if admin_key != os.getenv("ADMIN_KEY", "change_me_in_production"):
+            return jsonify({"error": "Unauthorized"}), 403
+
+        limit = int(request.args.get("limit", 50))
+
+        result = supabase.table("notes").select(
+            "id, user_id, original_filename, file_type, file_size, page_count, "
+            "is_public, ai_classification, uploaded_at, username"
+        ).order("uploaded_at", desc=True).limit(limit).execute()
+
+        return jsonify({"notes": result.data or []}), 200
+
+    except Exception as e:
+        debug_log(f"Classification queue error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/admin/classification/<note_id>", methods=["POST"])
+def admin_override_classification(note_id):
+    """Admin: override AI classification for a note."""
+    try:
+        data = request.get_json()
+        admin_key = data.get("key", "")
+        if admin_key != os.getenv("ADMIN_KEY", "change_me_in_production"):
+            return jsonify({"error": "Unauthorized"}), 403
+
+        action = data.get("action")
+        if action not in ("make_public", "make_private"):
+            return jsonify({"error": "Action must be make_public or make_private"}), 400
+
+        is_public = action == "make_public"
+        classification = "educational (admin)" if is_public else "personal (admin)"
+
+        supabase.table("notes").update({
+            "is_public": is_public,
+            "ai_classification": classification
+        }).eq("id", note_id).execute()
+
+        debug_log(f"[Admin Override] Note {note_id}: {classification}")
+        return jsonify({"success": True, "is_public": is_public}), 200
+
+    except Exception as e:
+        debug_log(f"Classification override error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/admin/note-preview/<note_id>", methods=["GET"])
 def admin_note_preview(note_id):
     """ADMIN: Get a signed URL for previewing a note."""
@@ -14306,11 +14357,14 @@ Personal = selfies, memes, screenshots of social media, personal photos, random 
             is_nexus = content_type in ('note', 'resource')
             debug_log(f"[AI Classification] Failed, using fallback: {classify_err}")
 
-        if not is_nexus:
-            try:
-                supabase.table("notes").update({"is_public": False}).eq("id", note_id).execute()
-            except:
-                pass
+        # Save classification result and set visibility
+        try:
+            supabase.table("notes").update({
+                "is_public": is_nexus,
+                "ai_classification": "educational" if is_nexus else "personal"
+            }).eq("id", note_id).execute()
+        except:
+            pass
 
         # Assign to folder if specified
         if folder_id:
