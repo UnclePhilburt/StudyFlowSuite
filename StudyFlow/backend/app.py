@@ -16629,7 +16629,109 @@ def get_unread_dm_count():
         debug_log(f"Get unread count error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
-# =================================================
+
+## ====== DM ENHANCEMENTS ======
+
+@app.route("/api/social/dm/conversation/<conversation_id>/read-all", methods=["POST"])
+@supabase_auth_required
+def mark_conversation_read(conversation_id):
+    """Mark all messages in a conversation as read."""
+    try:
+        supabase.table("dm_messages").update({"read_at": datetime.utcnow().isoformat(), "is_read": True}).eq("conversation_id", conversation_id).neq("sender_id", request.user_id).eq("is_read", False).execute()
+        return jsonify({"success": True}), 200
+    except:
+        return jsonify({"success": True}), 200
+
+@app.route("/api/social/dm/typing", methods=["POST"])
+@supabase_auth_required
+def set_typing_status():
+    """Update last active timestamp."""
+    try:
+        supabase.table("user_profiles").update({"last_active_at": datetime.utcnow().isoformat()}).eq("id", request.user_id).execute()
+        return jsonify({"success": True}), 200
+    except:
+        return jsonify({"success": True}), 200
+
+@app.route("/api/social/dm/online-status/<user_id>", methods=["GET"])
+@supabase_auth_required
+def get_online_status(user_id):
+    """Check if a user is online (active in last 2 min)."""
+    try:
+        res = supabase.table("user_profiles").select("last_active_at").eq("id", user_id).execute()
+        if not res.data or not res.data[0].get("last_active_at"):
+            return jsonify({"online": False}), 200
+        last = datetime.fromisoformat(res.data[0]["last_active_at"].replace("Z", "+00:00"))
+        return jsonify({"online": (datetime.now(last.tzinfo) - last).total_seconds() < 120, "last_active": res.data[0]["last_active_at"]}), 200
+    except:
+        return jsonify({"online": False}), 200
+
+@app.route("/api/social/dm/upload-image", methods=["POST"])
+@supabase_auth_required
+@account_not_frozen
+def upload_dm_image():
+    """Upload image for DM."""
+    try:
+        from StudyFlow.backend.supabase_client import upload_file_to_storage
+        import uuid
+        if 'file' not in request.files: return jsonify({"error": "No file"}), 400
+        file = request.files['file']
+        ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else 'jpg'
+        if ext not in ['jpg','jpeg','png','gif','webp']: return jsonify({"error": "Images only"}), 400
+        content = file.read()
+        if len(content) > 5*1024*1024: return jsonify({"error": "Max 5MB"}), 400
+        name = f"dm-images/{request.user_id}/{uuid.uuid4()}.{ext}"
+        url = upload_file_to_storage(content, name, f"image/{ext}" if ext != 'jpg' else 'image/jpeg')
+        return jsonify({"url": url}), 200 if url else jsonify({"error": "Failed"}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/social/dm/message/<message_id>/react", methods=["POST"])
+@supabase_auth_required
+def react_to_dm(message_id):
+    """Toggle reaction on DM."""
+    try:
+        emoji = (request.json or {}).get("emoji", "")
+        if not emoji: return jsonify({"error": "Emoji required"}), 400
+        try:
+            supabase.table("dm_reactions").insert({"message_id": message_id, "user_id": request.user_id, "emoji": emoji}).execute()
+            return jsonify({"action": "added"}), 200
+        except Exception as e:
+            if "unique" in str(e).lower() or "duplicate" in str(e).lower():
+                supabase.table("dm_reactions").delete().eq("message_id", message_id).eq("user_id", request.user_id).execute()
+                return jsonify({"action": "removed"}), 200
+            raise
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/social/dm/message/<message_id>", methods=["DELETE"])
+@supabase_auth_required
+def delete_dm_message(message_id):
+    """Delete own DM."""
+    try:
+        msg = supabase.table("dm_messages").select("sender_id").eq("id", message_id).single().execute()
+        if not msg.data or msg.data["sender_id"] != request.user_id: return jsonify({"error": "Not yours"}), 403
+        supabase.table("dm_messages").delete().eq("id", message_id).execute()
+        return jsonify({"success": True}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/social/dm/search", methods=["GET"])
+@supabase_auth_required
+def search_dm_messages():
+    """Search messages."""
+    try:
+        q = request.args.get("q", "").strip()
+        if len(q) < 2: return jsonify({"results": []}), 200
+        convs = supabase.table("dm_conversations").select("id").or_(f"user1_id.eq.{request.user_id},user2_id.eq.{request.user_id}").execute()
+        ids = [c["id"] for c in (convs.data or [])]
+        if not ids: return jsonify({"results": []}), 200
+        if len(ids) == 1:
+            r = supabase.table("dm_messages").select("id, conversation_id, sender_id, content, created_at").eq("conversation_id", ids[0]).ilike("content", f"%{q}%").order("created_at", desc=True).limit(20).execute()
+        else:
+            r = supabase.table("dm_messages").select("id, conversation_id, sender_id, content, created_at").in_("conversation_id", ids).ilike("content", f"%{q}%").order("created_at", desc=True).limit(20).execute()
+        return jsonify({"results": r.data or []}), 200
+    except:
+        return jsonify({"results": []}), 200
 
 
 if __name__ == "__main__":
