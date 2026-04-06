@@ -14708,6 +14708,125 @@ def search_by_hashtag(tag):
         return jsonify({"posts": [], "hashtag": tag}), 200
 
 
+## ====== POLLS ======
+
+@app.route("/api/social/posts/<post_id>/vote-poll", methods=["POST"])
+@supabase_auth_required
+def vote_poll(post_id):
+    """Vote on a poll option."""
+    try:
+        user_id = request.user_id
+        data = request.json
+        option_index = data.get("option_index")
+
+        if option_index is None:
+            return jsonify({"error": "option_index required"}), 400
+
+        # Check post has a poll
+        post = supabase.table("social_posts").select("poll_options, poll_ends_at").eq("id", post_id).execute()
+        if not post.data or not post.data[0].get("poll_options"):
+            return jsonify({"error": "No poll on this post"}), 404
+
+        options = post.data[0]["poll_options"]
+        if option_index < 0 or option_index >= len(options):
+            return jsonify({"error": "Invalid option"}), 400
+
+        # Check if poll expired
+        if post.data[0].get("poll_ends_at"):
+            ends = datetime.fromisoformat(post.data[0]["poll_ends_at"].replace("Z", "+00:00"))
+            if datetime.now(ends.tzinfo) > ends:
+                return jsonify({"error": "Poll has ended"}), 400
+
+        # Insert vote (unique constraint prevents double voting)
+        try:
+            supabase.table("poll_votes").insert({
+                "post_id": post_id,
+                "user_id": user_id,
+                "option_index": option_index
+            }).execute()
+        except Exception as e:
+            if "unique" in str(e).lower() or "duplicate" in str(e).lower():
+                return jsonify({"error": "Already voted"}), 409
+            raise
+
+        # Update vote count on the option
+        options[option_index]["votes"] = options[option_index].get("votes", 0) + 1
+        supabase.table("social_posts").update({"poll_options": options}).eq("id", post_id).execute()
+
+        return jsonify({"success": True, "options": options}), 200
+
+    except Exception as e:
+        debug_log(f"Poll vote error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
+## ====== LINK PREVIEW ======
+
+@app.route("/api/social/link-preview", methods=["POST"])
+@supabase_auth_required
+def get_link_preview():
+    """Fetch Open Graph metadata for a URL."""
+    try:
+        data = request.json
+        url = (data.get("url") or "").strip()
+
+        if not url or not url.startswith("http"):
+            return jsonify({"error": "Invalid URL"}), 400
+
+        import requests as req
+        from html.parser import HTMLParser
+
+        # Fetch page with timeout
+        headers = {"User-Agent": "StudyFlowBot/1.0"}
+        resp = req.get(url, headers=headers, timeout=5, allow_redirects=True)
+        if resp.status_code != 200:
+            return jsonify({"error": "Could not fetch URL"}), 400
+
+        html = resp.text[:50000]  # Only parse first 50KB
+
+        # Simple OG tag parser
+        og = {}
+        class OGParser(HTMLParser):
+            def handle_starttag(self, tag, attrs):
+                if tag == 'meta':
+                    d = dict(attrs)
+                    prop = d.get('property', d.get('name', ''))
+                    content = d.get('content', '')
+                    if prop.startswith('og:'):
+                        og[prop[3:]] = content
+                    elif prop == 'description' and 'description' not in og:
+                        og['description'] = content
+                elif tag == 'title':
+                    self._in_title = True
+                    self._title = ''
+            def handle_data(self, data):
+                if getattr(self, '_in_title', False):
+                    self._title += data
+            def handle_endtag(self, tag):
+                if tag == 'title' and getattr(self, '_in_title', False):
+                    self._in_title = False
+                    if 'title' not in og:
+                        og['title'] = self._title.strip()
+
+        parser = OGParser()
+        parser.feed(html)
+
+        if not og.get('title'):
+            return jsonify({"error": "No metadata found"}), 404
+
+        return jsonify({
+            "title": og.get("title", "")[:200],
+            "description": og.get("description", "")[:300],
+            "image": og.get("image", ""),
+            "url": url,
+            "site_name": og.get("site_name", "")
+        }), 200
+
+    except Exception as e:
+        debug_log(f"Link preview error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": "Could not fetch preview"}), 500
+
+
 ## ====== STORIES ======
 
 @app.route("/api/social/stories", methods=["GET"])
@@ -15146,6 +15265,13 @@ def create_social_post():
         images = data.get("images", [])
         if images and isinstance(images, list):
             post_data["images"] = images[:10]
+
+        # Poll support
+        poll_options = data.get("poll_options")
+        poll_duration = data.get("poll_duration", 24)  # hours
+        if poll_options and isinstance(poll_options, list) and len(poll_options) >= 2:
+            post_data["poll_options"] = [{"text": str(o)[:100], "votes": 0} for o in poll_options[:6]]
+            post_data["poll_ends_at"] = (datetime.utcnow() + timedelta(hours=min(poll_duration, 168))).isoformat()
 
         # Parse hashtags and mentions from text
         import re
