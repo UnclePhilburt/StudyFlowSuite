@@ -1,9 +1,10 @@
 """
-PDF Flattening & Watermarking for StudyFlow Suite
+PDF Flattening & Social Attribution for StudyFlow Suite
 
 Rasterizes PDF pages so text cannot be copied/edited,
-then overlays a watermark with username and transaction code.
-Also handles image files by converting them to watermarked PDFs.
+then adds clean header/footer bars with social attribution
+(username, download ID, timestamp) instead of diagonal watermarks.
+Also handles image files by converting them to attributed PDFs.
 """
 
 import io
@@ -21,8 +22,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 
 DPI = 150  # Resolution for rasterizing pages (150 = good quality, reasonable size)
-WATERMARK_OPACITY = 40  # 0-255, lower = more transparent
-FOOTER_HEIGHT = 30  # pixels for the footer bar
+FOOTER_HEIGHT = 30  # pixels for the footer bar (header is fixed at 35px)
 
 
 def _get_font(size):
@@ -37,63 +37,73 @@ def _get_font(size):
 
 
 def _add_watermark(img, username, transaction_code):
-    """Add diagonal watermark text and footer bar to a Pillow Image."""
+    """Add social attribution header and footer bars to a Pillow Image."""
     width, height = img.size
 
-    # Create transparent overlay for diagonal watermark
+    # Convert to RGBA for overlays
+    if img.mode != 'RGBA':
+        img = img.convert('RGBA')
+
+    # Create overlay for header and footer
     overlay = Image.new('RGBA', (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
 
-    # Diagonal watermark text
-    watermark_text = "StudyFlow Suite - For Reference Only"
-    font_size = max(24, width // 30)
-    font = _get_font(font_size)
+    # Font sizes
+    header_font = _get_font(max(14, width // 70))
+    footer_font = _get_font(max(12, width // 80))
 
-    # Diagonal watermarks -- sparse grid so text is readable, not a solid blob
-    angle = -30  # fixed angle for clean diagonals
-    y_spacing = font_size * 12  # large vertical gap between rows
-    x_spacing = font_size * 20  # large horizontal gap between columns
+    # Header bar (top)
+    header_height = 35
+    draw.rectangle(
+        [(0, 0), (width, header_height)],
+        fill=(45, 45, 45, 200)
+    )
 
-    for y_offset in range(0, height * 2, y_spacing):
-        for x_offset in range(-width, width * 2, x_spacing):
-            draw.text(
-                (x_offset, y_offset),
-                watermark_text,
-                fill=(128, 128, 128, WATERMARK_OPACITY),
-                font=font,
-            )
+    # Header text - Left side: username, Right side: StudyFlow Suite
+    header_left = f"Shared by @{username}"
+    header_right = "StudyFlow Suite"
 
-    # Rotate overlay for diagonal effect
-    overlay = overlay.rotate(angle, center=(width // 2, height // 2), expand=False)
+    draw.text(
+        (15, 10),
+        header_left,
+        fill=(220, 220, 220, 255),
+        font=header_font
+    )
 
-    # Composite watermark onto image
-    if img.mode != 'RGBA':
-        img = img.convert('RGBA')
-    img = Image.alpha_composite(img, overlay)
+    # Calculate right-aligned text position
+    try:
+        right_text_bbox = draw.textbbox((0, 0), header_right, font=header_font)
+        right_text_width = right_text_bbox[2] - right_text_bbox[0]
+    except:
+        right_text_width = len(header_right) * 8  # Fallback estimate
 
-    # Footer bar
-    footer_font = _get_font(max(12, width // 60))
+    draw.text(
+        (width - right_text_width - 15, 10),
+        header_right,
+        fill=(100, 149, 237, 255),  # Cornflower blue accent
+        font=header_font
+    )
+
+    # Footer bar (bottom)
     footer_y = height - FOOTER_HEIGHT
-    footer_overlay = Image.new('RGBA', (width, height), (0, 0, 0, 0))
-    footer_draw = ImageDraw.Draw(footer_overlay)
-
-    # Semi-transparent dark footer bar
-    footer_draw.rectangle(
+    draw.rectangle(
         [(0, footer_y), (width, height)],
-        fill=(40, 40, 40, 180)
+        fill=(45, 45, 45, 200)
     )
 
     # Footer text
     timestamp = datetime.utcnow().strftime("%b %d, %Y %H:%M UTC")
-    footer_text = f"@{username}  |  Transaction: {transaction_code}  |  {timestamp}  |  StudyFlow Suite"
-    footer_draw.text(
-        (10, footer_y + 6),
+    footer_text = f"Download ID: {transaction_code}  |  {timestamp}  |  studyflowsuite.com"
+
+    draw.text(
+        (15, footer_y + 8),
         footer_text,
-        fill=(220, 220, 220, 230),
+        fill=(180, 180, 180, 255),
         font=footer_font
     )
 
-    img = Image.alpha_composite(img, footer_overlay)
+    # Composite overlay onto image
+    img = Image.alpha_composite(img, overlay)
 
     # Convert back to RGB for PDF embedding
     return img.convert('RGB')
@@ -101,15 +111,15 @@ def _add_watermark(img, username, transaction_code):
 
 def flatten_pdf(file_data, username, transaction_code):
     """
-    Flatten a PDF: rasterize each page and add watermarks.
+    Flatten a PDF: rasterize each page and add social attribution bars.
 
     Args:
         file_data: Raw PDF bytes
-        username: User's username for watermark
-        transaction_code: Transaction ID for watermark
+        username: User's username for attribution header
+        transaction_code: Transaction ID for attribution footer
 
     Returns:
-        bytes of the flattened, watermarked PDF
+        bytes of the flattened PDF with header/footer attribution
     """
     if fitz is None:
         debug_log("[-] PyMuPDF not available, returning original file")
@@ -167,15 +177,15 @@ def flatten_pdf(file_data, username, transaction_code):
 
 def flatten_image(file_data, username, transaction_code):
     """
-    Convert an image file to a single-page watermarked PDF.
+    Convert an image file to a single-page PDF with social attribution.
 
     Args:
         file_data: Raw image bytes (PNG, JPG, etc.)
-        username: User's username for watermark
-        transaction_code: Transaction ID for watermark
+        username: User's username for attribution header
+        transaction_code: Transaction ID for attribution footer
 
     Returns:
-        bytes of the watermarked PDF
+        bytes of the PDF with header/footer attribution
     """
     if fitz is None:
         debug_log("[-] PyMuPDF not available, returning original file")
@@ -225,7 +235,7 @@ def can_flatten(filename):
 # ============ UPLOAD-TIME PDF CONVERSION ============
 
 def image_to_pdf(file_data):
-    """Convert an image file to a plain PDF (no watermark -- that happens at download)."""
+    """Convert an image file to a plain PDF (no attribution -- that happens at download)."""
     if fitz is None:
         debug_log("[-] PyMuPDF not available, cannot convert image to PDF")
         return None
