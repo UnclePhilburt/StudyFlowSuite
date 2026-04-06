@@ -14160,7 +14160,7 @@ def upload_note_from_social():
             file_name=original_filename,
             file_hash=file_hash,
             file_size=file_size,
-            shared_with_nexus=(content_type in ('note', 'resource')),
+            shared_with_nexus=True,  # Updated after AI classification
             ip_address=ip_address
         )
 
@@ -14280,8 +14280,32 @@ def upload_note_from_social():
 
         note_id = note['id']
 
-        # Only notes go to Nexus (public). Photos and other types stay private.
-        is_nexus = content_type in ('note', 'resource')
+        # Use Gemini to classify if this is educational content (Nexus-worthy)
+        is_nexus = False
+        try:
+            text_sample = ocr_text[:1500] if ocr_text else ""
+            classify_prompt = f"""Classify this uploaded file. Is it educational study material suitable for a university note-sharing platform?
+
+Filename: {original_filename}
+File type: {file_ext}
+Content type selected by user: {content_type}
+Text extracted from file (first 1500 chars):
+{text_sample}
+
+Respond with ONLY one word: "educational" or "personal"
+
+Educational = lecture notes, study guides, textbook excerpts, homework, lab reports, class materials, handwritten notes, flashcards, outlines, summaries, essays, research papers
+Personal = selfies, memes, screenshots of social media, personal photos, random images, non-academic content"""
+
+            classify_response = model.generate_content(classify_prompt)
+            classification = classify_response.text.strip().lower()
+            is_nexus = 'educational' in classification
+            debug_log(f"[AI Classification] {original_filename}: {classification} -> Nexus: {is_nexus}")
+        except Exception as classify_err:
+            # If classification fails, fall back to content_type from user
+            is_nexus = content_type in ('note', 'resource')
+            debug_log(f"[AI Classification] Failed, using fallback: {classify_err}")
+
         if not is_nexus:
             try:
                 supabase.table("notes").update({"is_public": False}).eq("id", note_id).execute()
