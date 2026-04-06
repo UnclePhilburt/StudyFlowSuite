@@ -756,6 +756,20 @@ def signup():
 
         debug_log(f"✅ New user created: {email}")
 
+        # Auto-follow the official StudyFlow account
+        official_id = os.getenv("STUDYFLOW_OFFICIAL_USER_ID")
+        if official_id and result['user']:
+            try:
+                new_user_id = result['user'].id
+                if new_user_id != official_id:
+                    supabase.table("user_followers").insert({
+                        "follower_id": new_user_id,
+                        "following_id": official_id
+                    }).execute()
+                    debug_log(f"Auto-followed official account for {email}")
+            except Exception as follow_err:
+                debug_log(f"Auto-follow failed (non-fatal): {follow_err}")
+
         return jsonify({
             'success': True,
             'message': 'Account created successfully',
@@ -1418,6 +1432,17 @@ def get_current_user():
 
             if not profile:
                 return jsonify({"error": "Failed to create user profile"}), 500
+
+            # Auto-follow official account for new profiles
+            official_id = os.getenv("STUDYFLOW_OFFICIAL_USER_ID")
+            if official_id and request.user_id != official_id:
+                try:
+                    supabase.table("user_followers").insert({
+                        "follower_id": request.user_id,
+                        "following_id": official_id
+                    }).execute()
+                except:
+                    pass
 
         return jsonify({
             "id": profile.get("id"),
