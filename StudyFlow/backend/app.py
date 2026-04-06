@@ -13869,11 +13869,23 @@ def get_social_feed():
             except:
                 pass
 
+            # Fetch latest 2 comments per post for inline preview
+            comments_map = {}
+            try:
+                for pid in post_ids[:20]:  # limit to avoid too many queries
+                    cres = supabase.table("post_comments").select(
+                        "id, user_id, username, text_content, created_at"
+                    ).eq("post_id", pid).order("created_at", desc=True).limit(2).execute()
+                    if cres.data:
+                        comments_map[pid] = list(reversed(cres.data))
+            except:
+                pass
+
             for post in posts:
                 post["user_vote_type"] = votes_map.get(post["id"])
                 post["is_bookmarked"] = post["id"] in bookmark_ids
                 post["avatar_url"] = avatars_map.get(post["user_id"])
-                # Add note details if post has a note
+                post["recent_comments"] = comments_map.get(post["id"], [])
                 if post.get("note_id"):
                     post["notes"] = notes_map.get(post["note_id"])
 
