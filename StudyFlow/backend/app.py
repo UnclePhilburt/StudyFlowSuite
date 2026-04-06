@@ -15811,7 +15811,7 @@ def search_users():
     try:
         query = request.args.get("q", "").strip()
 
-        if not query or len(query) < 2:
+        if not query or len(query) < 1:
             return jsonify({"error": "Search query too short"}), 400
 
         response = supabase.table("user_profiles").select(
