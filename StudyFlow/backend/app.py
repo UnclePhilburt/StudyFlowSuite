@@ -14915,12 +14915,17 @@ def create_story():
             story_data["images"] = [image_url]
             story_data["post_type"] = "text"
 
+        print(f"[STORY DEBUG] Inserting story_data: {story_data}")
         result = supabase.table("social_posts").insert(story_data).execute()
+        print(f"[STORY DEBUG] Result: {result.data}")
         if not result.data:
             return jsonify({"error": "Failed to create story"}), 500
 
         return jsonify({"message": "Story posted!", "story": result.data[0]}), 201
     except Exception as e:
+        print(f"[STORY ERROR] {e}")
+        import traceback
+        traceback.print_exc()
         debug_log(f"Create story error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": str(e)}), 500
 
