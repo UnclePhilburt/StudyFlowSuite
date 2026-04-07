@@ -9808,9 +9808,10 @@ def mark_notifications_read():
     """Mark a single notification or all notifications as read."""
     try:
         from StudyFlow.backend.supabase_client import supabase
-        data = request.get_json()
+        data = request.get_json() or {}
 
-        if data.get("all"):
+        # If no data provided or "all" is true, mark all as read
+        if not data or data.get("all"):
             supabase.table("notifications") \
                 .update({"is_read": True}) \
                 .eq("user_id", request.user_id) \
@@ -9822,8 +9823,6 @@ def mark_notifications_read():
                 .eq("id", data["notification_id"]) \
                 .eq("user_id", request.user_id) \
                 .execute()
-        else:
-            return jsonify({"error": "Provide notification_id or all:true"}), 400
 
         return jsonify({"success": True}), 200
     except Exception as e:
