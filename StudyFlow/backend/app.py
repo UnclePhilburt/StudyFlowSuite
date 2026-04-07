@@ -15218,6 +15218,38 @@ def upload_social_images():
             if len(file_content) > 5 * 1024 * 1024:
                 continue  # Skip files > 5MB
 
+            # Fix EXIF orientation - physically rotate image so it displays correctly
+            if ext in ['jpg', 'jpeg', 'png', 'webp']:
+                try:
+                    from PIL import Image, ExifTags
+                    import io
+                    img = Image.open(io.BytesIO(file_content))
+                    try:
+                        exif = img._getexif()
+                        if exif:
+                            orientation_key = next(
+                                (k for k, v in ExifTags.TAGS.items() if v == 'Orientation'), None
+                            )
+                            if orientation_key and orientation_key in exif:
+                                orientation = exif[orientation_key]
+                                if orientation == 3:
+                                    img = img.rotate(180, expand=True)
+                                elif orientation == 6:
+                                    img = img.rotate(270, expand=True)
+                                elif orientation == 8:
+                                    img = img.rotate(90, expand=True)
+                    except (AttributeError, KeyError):
+                        pass
+                    buf = io.BytesIO()
+                    fmt = 'JPEG' if ext in ['jpg', 'jpeg'] else ext.upper()
+                    if fmt == 'WEBP':
+                        img.save(buf, format='WEBP', quality=90)
+                    else:
+                        img.save(buf, format=fmt, quality=90)
+                    file_content = buf.getvalue()
+                except Exception:
+                    pass  # If Pillow fails, upload original
+
             unique_name = f"social-images/{request.user_id}/{uuid.uuid4()}.{ext}"
             content_type = f"image/{ext}" if ext != 'jpg' else 'image/jpeg'
             url = upload_file_to_storage(file_content, unique_name, content_type)
@@ -16261,8 +16293,35 @@ def upload_avatar():
         if file_size > 5 * 1024 * 1024:
             return jsonify({"error": "File too large. Maximum 5MB"}), 400
 
-        # Read file
+        # Read file and fix EXIF orientation
         file_content = file.read()
+        if file_ext in ['jpg', 'jpeg', 'png', 'webp']:
+            try:
+                from PIL import Image, ExifTags
+                import io
+                img = Image.open(io.BytesIO(file_content))
+                try:
+                    exif = img._getexif()
+                    if exif:
+                        orientation_key = next(
+                            (k for k, v in ExifTags.TAGS.items() if v == 'Orientation'), None
+                        )
+                        if orientation_key and orientation_key in exif:
+                            orientation = exif[orientation_key]
+                            if orientation == 3:
+                                img = img.rotate(180, expand=True)
+                            elif orientation == 6:
+                                img = img.rotate(270, expand=True)
+                            elif orientation == 8:
+                                img = img.rotate(90, expand=True)
+                except (AttributeError, KeyError):
+                    pass
+                buf = io.BytesIO()
+                fmt = 'JPEG' if file_ext in ['jpg', 'jpeg'] else file_ext.upper()
+                img.save(buf, format=fmt, quality=90)
+                file_content = buf.getvalue()
+            except Exception:
+                pass
 
         # Upload to Supabase Storage in avatars folder
         unique_filename = f"avatars/{request.user_id}/{uuid.uuid4()}.{file_ext}"
