@@ -14907,13 +14907,12 @@ def create_story():
             "username": username,
             "post_type": "text",
             "is_story": True,
-            "text_content": text if text else None,
+            "text_content": text if text else "",
             "story_bg": bg
         }
 
         if image_url:
             story_data["images"] = [image_url]
-            story_data["post_type"] = "text"
 
         print(f"[STORY DEBUG] Inserting story_data: {story_data}")
         result = supabase.table("social_posts").insert(story_data).execute()
@@ -15292,7 +15291,7 @@ def create_social_post():
             "user_id": user_id,
             "username": username,
             "post_type": "text" if post_type == "photo" else post_type,
-            "text_content": text_content if text_content else None
+            "text_content": text_content if text_content else ""
         }
 
         # Story support
