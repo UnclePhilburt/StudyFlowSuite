@@ -14544,7 +14544,7 @@ def get_social_feed():
             try:
                 for pid in post_ids[:20]:  # limit to avoid too many queries
                     cres = supabase.table("post_comments").select(
-                        "id, user_id, username, text_content, created_at"
+                        "id, user_id, username, content, created_at"
                     ).eq("post_id", pid).order("created_at", desc=True).limit(2).execute()
                     if cres.data:
                         comments_map[pid] = list(reversed(cres.data))
