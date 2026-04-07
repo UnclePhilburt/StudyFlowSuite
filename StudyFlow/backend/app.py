@@ -15282,7 +15282,7 @@ def create_social_post():
         text_content = (data.get("text_content") or "").strip()
         group_id = data.get("group_id")
 
-        if post_type not in ["note", "text", "group_invite"]:
+        if post_type not in ["note", "text", "group_invite", "photo"]:
             return jsonify({"error": "Invalid post type"}), 400
 
         profile = get_cached_profile(user_id)
@@ -15291,9 +15291,16 @@ def create_social_post():
         post_data = {
             "user_id": user_id,
             "username": username,
-            "post_type": post_type,
+            "post_type": "text" if post_type == "photo" else post_type,
             "text_content": text_content if text_content else None
         }
+
+        # Story support
+        if data.get("is_story"):
+            post_data["is_story"] = True
+        bg_color = data.get("bg_color") or data.get("bg")
+        if bg_color:
+            post_data["story_bg"] = bg_color
 
         if post_type == "note":
             post_data["note_id"] = note_id
