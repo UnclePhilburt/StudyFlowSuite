@@ -14457,17 +14457,15 @@ def get_social_feed():
         # Add current user to see their own posts
         followed_user_ids.append(user_id)
 
-        # Get posts from followed users + own posts
+        # Get posts from followed users + own posts (exclude stories)
         if len(followed_user_ids) == 1:
-            # Single ID - use .eq() instead of .in_()
             response = supabase.table("social_posts").select("*").eq(
                 "user_id", followed_user_ids[0]
-            ).order("created_at", desc=True).limit(per_page).offset(offset).execute()
+            ).neq("is_story", True).order("created_at", desc=True).limit(per_page).offset(offset).execute()
         elif len(followed_user_ids) > 1:
-            # Multiple IDs - use .in_()
             response = supabase.table("social_posts").select("*").in_(
                 "user_id", followed_user_ids
-            ).order("created_at", desc=True).limit(per_page).offset(offset).execute()
+            ).neq("is_story", True).order("created_at", desc=True).limit(per_page).offset(offset).execute()
         else:
             response = None
 
@@ -14597,10 +14595,10 @@ def get_trending_posts():
         per_page = 20
         offset = (page - 1) * per_page
 
-        # Get posts without join to avoid NULL note_id issues
+        # Get posts without join to avoid NULL note_id issues (exclude stories)
         response = supabase.table("social_posts").select(
             "*"
-        ).order("score", desc=True).order("created_at", desc=True).limit(per_page).offset(offset).execute()
+        ).neq("is_story", True).order("score", desc=True).order("created_at", desc=True).limit(per_page).offset(offset).execute()
 
         posts = response.data or []
 
@@ -16210,10 +16208,10 @@ def get_user_posts(username):
 
         profile_user_id = profile.data["id"]
 
-        # Get posts without join to avoid NULL note_id issues
+        # Get posts without join to avoid NULL note_id issues (exclude stories)
         response = supabase.table("social_posts").select("*").eq(
             "user_id", profile_user_id
-        ).order("created_at", desc=True).limit(per_page).offset(offset).execute()
+        ).neq("is_story", True).order("created_at", desc=True).limit(per_page).offset(offset).execute()
 
         posts = response.data or []
 
