@@ -11025,7 +11025,7 @@ def get_personalized_feed():
             comments_map = {}
             try:
                 for pid in post_ids[:20]:
-                    cr = supabase.table("post_comments").select("id, user_id, username, text_content, created_at").eq("post_id", pid).order("created_at", desc=True).limit(2).execute()
+                    cr = supabase.table("post_comments").select("id, user_id, username, content, created_at").eq("post_id", pid).order("created_at", desc=True).limit(2).execute()
                     if cr.data:
                         comments_map[pid] = list(reversed(cr.data))
             except:
@@ -11081,7 +11081,7 @@ def get_social_activity():
         # Recent comments on user's posts
         try:
             if post_ids:
-                query = supabase.table("post_comments").select("user_id, username, post_id, text_content, created_at")
+                query = supabase.table("post_comments").select("user_id, username, post_id, content, created_at")
                 if len(post_ids) == 1:
                     query = query.eq("post_id", post_ids[0])
                 else:
@@ -11093,7 +11093,7 @@ def get_social_activity():
                         "user_id": c["user_id"],
                         "username": c.get("username"),
                         "post_id": c["post_id"],
-                        "detail": (c.get("text_content") or "")[:60],
+                        "detail": (c.get("content") or "")[:60],
                         "created_at": c["created_at"]
                     })
         except:
