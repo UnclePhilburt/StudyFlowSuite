@@ -15213,47 +15213,64 @@ def upload_social_images():
             if not file.filename:
                 continue
             ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else ''
-            if ext not in ['jpg', 'jpeg', 'png', 'gif', 'webp']:
-                continue
+            if ext not in ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif']:
+                # Try to detect from content type
+                ct = (file.content_type or '').lower()
+                if 'image/' in ct:
+                    ext = ct.split('/')[-1].replace('heif', 'heic')
+                    if ext not in ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic', 'heif']:
+                        ext = 'jpg'  # fallback
+                else:
+                    continue
 
             file_content = file.read()
-            if len(file_content) > 5 * 1024 * 1024:
-                continue  # Skip files > 5MB
+            if len(file_content) > 10 * 1024 * 1024:
+                continue  # Skip files > 10MB
 
-            # Fix EXIF orientation - physically rotate image so it displays correctly
-            if ext in ['jpg', 'jpeg', 'png', 'webp']:
+            # Convert HEIC/HEIF to JPEG, fix EXIF orientation
+            try:
+                from PIL import Image, ExifTags
+                import io
                 try:
-                    from PIL import Image, ExifTags
-                    import io
-                    img = Image.open(io.BytesIO(file_content))
-                    try:
-                        exif = img._getexif()
-                        if exif:
-                            orientation_key = next(
-                                (k for k, v in ExifTags.TAGS.items() if v == 'Orientation'), None
-                            )
-                            if orientation_key and orientation_key in exif:
-                                orientation = exif[orientation_key]
-                                if orientation == 3:
-                                    img = img.rotate(180, expand=True)
-                                elif orientation == 6:
-                                    img = img.rotate(270, expand=True)
-                                elif orientation == 8:
-                                    img = img.rotate(90, expand=True)
-                    except (AttributeError, KeyError):
-                        pass
+                    from pillow_heif import register_heif_opener
+                    register_heif_opener()
+                except ImportError:
+                    pass
+                img = Image.open(io.BytesIO(file_content))
+
+                # Fix EXIF orientation
+                try:
+                    exif = img._getexif()
+                    if exif:
+                        orientation_key = next(
+                            (k for k, v in ExifTags.TAGS.items() if v == 'Orientation'), None
+                        )
+                        if orientation_key and orientation_key in exif:
+                            orientation = exif[orientation_key]
+                            if orientation == 3:
+                                img = img.rotate(180, expand=True)
+                            elif orientation == 6:
+                                img = img.rotate(270, expand=True)
+                            elif orientation == 8:
+                                img = img.rotate(90, expand=True)
+                except (AttributeError, KeyError):
+                    pass
+
+                # Convert RGBA to RGB for JPEG output
+                if img.mode in ('RGBA', 'P'):
+                    img = img.convert('RGB')
+
+                # Always save as JPEG for consistency (except GIF)
+                if ext != 'gif':
                     buf = io.BytesIO()
-                    fmt = 'JPEG' if ext in ['jpg', 'jpeg'] else ext.upper()
-                    if fmt == 'WEBP':
-                        img.save(buf, format='WEBP', quality=90)
-                    else:
-                        img.save(buf, format=fmt, quality=90)
+                    img.save(buf, format='JPEG', quality=90)
                     file_content = buf.getvalue()
-                except Exception:
-                    pass  # If Pillow fails, upload original
+                    ext = 'jpg'
+            except Exception as e:
+                print(f"[IMAGE] Pillow processing failed: {e}, uploading original")
 
             unique_name = f"social-images/{request.user_id}/{uuid.uuid4()}.{ext}"
-            content_type = f"image/{ext}" if ext != 'jpg' else 'image/jpeg'
+            content_type = 'image/jpeg' if ext in ['jpg', 'jpeg'] else f"image/{ext}"
             url = upload_file_to_storage(file_content, unique_name, content_type)
             if url:
                 urls.append(url)

@@ -10,6 +10,7 @@ google-generativeai
 google-genai
 python-dotenv
 Pillow
+pillow-heif
 pytesseract
 opencv-python-headless
 scikit-image
