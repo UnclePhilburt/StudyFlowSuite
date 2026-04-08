@@ -4683,13 +4683,9 @@ def get_pomodoro_stats():
 
 ## ====== ACHIEVEMENTS ======
 
-@app.route("/api/achievements", methods=["GET"])
-@supabase_auth_required
-def get_achievements():
-    """Compute achievement progress from existing database tables."""
+def _compute_achievements(user_id):
+    """Compute achievement progress for a user. Returns list of achievement dicts."""
     try:
-        user_id = request.user_id
-
         # Gather stats from various tables
         stats = {}
 
@@ -4989,15 +4985,26 @@ def get_achievements():
                 a['unlocked'] = all_unlocked
                 a['progress'] = 1 if all_unlocked else 0
 
-        unlocked_count = sum(1 for a in achievements if a['unlocked'])
+        return achievements, stats
 
+    except Exception as e:
+        debug_log(f"Achievements compute error: {e}\n{traceback.format_exc()}")
+        return [], {}
+
+
+@app.route("/api/achievements", methods=["GET"])
+@supabase_auth_required
+def get_achievements():
+    """Compute achievement progress from existing database tables."""
+    try:
+        achievements, stats = _compute_achievements(request.user_id)
+        unlocked_count = sum(1 for a in achievements if a['unlocked'])
         return jsonify({
             "achievements": achievements,
             "unlocked": unlocked_count,
             "total": len(achievements),
             "stats": stats
         }), 200
-
     except Exception as e:
         debug_log(f"Achievements error: {e}\n{traceback.format_exc()}")
         return jsonify({"error": "Could not load achievements"}), 500
@@ -16930,17 +16937,7 @@ def get_available_badges():
 
 def _get_achievement_badges(user_id):
     """Helper: convert achievements to badge format"""
-    # Call achievements logic inline
-    import json
-    with app.test_request_context(headers={"Authorization": f"Bearer _internal_"}):
-        request.user_id = user_id
-        # Get achievements response
-        try:
-            resp = get_achievements()
-            data = json.loads(resp[0].data)
-            achievements = data.get("achievements", [])
-        except:
-            achievements = []
+    achievements, _ = _compute_achievements(user_id)
 
     icon_map = {
         "rocket": "🚀", "graduation": "🎓", "book": "📖", "users": "👥",
