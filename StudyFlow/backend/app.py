@@ -13531,14 +13531,27 @@ def admin_note_preview(note_id):
 
         from StudyFlow.backend.supabase_client import supabase
 
-        note = supabase.table("notes").select("file_path, original_filename").eq("id", note_id).execute()
+        note = supabase.table("notes").select("file_path, original_filename, file_type").eq("id", note_id).execute()
         if not note.data or not note.data[0].get("file_path"):
             return jsonify({"error": "Note not found"}), 404
 
-        signed = supabase.storage.from_("note-files").create_signed_url(note.data[0]["file_path"], 3600)
-        url = signed.get("signedURL") or signed.get("signedUrl", "")
+        file_path = note.data[0]["file_path"]
+        filename = note.data[0].get("original_filename")
 
-        return jsonify({"url": url, "filename": note.data[0].get("original_filename")}), 200
+        # If file_path is already a full URL (image notes from social), return it directly
+        if file_path.startswith("http://") or file_path.startswith("https://"):
+            return jsonify({"url": file_path, "filename": filename}), 200
+
+        # Otherwise it's a storage path - generate a signed URL
+        try:
+            signed = supabase.storage.from_("note-files").create_signed_url(file_path, 3600)
+            url = signed.get("signedURL") or signed.get("signedUrl", "")
+            if not url:
+                return jsonify({"error": "Could not generate signed URL", "file_path": file_path}), 500
+            return jsonify({"url": url, "filename": filename}), 200
+        except Exception as storage_err:
+            debug_log(f"Admin preview storage error for {file_path}: {storage_err}")
+            return jsonify({"error": f"Storage error: {storage_err}", "file_path": file_path}), 500
 
     except Exception as e:
         debug_log(f"Admin note preview error: {e}\n{traceback.format_exc()}")
