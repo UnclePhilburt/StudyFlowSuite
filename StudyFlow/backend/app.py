@@ -16914,111 +16914,148 @@ if __name__ == "__main__":
 # ============= BADGE SYSTEM API =============
 
 @app.route("/api/badges/available", methods=["GET"])
+@supabase_auth_required
 def get_available_badges():
-    """Get all available badge definitions"""
+    """Get all available badges (derived from achievements)"""
     try:
-        result = supabase.table("badge_definitions").select("*").eq("is_active", True).order("tier").order("requirement_value").execute()
-        badges = result.data or []
+        # Use the achievements endpoint logic to get all possible badges
+        from flask import g
+        g._badge_user_id = request.user_id
+        badges = _get_achievement_badges(request.user_id)
         return jsonify({"badges": badges}), 200
     except Exception as e:
-        debug_log(f"Get available badges error: {e}\n{traceback.format_exc()}")
+        debug_log(f"Get available badges error: {e}")
         return jsonify({"badges": []}), 200
+
+
+def _get_achievement_badges(user_id):
+    """Helper: convert achievements to badge format"""
+    # Call achievements logic inline
+    import json
+    with app.test_request_context(headers={"Authorization": f"Bearer _internal_"}):
+        request.user_id = user_id
+        # Get achievements response
+        try:
+            resp = get_achievements()
+            data = json.loads(resp[0].data)
+            achievements = data.get("achievements", [])
+        except:
+            achievements = []
+
+    icon_map = {
+        "rocket": "🚀", "graduation": "🎓", "book": "📖", "users": "👥",
+        "chat": "💬", "link": "🔗", "globe": "🌍", "star": "⭐",
+        "heart": "❤️", "award": "🏆", "crown": "👑", "folder": "📁",
+        "archive": "🗃️", "box": "📦", "layers": "📋", "pen": "✏️",
+        "bookmark": "🔖", "download": "⬇️", "message": "✉️", "flag": "🚩",
+        "megaphone": "📢", "network": "🌐", "brain": "🧠", "lightbulb": "💡",
+        "telescope": "🔭", "calendar": "📅", "timer": "⏱️", "fire": "🔥",
+        "mountain": "⛰️", "wave": "🌊", "clock": "🕐", "palette": "🎨",
+        "image": "🖼️", "grid": "📊", "sparkle": "✨", "tophat": "🎩",
+        "rainbow": "🌈", "type": "🔤", "cursor": "🖱️", "moon": "🌙",
+        "sunrise": "🌅", "medal": "🎖️", "hourglass": "⏳", "infinity": "♾️",
+        "share": "🔄", "robot": "🤖", "trophy": "🏆", "pencil": "✏️",
+        "newspaper": "📰", "video": "🎬", "user-plus": "👤", "trending": "📈",
+        "zap": "⚡", "thumbs-up": "👍",
+    }
+
+    badges = []
+    for a in achievements:
+        badges.append({
+            "id": a["id"],
+            "name": a["name"],
+            "description": a["desc"],
+            "icon": icon_map.get(a.get("icon"), "🏅"),
+            "category": a.get("category", ""),
+            "color": "#8B9D83",
+            "unlocked": a.get("unlocked", False),
+            "progress": a.get("progress", 0),
+            "goal": a.get("goal", 1),
+            "hidden": a.get("hidden", False),
+        })
+    return badges
 
 
 @app.route("/api/badges/my-badges", methods=["GET"])
 @supabase_auth_required
 def get_my_badges():
-    """Get current user's earned badges and equipped badges"""
+    """Get current user's earned and equipped badges"""
     try:
         user_id = request.user_id
-        earned = supabase.table("user_badges").select("*, badge_definitions(*)").eq("user_id", user_id).execute()
-        earned_badges = []
-        for item in (earned.data or []):
-            if item.get("badge_definitions"):
-                badge = item["badge_definitions"]
-                badge["earned_at"] = item["earned_at"]
-                earned_badges.append(badge)
-        equipped = supabase.table("user_equipped_badges").select("*").eq("user_id", user_id).single().execute()
-        equipped_ids = []
-        if equipped.data:
-            if equipped.data.get("badge_1"):
-                equipped_ids.append(equipped.data["badge_1"])
-            if equipped.data.get("badge_2"):
-                equipped_ids.append(equipped.data["badge_2"])
-            if equipped.data.get("badge_3"):
-                equipped_ids.append(equipped.data["badge_3"])
-        return jsonify({"earned_badges": earned_badges, "equipped_badge_ids": equipped_ids}), 200
+        all_badges = _get_achievement_badges(user_id)
+        earned = [b for b in all_badges if b["unlocked"]]
+
+        # Get equipped badge IDs from user_profiles preferences
+        try:
+            profile = supabase.table("user_profiles").select("preferences").eq("id", user_id).execute()
+            prefs = (profile.data[0].get("preferences") or {}) if profile.data else {}
+            equipped_ids = prefs.get("equipped_badges", [])
+        except:
+            equipped_ids = []
+
+        return jsonify({"earned_badges": earned, "equipped_badge_ids": equipped_ids}), 200
     except Exception as e:
-        debug_log(f"Get my badges error: {e}\n{traceback.format_exc()}")
+        debug_log(f"Get my badges error: {e}")
         return jsonify({"earned_badges": [], "equipped_badge_ids": []}), 200
 
 
 @app.route("/api/badges/<username>", methods=["GET"])
-@supabase_auth_required
 def get_user_badges(username):
-    """Get a specific user's equipped badges (for display on posts)"""
+    """Get a user's equipped badges for display"""
     try:
-        user = supabase.table("user_profiles").select("id").eq("username", username).single().execute()
+        user = supabase.table("user_profiles").select("id, preferences").eq("username", username).single().execute()
         if not user.data:
-            return jsonify({"badges": []}), 404
-        user_id = user.data["id"]
-        equipped = supabase.table("user_equipped_badges").select("*").eq("user_id", user_id).single().execute()
-        badge_ids = []
-        if equipped.data:
-            if equipped.data.get("badge_1"):
-                badge_ids.append(equipped.data["badge_1"])
-            if equipped.data.get("badge_2"):
-                badge_ids.append(equipped.data["badge_2"])
-            if equipped.data.get("badge_3"):
-                badge_ids.append(equipped.data["badge_3"])
-        badges = []
-        if badge_ids:
-            result = supabase.table("badge_definitions").select("*").in_("id", badge_ids).execute()
-            badges = result.data or []
+            return jsonify({"badges": []}), 200
+
+        prefs = user.data.get("preferences") or {}
+        equipped_ids = prefs.get("equipped_badges", [])
+        if not equipped_ids:
+            return jsonify({"badges": []}), 200
+
+        all_badges = _get_achievement_badges(user.data["id"])
+        badges = [b for b in all_badges if b["id"] in equipped_ids and b["unlocked"]]
         return jsonify({"badges": badges}), 200
     except Exception as e:
-        debug_log(f"Get user badges error: {e}\n{traceback.format_exc()}")
+        debug_log(f"Get user badges error: {e}")
         return jsonify({"badges": []}), 200
 
 
 @app.route("/api/badges/equip", methods=["POST"])
 @supabase_auth_required
 def equip_badges():
-    """Equip up to 3 badges for display"""
+    """Equip up to 3 badges for display (stored in preferences)"""
     try:
         user_id = request.user_id
         data = request.json or {}
-        badge_ids = data.get("badge_ids", [])
-        if len(badge_ids) > 3:
-            return jsonify({"error": "Maximum 3 badges allowed"}), 400
-        for badge_id in badge_ids:
-            if badge_id:
-                owned = supabase.table("user_badges").select("id").eq("user_id", user_id).eq("badge_id", badge_id).execute()
-                if not owned.data:
-                    return jsonify({"error": f"You have not earned badge: {badge_id}"}), 403
-        equipped_data = {
-            "badge_1": badge_ids[0] if len(badge_ids) > 0 else None,
-            "badge_2": badge_ids[1] if len(badge_ids) > 1 else None,
-            "badge_3": badge_ids[2] if len(badge_ids) > 2 else None,
-            "updated_at": "now()"
-        }
-        supabase.table("user_equipped_badges").upsert({"user_id": user_id, **equipped_data}).execute()
-        debug_log(f"User {user_id} equipped badges: {badge_ids}")
+        badge_ids = data.get("badge_ids", [])[:3]
+
+        # Verify user has earned these badges
+        all_badges = _get_achievement_badges(user_id)
+        earned_ids = {b["id"] for b in all_badges if b["unlocked"]}
+        for bid in badge_ids:
+            if bid and bid not in earned_ids:
+                return jsonify({"error": f"Badge not earned: {bid}"}), 403
+
+        # Store in preferences
+        profile = supabase.table("user_profiles").select("preferences").eq("id", user_id).execute()
+        prefs = (profile.data[0].get("preferences") or {}) if profile.data else {}
+        prefs["equipped_badges"] = badge_ids
+        supabase.table("user_profiles").update({"preferences": prefs}).eq("id", user_id).execute()
+
         return jsonify({"success": True, "equipped_badges": badge_ids}), 200
     except Exception as e:
-        debug_log(f"Equip badges error: {e}\n{traceback.format_exc()}")
+        debug_log(f"Equip badges error: {e}")
         return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/badges/check-new", methods=["POST"])
 @supabase_auth_required
 def check_new_badges():
-    """Check if user has earned any new badges based on current stats"""
+    """Check for newly earned badges"""
     try:
-        user_id = request.user_id
-        result = supabase.rpc("check_and_grant_badges", {"p_user_id": user_id}).execute()
-        newly_earned = result.data or []
-        return jsonify({"newly_earned": newly_earned, "count": len(newly_earned)}), 200
+        all_badges = _get_achievement_badges(request.user_id)
+        earned = [b for b in all_badges if b["unlocked"]]
+        return jsonify({"newly_earned": earned, "count": len(earned)}), 200
     except Exception as e:
         debug_log(f"Check new badges error: {e}\n{traceback.format_exc()}")
         return jsonify({"newly_earned": [], "count": 0}), 200
