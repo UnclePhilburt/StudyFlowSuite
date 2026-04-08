@@ -5808,11 +5808,28 @@ def download_note_endpoint(note_id):
             except Exception as count_err:
                 debug_log(f"[-] Failed to increment download count: {count_err}")
 
-        return send_file(
-            io.BytesIO(file_data),
+        # Validate we have actual content
+        if not file_data or len(file_data) == 0:
+            debug_log(f"[-] Download produced empty file_data for note {note_id}")
+            return jsonify({"error": "File is empty or could not be processed"}), 500
+
+        debug_log(f"[+] Sending download: {download_name} ({len(file_data)} bytes, {mimetype})")
+
+        # Sanitize filename for Content-Disposition (remove non-ASCII)
+        import re as _re
+        safe_name = _re.sub(r'[^\w\-. ]', '_', download_name)
+        if not safe_name:
+            safe_name = 'note.pdf'
+
+        from flask import Response
+        return Response(
+            file_data,
             mimetype=mimetype,
-            as_attachment=True,
-            download_name=download_name
+            headers={
+                'Content-Disposition': f'attachment; filename="{safe_name}"',
+                'Content-Length': str(len(file_data)),
+                'Cache-Control': 'no-store'
+            }
         )
 
     except Exception as e:
@@ -8632,11 +8649,28 @@ def download_note_file(note_id):
             except Exception as count_err:
                 debug_log(f"[-] Failed to increment download count: {count_err}")
 
-        return send_file(
-            io.BytesIO(file_data),
+        # Validate we have actual content
+        if not file_data or len(file_data) == 0:
+            debug_log(f"[-] Download produced empty file_data for note {note_id}")
+            return jsonify({"error": "File is empty or could not be processed"}), 500
+
+        debug_log(f"[+] Sending download: {download_name} ({len(file_data)} bytes, {mimetype})")
+
+        # Sanitize filename for Content-Disposition (remove non-ASCII)
+        import re as _re
+        safe_name = _re.sub(r'[^\w\-. ]', '_', download_name)
+        if not safe_name:
+            safe_name = 'note.pdf'
+
+        from flask import Response
+        return Response(
+            file_data,
             mimetype=mimetype,
-            as_attachment=True,
-            download_name=download_name
+            headers={
+                'Content-Disposition': f'attachment; filename="{safe_name}"',
+                'Content-Length': str(len(file_data)),
+                'Cache-Control': 'no-store'
+            }
         )
 
     except Exception as e:
