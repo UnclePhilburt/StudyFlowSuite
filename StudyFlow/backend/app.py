@@ -13472,19 +13472,27 @@ def review_note(note_id):
 
 @app.route("/admin/classification-queue", methods=["GET"])
 def admin_classification_queue():
-    """Admin: get recent uploads with their AI classification for review."""
+    """Admin: get recent uploads with their AI classification for review.
+    Excludes notes that have already been admin-reviewed.
+    """
     try:
         admin_key = request.args.get("key", "")
         if admin_key != os.getenv("ADMIN_KEY", "change_me_in_production"):
             return jsonify({"error": "Unauthorized"}), 403
 
         limit = int(request.args.get("limit", 50))
+        show_all = request.args.get("show_all", "false").lower() == "true"
 
-        result = supabase.table("notes").select(
+        query = supabase.table("notes").select(
             "id, user_id, original_filename, file_type, file_size, page_count, "
             "is_public, ai_classification, uploaded_at, username"
-        ).order("uploaded_at", desc=True).limit(limit).execute()
+        ).order("uploaded_at", desc=True).limit(limit)
 
+        # Hide already-reviewed unless show_all is set
+        if not show_all:
+            query = query.not_.like("ai_classification", "%(admin)%")
+
+        result = query.execute()
         return jsonify({"notes": result.data or []}), 200
 
     except Exception as e:
