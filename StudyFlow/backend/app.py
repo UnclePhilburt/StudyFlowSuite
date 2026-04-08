@@ -5749,6 +5749,9 @@ def download_note_endpoint(note_id):
         flattenable, file_type = can_flatten(original_filename)
         name_base = original_filename.rsplit('.', 1)[0] if '.' in original_filename else original_filename
 
+        download_name = f"{name_base}_studyflow.pdf"
+        mimetype = 'application/pdf'
+
         if flattenable and file_type == 'pdf':
             file_data = flatten_pdf(file_data, username, transaction_code)
         elif flattenable and file_type == 'image':
@@ -5758,9 +5761,18 @@ def download_note_endpoint(note_id):
             pdf_data, _ = convert_to_pdf(file_data, original_filename)
             if pdf_data:
                 file_data = flatten_pdf(pdf_data, username, transaction_code)
-
-        download_name = f"{name_base}_studyflow.pdf"
-        mimetype = 'application/pdf'
+            else:
+                # Conversion failed -- serve original file with original mimetype/name
+                debug_log(f"[-] PDF conversion failed for {original_filename}, serving original")
+                download_name = original_filename
+                ext = original_filename.rsplit('.', 1)[-1].lower() if '.' in original_filename else ''
+                mime_map = {
+                    'txt': 'text/plain',
+                    'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                    'doc': 'application/msword', 'rtf': 'application/rtf', 'csv': 'text/csv',
+                    'json': 'application/json', 'md': 'text/markdown', 'xml': 'application/xml'
+                }
+                mimetype = mime_map.get(ext, 'application/octet-stream')
 
         # Increment download counter for free users
         if not is_scholar:
@@ -8538,6 +8550,9 @@ def download_note_file(note_id):
         flattenable, file_type = can_flatten(original_filename)
         name_base = original_filename.rsplit('.', 1)[0] if '.' in original_filename else original_filename
 
+        download_name = f"{name_base}_studyflow.pdf"
+        mimetype = 'application/pdf'
+
         if flattenable and file_type == 'pdf':
             file_data = flatten_pdf(file_data, username, transaction_code)
         elif flattenable and file_type == 'image':
@@ -8547,9 +8562,18 @@ def download_note_file(note_id):
             pdf_data, _ = convert_to_pdf(file_data, original_filename)
             if pdf_data:
                 file_data = flatten_pdf(pdf_data, username, transaction_code)
-
-        download_name = f"{name_base}_studyflow.pdf"
-        mimetype = 'application/pdf'
+            else:
+                # Conversion failed -- serve original file with original mimetype/name
+                debug_log(f"[-] PDF conversion failed for {original_filename}, serving original")
+                download_name = original_filename
+                ext = original_filename.rsplit('.', 1)[-1].lower() if '.' in original_filename else ''
+                mime_map = {
+                    'txt': 'text/plain',
+                    'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                    'doc': 'application/msword', 'rtf': 'application/rtf', 'csv': 'text/csv',
+                    'json': 'application/json', 'md': 'text/markdown', 'xml': 'application/xml'
+                }
+                mimetype = mime_map.get(ext, 'application/octet-stream')
 
         # Increment download counter for free users
         if not is_scholar:
