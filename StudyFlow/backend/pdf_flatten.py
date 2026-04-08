@@ -38,66 +38,83 @@ def _get_font(size):
 
 
 def _add_watermark(img, username, transaction_code):
-    """Add minimal, elegant attribution badge to a Pillow Image - like a seal of quality."""
+    """Add visible attribution watermark to a Pillow Image."""
     width, height = img.size
 
     # Convert to RGBA for overlays
     if img.mode != 'RGBA':
         img = img.convert('RGBA')
 
-    # Create overlay
     overlay = Image.new('RGBA', (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(overlay)
 
-    # Very subtle footer line - just a tasteful accent
-    footer_line_height = 1
-    footer_y = height - 25
+    # ============ DIAGONAL WATERMARK (across whole page) ============
+    diag_font_size = max(40, width // 25)
+    diag_font = _get_font(diag_font_size)
+    diag_text = f"@{username} - StudyFlow Suite"
 
-    # Thin accent line (very subtle)
+    try:
+        text_bbox = draw.textbbox((0, 0), diag_text, font=diag_font)
+        text_width = text_bbox[2] - text_bbox[0]
+        text_height = text_bbox[3] - text_bbox[1]
+    except:
+        text_width = len(diag_text) * diag_font_size // 2
+        text_height = diag_font_size
+
+    # Create rotated text overlay
+    diag_layer = Image.new('RGBA', (text_width + 40, text_height + 20), (0, 0, 0, 0))
+    diag_draw = ImageDraw.Draw(diag_layer)
+    diag_draw.text((20, 10), diag_text, fill=(180, 180, 180, 70), font=diag_font)
+    rotated = diag_layer.rotate(30, expand=True, resample=Image.BICUBIC)
+
+    # Paste rotated text in center
+    paste_x = (width - rotated.width) // 2
+    paste_y = (height - rotated.height) // 2
+    overlay.paste(rotated, (paste_x, paste_y), rotated)
+
+    # ============ FOOTER BAR (bottom of page) ============
+    footer_height = 32
+    footer_y = height - footer_height
+
+    # Solid footer background bar
     draw.rectangle(
-        [(0, footer_y), (width, footer_y + footer_line_height)],
-        fill=(180, 180, 180, 60)  # Very subtle gray line
+        [(0, footer_y), (width, height)],
+        fill=(40, 60, 50, 220)
     )
 
-    # Minimal attribution text - small, tasteful, bottom-right corner
-    font_size = max(9, width // 120)  # Very small font
-    footer_font = _get_font(font_size)
+    # Footer text
+    footer_font_size = max(11, width // 80)
+    footer_font = _get_font(footer_font_size)
 
-    # Just the essentials - make it look like a quality badge
-    attribution_text = f"@{username} · StudyFlow"
+    left_text = f"@{username} - StudyFlow Suite"
+    right_text = f"{transaction_code} - studyflowsuite.com"
 
-    # Calculate text width for right-alignment
     try:
-        text_bbox = draw.textbbox((0, 0), attribution_text, font=footer_font)
-        text_width = text_bbox[2] - text_bbox[0]
+        right_bbox = draw.textbbox((0, 0), right_text, font=footer_font)
+        right_width = right_bbox[2] - right_bbox[0]
     except:
-        text_width = len(attribution_text) * 6
+        right_width = len(right_text) * footer_font_size // 2
 
-    # Bottom-right corner, subtle and elegant
-    text_x = width - text_width - 15
-    text_y = footer_y + 6
+    footer_text_y = footer_y + (footer_height - footer_font_size) // 2 - 2
 
-    # Add subtle shadow for readability without being obtrusive
-    shadow_offset = 1
+    # Left side: username
     draw.text(
-        (text_x + shadow_offset, text_y + shadow_offset),
-        attribution_text,
-        fill=(0, 0, 0, 40),  # Very subtle shadow
+        (15, footer_text_y),
+        left_text,
+        fill=(255, 255, 255, 240),
         font=footer_font
     )
 
-    # Main text - muted gray, not bright white
+    # Right side: transaction code + site
     draw.text(
-        (text_x, text_y),
-        attribution_text,
-        fill=(140, 140, 140, 180),  # Muted gray, feels premium
+        (width - right_width - 15, footer_text_y),
+        right_text,
+        fill=(255, 255, 255, 240),
         font=footer_font
     )
 
     # Composite overlay onto image
     img = Image.alpha_composite(img, overlay)
-
-    # Convert back to RGB for PDF embedding
     return img.convert('RGB')
 
 
