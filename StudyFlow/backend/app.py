@@ -15337,8 +15337,9 @@ def upload_social_images():
 @supabase_auth_required
 @account_not_frozen
 def classify_image_as_note():
-    """User marked an image as a study note. Verify with Gemini and create a notes entry.
-    Returns note_id that can be linked to a social_post with post_type='note'.
+    """User marked an image as a study note. Verify with Gemini, watermark the image,
+    re-upload it, and create a notes entry. Returns the new watermarked image URL
+    and note_id so the social post can link to both.
     """
     try:
         data = request.json or {}
@@ -15348,29 +15349,43 @@ def classify_image_as_note():
 
         user_id = request.user_id
         import uuid
+        from PIL import Image
+        import io
+        import requests as req_lib
         note_id = str(uuid.uuid4())
 
-        # Run Gemini classification on the image
+        # Get user profile for username (needed for watermark)
+        try:
+            profile = supabase.table("user_profiles").select("username").eq("id", user_id).execute()
+            username = profile.data[0].get("username", "Anonymous") if profile.data else "Anonymous"
+        except:
+            username = "Anonymous"
+
+        # Download image content
+        img_bytes = None
+        try:
+            img_resp = req_lib.get(image_url, timeout=10)
+            if img_resp.ok:
+                img_bytes = img_resp.content
+        except Exception as e:
+            debug_log(f"Failed to download image for classification: {e}")
+
+        if not img_bytes:
+            return jsonify({"error": "Could not download image"}), 500
+
+        # Run Gemini classification
         ai_classification = "user_marked_pending"
         is_public = False
         is_educational = False
-
         try:
             import google.generativeai as genai
-            import requests as req_lib
             genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
             model = genai.GenerativeModel('gemini-2.5-flash')
+            pil_img = Image.open(io.BytesIO(img_bytes))
+            if pil_img.mode in ('RGBA', 'P'):
+                pil_img = pil_img.convert('RGB')
 
-            # Download image content
-            img_resp = req_lib.get(image_url, timeout=10)
-            if img_resp.ok:
-                from PIL import Image
-                import io
-                pil_img = Image.open(io.BytesIO(img_resp.content))
-                if pil_img.mode in ('RGBA', 'P'):
-                    pil_img = pil_img.convert('RGB')
-
-                prompt = """Look at this image. Is it study-related material?
+            prompt = """Look at this image. Is it study-related material?
 
 Study material includes: handwritten notes, lecture slides, textbook pages, whiteboard photos, diagrams, formulas, study guides, homework, code, academic content.
 
@@ -15379,52 +15394,64 @@ NOT study material: selfies, food, pets, scenery, screenshots of social media, m
 Respond with ONLY a JSON object:
 {"is_study_material": true/false, "confidence": 0.0-1.0, "category": "notes" | "slides" | "textbook" | "diagram" | "personal" | "other"}"""
 
-                response = model.generate_content([prompt, pil_img])
-                ai_text = (response.text or "").strip()
+            response = model.generate_content([prompt, pil_img])
+            ai_text = (response.text or "").strip()
+            try:
+                from StudyFlow.backend.cost_tracker import track_ai_call
+                track_ai_call("gemini", "2.5-flash", "image_note_classify")
+            except:
+                pass
 
-                try:
-                    from StudyFlow.backend.cost_tracker import track_ai_call
-                    track_ai_call("gemini", "2.5-flash", "image_note_classify")
-                except:
-                    pass
-
-                import json, re
-                if ai_text.startswith("```"):
-                    ai_text = re.sub(r'^```json?\s*', '', ai_text)
-                    ai_text = re.sub(r'\s*```$', '', ai_text)
-                result = json.loads(ai_text)
-                is_educational = bool(result.get("is_study_material"))
-                category = result.get("category", "other")
-
-                if is_educational:
-                    ai_classification = f"educational ({category})"
-                    is_public = True
-                else:
-                    ai_classification = f"personal (mismatch: {category})"
-                    is_public = False
+            import json, re
+            if ai_text.startswith("```"):
+                ai_text = re.sub(r'^```json?\s*', '', ai_text)
+                ai_text = re.sub(r'\s*```$', '', ai_text)
+            result = json.loads(ai_text)
+            is_educational = bool(result.get("is_study_material"))
+            category = result.get("category", "other")
+            if is_educational:
+                ai_classification = f"educational ({category})"
+                is_public = True
+            else:
+                ai_classification = f"personal (mismatch: {category})"
+                is_public = False
         except Exception as e:
             debug_log(f"Gemini image classification failed: {e}")
-            # If Gemini fails, accept the user's claim but mark as pending review
             ai_classification = "pending_review"
             is_public = True
 
-        # Get user profile for username
+        # Watermark the image with username and transaction code
+        watermarked_url = image_url  # fallback
         try:
-            profile = supabase.table("user_profiles").select("username").eq("id", user_id).execute()
-            username = profile.data[0].get("username", "Anonymous") if profile.data else "Anonymous"
-        except:
-            username = "Anonymous"
+            from StudyFlow.backend.pdf_flatten import _add_watermark
+            from StudyFlow.backend.supabase_client import upload_file_to_storage
+            transaction_code = "NOTE-" + note_id[:8]
+            wm_img = Image.open(io.BytesIO(img_bytes))
+            if wm_img.mode in ('P',):
+                wm_img = wm_img.convert('RGBA')
+            wm_img = _add_watermark(wm_img, username, transaction_code)
+            buf = io.BytesIO()
+            wm_img.save(buf, format='JPEG', quality=90)
+            wm_bytes = buf.getvalue()
 
-        # Create notes entry pointing to the image
+            unique_name = f"social-images/{user_id}/{note_id}_note.jpg"
+            new_url = upload_file_to_storage(wm_bytes, unique_name, 'image/jpeg')
+            if new_url:
+                watermarked_url = new_url
+                debug_log(f"Watermarked note image uploaded: {new_url}")
+        except Exception as e:
+            debug_log(f"Image watermarking failed: {e}, using original")
+
+        # Create notes entry pointing to the watermarked image
         note_row = {
             "id": note_id,
             "user_id": user_id,
             "username": username,
             "original_filename": "Photo Note",
             "file_type": "image",
-            "file_path": image_url,
-            "thumbnail_url": image_url,
-            "file_size": 0,
+            "file_path": watermarked_url,
+            "thumbnail_url": watermarked_url,
+            "file_size": len(img_bytes),
             "is_public": is_public,
             "page_count": 1,
             "ai_classification": ai_classification,
@@ -15438,6 +15465,7 @@ Respond with ONLY a JSON object:
 
         return jsonify({
             "note_id": note_id,
+            "watermarked_url": watermarked_url,
             "is_educational": is_educational,
             "ai_classification": ai_classification,
             "is_public": is_public
