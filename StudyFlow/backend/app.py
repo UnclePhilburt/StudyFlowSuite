@@ -14473,81 +14473,74 @@ def get_social_feed():
 
         # Fetch note details separately for posts that have notes
         if posts:
-            note_ids = [p["note_id"] for p in posts if p.get("note_id")]
-            notes_map = {}
-            if note_ids:
-                try:
-                    # Use .eq() for single ID, .in_() for multiple to avoid 400 error
-                    if len(note_ids) == 1:
-                        print(f"[FEED DEBUG] Fetching single note ID: {note_ids[0]}")
-                        print(f"[FEED DEBUG] Using service role client: {type(supabase)}")
-                        notes_response = supabase.table("notes").select(
-                            "id, original_filename, thumbnail_url, file_type"
-                        ).eq("id", note_ids[0]).execute()
-                        print(f"[FEED DEBUG] Response data: {notes_response.data}")
-                        print(f"[FEED DEBUG] Response count: {notes_response.count}")
-                    else:
-                        print(f"[FEED DEBUG] Fetching multiple notes: {len(note_ids)} notes")
-                        notes_response = supabase.table("notes").select(
-                            "id, original_filename, thumbnail_url, file_type"
-                        ).in_("id", note_ids).execute()
-                    notes_map = {n["id"]: n for n in (notes_response.data or [])}
-                    print(f"[FEED DEBUG] Successfully mapped {len(notes_map)} notes")
-                except Exception as e:
-                    print(f"[FEED ERROR] Exception type: {type(e)}")
-                    print(f"[FEED ERROR] Exception message: {str(e)}")
-                    print(f"[FEED ERROR] Full traceback:")
-                    import traceback
-                    traceback.print_exc()
-                    notes_map = {}
-
-            # Add user interaction flags and note details
             post_ids = [p["id"] for p in posts]
-
-            # Use .eq() for single ID, .in_() for multiple to avoid 400 error
-            if len(post_ids) == 1:
-                votes = supabase.table("post_votes").select("post_id, vote_type").eq(
-                    "user_id", user_id
-                ).eq("post_id", post_ids[0]).execute()
-            else:
-                votes = supabase.table("post_votes").select("post_id, vote_type").eq(
-                    "user_id", user_id
-                ).in_("post_id", post_ids).execute()
-            votes_map = {v["post_id"]: v["vote_type"] for v in (votes.data or [])}
-
-            if len(post_ids) == 1:
-                bookmarks = supabase.table("post_bookmarks").select("post_id").eq(
-                    "user_id", user_id
-                ).eq("post_id", post_ids[0]).execute()
-            else:
-                bookmarks = supabase.table("post_bookmarks").select("post_id").eq(
-                    "user_id", user_id
-                ).in_("post_id", post_ids).execute()
-            bookmark_ids = {b["post_id"] for b in (bookmarks.data or [])}
-
-            # Fetch avatar URLs for post authors
             author_ids = list(set(p["user_id"] for p in posts))
-            avatars_map = {}
-            try:
-                if len(author_ids) == 1:
-                    av_res = supabase.table("user_profiles").select("id, avatar_url, is_verified").eq("id", author_ids[0]).execute()
-                else:
-                    av_res = supabase.table("user_profiles").select("id, avatar_url, is_verified").in_("id", author_ids).execute()
-                avatars_map = {a["id"]: {"avatar_url": a.get("avatar_url"), "is_verified": a.get("is_verified", False)} for a in (av_res.data or [])}
-            except:
-                pass
+            note_ids = [p["note_id"] for p in posts if p.get("note_id")]
 
-            # Fetch latest 2 comments per post for inline preview
+            # Batch all enrichment queries (no N+1)
+            notes_map = {}
+            votes_map = {}
+            bookmark_ids = set()
+            avatars_map = {}
             comments_map = {}
+
+            def _q(table, select, field, ids):
+                if not ids: return []
+                q = supabase.table(table).select(select)
+                if len(ids) == 1:
+                    q = q.eq(field, ids[0])
+                else:
+                    q = q.in_(field, ids)
+                return q.execute().data or []
+
             try:
-                for pid in post_ids[:20]:  # limit to avoid too many queries
-                    cres = supabase.table("post_comments").select(
-                        "id, user_id, username, content, created_at"
-                    ).eq("post_id", pid).order("created_at", desc=True).limit(2).execute()
-                    if cres.data:
-                        comments_map[pid] = list(reversed(cres.data))
-            except:
-                pass
+                # Notes
+                if note_ids:
+                    for n in _q("notes", "id, original_filename, thumbnail_url, file_type", "id", note_ids):
+                        notes_map[n["id"]] = n
+
+                # Votes, bookmarks, avatars — all single batch queries
+                for v in _q("post_votes", "post_id, vote_type", "post_id", post_ids):
+                    if v.get("user_id") == user_id or "user_id" not in v:
+                        votes_map[v["post_id"]] = v["vote_type"]
+                # Re-query votes filtered by user (the above won't have user_id filter)
+                votes_q = supabase.table("post_votes").select("post_id, vote_type").eq("user_id", user_id)
+                if len(post_ids) == 1:
+                    votes_q = votes_q.eq("post_id", post_ids[0])
+                else:
+                    votes_q = votes_q.in_("post_id", post_ids)
+                votes_map = {v["post_id"]: v["vote_type"] for v in (votes_q.execute().data or [])}
+
+                bookmark_ids = {b["post_id"] for b in _q("post_bookmarks", "post_id", "post_id", post_ids) if b.get("user_id") == user_id}
+                # Re-query bookmarks filtered by user
+                bk_q = supabase.table("post_bookmarks").select("post_id").eq("user_id", user_id)
+                if len(post_ids) == 1:
+                    bk_q = bk_q.eq("post_id", post_ids[0])
+                else:
+                    bk_q = bk_q.in_("post_id", post_ids)
+                bookmark_ids = {b["post_id"] for b in (bk_q.execute().data or [])}
+
+                for a in _q("user_profiles", "id, avatar_url, is_verified", "id", author_ids):
+                    avatars_map[a["id"]] = {"avatar_url": a.get("avatar_url"), "is_verified": a.get("is_verified", False)}
+
+                # Batch comment fetch — single query for all posts, then group
+                if len(post_ids) == 1:
+                    all_comments = supabase.table("post_comments").select(
+                        "id, user_id, username, content, created_at, post_id"
+                    ).eq("post_id", post_ids[0]).order("created_at", desc=True).limit(40).execute().data or []
+                else:
+                    all_comments = supabase.table("post_comments").select(
+                        "id, user_id, username, content, created_at, post_id"
+                    ).in_("post_id", post_ids).order("created_at", desc=True).limit(40).execute().data or []
+                # Group by post_id, keep latest 2 per post
+                from collections import defaultdict
+                grouped = defaultdict(list)
+                for c in all_comments:
+                    if len(grouped[c["post_id"]]) < 2:
+                        grouped[c["post_id"]].append(c)
+                comments_map = {pid: list(reversed(cs)) for pid, cs in grouped.items()}
+            except Exception as e:
+                debug_log(f"Feed enrichment error: {e}")
 
             for post in posts:
                 post["user_vote_type"] = votes_map.get(post["id"])
