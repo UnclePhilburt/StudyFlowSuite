@@ -15333,6 +15333,121 @@ def upload_social_images():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/social/classify-image-as-note", methods=["POST"])
+@supabase_auth_required
+@account_not_frozen
+def classify_image_as_note():
+    """User marked an image as a study note. Verify with Gemini and create a notes entry.
+    Returns note_id that can be linked to a social_post with post_type='note'.
+    """
+    try:
+        data = request.json or {}
+        image_url = data.get("image_url")
+        if not image_url:
+            return jsonify({"error": "image_url required"}), 400
+
+        user_id = request.user_id
+        import uuid
+        note_id = str(uuid.uuid4())
+
+        # Run Gemini classification on the image
+        ai_classification = "user_marked_pending"
+        is_public = False
+        is_educational = False
+
+        try:
+            import google.generativeai as genai
+            import requests as req_lib
+            genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+            model = genai.GenerativeModel('gemini-2.5-flash')
+
+            # Download image content
+            img_resp = req_lib.get(image_url, timeout=10)
+            if img_resp.ok:
+                from PIL import Image
+                import io
+                pil_img = Image.open(io.BytesIO(img_resp.content))
+                if pil_img.mode in ('RGBA', 'P'):
+                    pil_img = pil_img.convert('RGB')
+
+                prompt = """Look at this image. Is it study-related material?
+
+Study material includes: handwritten notes, lecture slides, textbook pages, whiteboard photos, diagrams, formulas, study guides, homework, code, academic content.
+
+NOT study material: selfies, food, pets, scenery, screenshots of social media, memes, random photos, personal moments.
+
+Respond with ONLY a JSON object:
+{"is_study_material": true/false, "confidence": 0.0-1.0, "category": "notes" | "slides" | "textbook" | "diagram" | "personal" | "other"}"""
+
+                response = model.generate_content([prompt, pil_img])
+                ai_text = (response.text or "").strip()
+
+                try:
+                    from StudyFlow.backend.cost_tracker import track_ai_call
+                    track_ai_call("gemini", "2.5-flash", "image_note_classify")
+                except:
+                    pass
+
+                import json, re
+                if ai_text.startswith("```"):
+                    ai_text = re.sub(r'^```json?\s*', '', ai_text)
+                    ai_text = re.sub(r'\s*```$', '', ai_text)
+                result = json.loads(ai_text)
+                is_educational = bool(result.get("is_study_material"))
+                category = result.get("category", "other")
+
+                if is_educational:
+                    ai_classification = f"educational ({category})"
+                    is_public = True
+                else:
+                    ai_classification = f"personal (mismatch: {category})"
+                    is_public = False
+        except Exception as e:
+            debug_log(f"Gemini image classification failed: {e}")
+            # If Gemini fails, accept the user's claim but mark as pending review
+            ai_classification = "pending_review"
+            is_public = True
+
+        # Get user profile for username
+        try:
+            profile = supabase.table("user_profiles").select("username").eq("id", user_id).execute()
+            username = profile.data[0].get("username", "Anonymous") if profile.data else "Anonymous"
+        except:
+            username = "Anonymous"
+
+        # Create notes entry pointing to the image
+        note_row = {
+            "id": note_id,
+            "user_id": user_id,
+            "username": username,
+            "original_filename": "Photo Note",
+            "file_type": "image",
+            "file_path": image_url,
+            "thumbnail_url": image_url,
+            "file_size": 0,
+            "is_public": is_public,
+            "page_count": 1,
+            "ai_classification": ai_classification,
+            "user_classification": "note",
+        }
+        try:
+            supabase.table("notes").insert(note_row).execute()
+        except Exception as e:
+            debug_log(f"Failed to insert image note: {e}")
+            return jsonify({"error": "Failed to create note"}), 500
+
+        return jsonify({
+            "note_id": note_id,
+            "is_educational": is_educational,
+            "ai_classification": ai_classification,
+            "is_public": is_public
+        }), 200
+
+    except Exception as e:
+        debug_log(f"Classify image as note error: {e}\n{traceback.format_exc()}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/social/posts", methods=["POST"])
 @supabase_auth_required
 @account_not_frozen
