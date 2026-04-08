@@ -5813,7 +5813,7 @@ def download_note_endpoint(note_id):
             debug_log(f"[-] Download produced empty file_data for note {note_id}")
             return jsonify({"error": "File is empty or could not be processed"}), 500
 
-        debug_log(f"[+] Sending download: {download_name} ({len(file_data)} bytes, {mimetype})")
+        print(f"[DOWNLOAD] Sending: {download_name} ({len(file_data)} bytes, {mimetype})", flush=True)
 
         # Sanitize filename for Content-Disposition (remove non-ASCII)
         import re as _re
@@ -8654,7 +8654,7 @@ def download_note_file(note_id):
             debug_log(f"[-] Download produced empty file_data for note {note_id}")
             return jsonify({"error": "File is empty or could not be processed"}), 500
 
-        debug_log(f"[+] Sending download: {download_name} ({len(file_data)} bytes, {mimetype})")
+        print(f"[DOWNLOAD] Sending: {download_name} ({len(file_data)} bytes, {mimetype})", flush=True)
 
         # Sanitize filename for Content-Disposition (remove non-ASCII)
         import re as _re
