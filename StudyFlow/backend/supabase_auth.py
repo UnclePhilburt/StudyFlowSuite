@@ -46,18 +46,21 @@ def supabase_auth_required(f):
         if request.method == 'OPTIONS':
             return f(*args, **kwargs)
 
-        # Get token from Authorization header
+        # Get token from Authorization header OR ?token= query param (for direct downloads)
         auth_header = request.headers.get('Authorization')
+        token = None
 
-        if not auth_header:
-            return jsonify({"error": "Missing Authorization header"}), 401
+        if auth_header:
+            parts = auth_header.split()
+            if len(parts) == 2 and parts[0].lower() == 'bearer':
+                token = parts[1]
 
-        # Extract token (format: "Bearer <token>")
-        parts = auth_header.split()
-        if len(parts) != 2 or parts[0].lower() != 'bearer':
-            return jsonify({"error": "Invalid Authorization header format"}), 401
+        # Fallback: check ?token= query param (used for direct file downloads on mobile)
+        if not token:
+            token = request.args.get('token')
 
-        token = parts[1]
+        if not token:
+            return jsonify({"error": "Missing authentication"}), 401
 
         # Check Redis session cache first
         token_hash = hashlib.sha256(token.encode()).hexdigest()[:32]
