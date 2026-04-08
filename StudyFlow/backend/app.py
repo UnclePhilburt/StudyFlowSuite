@@ -14501,6 +14501,7 @@ def admin_get_social_posts():
 
         query = supabase.table("social_posts").select(
             "id, user_id, username, post_type, text_content, note_id, "
+            "images, image_url, "
             "upvote_count, downvote_count, score, comment_count, "
             "created_at, moderation_status"
         ).order("created_at", desc=True).range(page * limit, (page + 1) * limit - 1)
