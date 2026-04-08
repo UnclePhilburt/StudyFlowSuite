@@ -5762,8 +5762,8 @@ def download_note_endpoint(note_id):
             if pdf_data:
                 file_data = flatten_pdf(pdf_data, username, transaction_code)
             else:
-                # Conversion failed -- serve original file with original mimetype/name
-                debug_log(f"[-] PDF conversion failed for {original_filename}, serving original")
+                # Conversion failed -- serve original file with text watermark embedded
+                debug_log(f"[-] PDF conversion failed for {original_filename}, serving with text watermark")
                 download_name = original_filename
                 ext = original_filename.rsplit('.', 1)[-1].lower() if '.' in original_filename else ''
                 mime_map = {
@@ -5773,6 +5773,29 @@ def download_note_endpoint(note_id):
                     'json': 'application/json', 'md': 'text/markdown', 'xml': 'application/xml'
                 }
                 mimetype = mime_map.get(ext, 'application/octet-stream')
+
+                # Embed text watermark in plain-text formats
+                if ext in ('txt', 'md', 'csv', 'json', 'xml', 'rtf'):
+                    try:
+                        original_text = file_data.decode('utf-8', errors='ignore')
+                        watermark_header = (
+                            "================================================================\n"
+                            f"  Downloaded from StudyFlow Suite\n"
+                            f"  Author: @{username}\n"
+                            f"  Transaction: {transaction_code}\n"
+                            f"  https://studyflowsuite.com\n"
+                            f"  This note is licensed for personal study use only.\n"
+                            "================================================================\n\n"
+                        )
+                        watermark_footer = (
+                            "\n\n================================================================\n"
+                            f"  Downloaded from StudyFlow Suite by @{username}\n"
+                            f"  Transaction: {transaction_code}\n"
+                            "================================================================\n"
+                        )
+                        file_data = (watermark_header + original_text + watermark_footer).encode('utf-8')
+                    except Exception as wm_err:
+                        debug_log(f"[-] Text watermark embed failed: {wm_err}")
 
         # Increment download counter for free users
         if not is_scholar:
@@ -8563,8 +8586,8 @@ def download_note_file(note_id):
             if pdf_data:
                 file_data = flatten_pdf(pdf_data, username, transaction_code)
             else:
-                # Conversion failed -- serve original file with original mimetype/name
-                debug_log(f"[-] PDF conversion failed for {original_filename}, serving original")
+                # Conversion failed -- serve original file with text watermark embedded
+                debug_log(f"[-] PDF conversion failed for {original_filename}, serving with text watermark")
                 download_name = original_filename
                 ext = original_filename.rsplit('.', 1)[-1].lower() if '.' in original_filename else ''
                 mime_map = {
@@ -8574,6 +8597,29 @@ def download_note_file(note_id):
                     'json': 'application/json', 'md': 'text/markdown', 'xml': 'application/xml'
                 }
                 mimetype = mime_map.get(ext, 'application/octet-stream')
+
+                # Embed text watermark in plain-text formats
+                if ext in ('txt', 'md', 'csv', 'json', 'xml', 'rtf'):
+                    try:
+                        original_text = file_data.decode('utf-8', errors='ignore')
+                        watermark_header = (
+                            "================================================================\n"
+                            f"  Downloaded from StudyFlow Suite\n"
+                            f"  Author: @{username}\n"
+                            f"  Transaction: {transaction_code}\n"
+                            f"  https://studyflowsuite.com\n"
+                            f"  This note is licensed for personal study use only.\n"
+                            "================================================================\n\n"
+                        )
+                        watermark_footer = (
+                            "\n\n================================================================\n"
+                            f"  Downloaded from StudyFlow Suite by @{username}\n"
+                            f"  Transaction: {transaction_code}\n"
+                            "================================================================\n"
+                        )
+                        file_data = (watermark_header + original_text + watermark_footer).encode('utf-8')
+                    except Exception as wm_err:
+                        debug_log(f"[-] Text watermark embed failed: {wm_err}")
 
         # Increment download counter for free users
         if not is_scholar:

@@ -260,8 +260,26 @@ def image_to_pdf(file_data):
         return None
 
 
+def _safe_insert_text(page, point, text, fontsize, fontname):
+    """Insert text with fallback for unsupported characters."""
+    try:
+        page.insert_text(point, text, fontsize=fontsize, fontname=fontname)
+    except Exception:
+        # Strip non-Latin-1 characters and retry
+        try:
+            ascii_text = text.encode('latin-1', errors='replace').decode('latin-1')
+            page.insert_text(point, ascii_text, fontsize=fontsize, fontname=fontname)
+        except Exception:
+            # Last resort: pure ASCII
+            try:
+                ascii_text = ''.join(c if 32 <= ord(c) < 127 else '?' for c in text)
+                page.insert_text(point, ascii_text, fontsize=fontsize, fontname=fontname)
+            except Exception:
+                pass  # Skip this line entirely
+
+
 def text_to_pdf(text_content):
-    """Convert plain text to a multi-page PDF document."""
+    """Convert plain text to a multi-page PDF document. Robust against unicode and large files."""
     if fitz is None:
         debug_log("[-] PyMuPDF not available, cannot convert text to PDF")
         return None
@@ -272,35 +290,47 @@ def text_to_pdf(text_content):
         margin = 50
         font_size = 11
         line_height = font_size * 1.4
+        MAX_PAGES = 500  # Safety limit
 
         lines = text_content.split('\n')
         y = margin
         page = out_doc.new_page(width=page_width, height=page_height)
+        page_count = 1
 
         for line in lines:
+            if page_count > MAX_PAGES:
+                debug_log(f"[!] text_to_pdf hit max page limit, truncating")
+                break
+
             # Wrap long lines
             while len(line) > 90:
-                page.insert_text(
+                _safe_insert_text(
+                    page,
                     fitz.Point(margin, y + font_size),
                     line[:90],
-                    fontsize=font_size,
-                    fontname="helv"
+                    font_size,
+                    "helv"
                 )
                 line = line[90:]
                 y += line_height
                 if y + line_height > page_height - margin:
                     page = out_doc.new_page(width=page_width, height=page_height)
+                    page_count += 1
                     y = margin
+                    if page_count > MAX_PAGES:
+                        break
 
             if y + line_height > page_height - margin:
                 page = out_doc.new_page(width=page_width, height=page_height)
+                page_count += 1
                 y = margin
 
-            page.insert_text(
+            _safe_insert_text(
+                page,
                 fitz.Point(margin, y + font_size),
                 line,
-                fontsize=font_size,
-                fontname="helv"
+                font_size,
+                "helv"
             )
             y += line_height
 
@@ -309,7 +339,7 @@ def text_to_pdf(text_content):
         out_doc.close()
 
         result = output.getvalue()
-        debug_log(f"[+] Text -> PDF: {len(text_content)} chars -> {len(result)} bytes")
+        debug_log(f"[+] Text -> PDF: {len(text_content)} chars -> {len(result)} bytes ({page_count} pages)")
         return result
 
     except Exception as e:
