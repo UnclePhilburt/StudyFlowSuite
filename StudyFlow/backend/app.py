@@ -4850,6 +4850,46 @@ def get_achievements():
         except:
             stats['favorites'] = 0
 
+        # Social media stats
+        try:
+            res = supabase.table("social_posts").select("id", count="exact").eq("user_id", user_id).neq("is_story", True).execute()
+            stats['social_posts'] = res.count or 0
+        except:
+            stats['social_posts'] = 0
+
+        try:
+            res = supabase.table("user_followers").select("id", count="exact").eq("following_id", user_id).execute()
+            stats['followers'] = res.count or 0
+        except:
+            stats['followers'] = 0
+
+        try:
+            res = supabase.table("user_followers").select("id", count="exact").eq("follower_id", user_id).execute()
+            stats['following'] = res.count or 0
+        except:
+            stats['following'] = 0
+
+        try:
+            # Count upvotes received on user's posts
+            user_posts = supabase.table("social_posts").select("id").eq("user_id", user_id).execute()
+            post_ids = [p["id"] for p in (user_posts.data or [])]
+            if post_ids:
+                if len(post_ids) == 1:
+                    votes = supabase.table("post_votes").select("id", count="exact").eq("post_id", post_ids[0]).eq("vote_type", "upvote").execute()
+                else:
+                    votes = supabase.table("post_votes").select("id", count="exact").in_("post_id", post_ids[:50]).eq("vote_type", "upvote").execute()
+                stats['upvotes_received'] = votes.count or 0
+            else:
+                stats['upvotes_received'] = 0
+        except:
+            stats['upvotes_received'] = 0
+
+        try:
+            res = supabase.table("post_comments").select("id", count="exact").eq("user_id", user_id).execute()
+            stats['comments_made'] = res.count or 0
+        except:
+            stats['comments_made'] = 0
+
         # Current hour (for time-based achievements)
         stats['current_hour'] = datetime.utcnow().hour
 
@@ -4895,6 +4935,17 @@ def get_achievements():
             {"id": "leader", "name": "Leader", "desc": "Create a study group", "icon": "flag", "category": "Social", "unlocked": stats['groups_created'] >= 1, "progress": min(stats['groups_created'], 1), "goal": 1},
             {"id": "chatterbox", "name": "Chatterbox", "desc": "Send 50 group messages", "icon": "megaphone", "category": "Social", "unlocked": stats['group_messages'] >= 50, "progress": min(stats['group_messages'], 50), "goal": 50},
             {"id": "social_network", "name": "Social Network", "desc": "Join 5 study groups", "icon": "network", "category": "Social", "unlocked": stats['groups_joined'] >= 5, "progress": min(stats['groups_joined'], 5), "goal": 5},
+            {"id": "first_post", "name": "First Post", "desc": "Create your first social post", "icon": "pencil", "category": "Social", "unlocked": stats['social_posts'] >= 1, "progress": min(stats['social_posts'], 1), "goal": 1},
+            {"id": "prolific_poster", "name": "Prolific Poster", "desc": "Create 10 social posts", "icon": "newspaper", "category": "Social", "unlocked": stats['social_posts'] >= 10, "progress": min(stats['social_posts'], 10), "goal": 10},
+            {"id": "content_creator", "name": "Content Creator", "desc": "Create 50 social posts", "icon": "video", "category": "Social", "unlocked": stats['social_posts'] >= 50, "progress": min(stats['social_posts'], 50), "goal": 50},
+            {"id": "first_follower", "name": "First Follower", "desc": "Get your first follower", "icon": "user-plus", "category": "Social", "unlocked": stats['followers'] >= 1, "progress": min(stats['followers'], 1), "goal": 1},
+            {"id": "rising_star", "name": "Rising Star", "desc": "Get 10 followers", "icon": "trending", "category": "Social", "unlocked": stats['followers'] >= 10, "progress": min(stats['followers'], 10), "goal": 10},
+            {"id": "influencer", "name": "Influencer", "desc": "Get 50 followers", "icon": "zap", "category": "Social", "unlocked": stats['followers'] >= 50, "progress": min(stats['followers'], 50), "goal": 50},
+            {"id": "celebrity", "name": "Celebrity", "desc": "Get 100 followers", "icon": "star", "category": "Social", "unlocked": stats['followers'] >= 100, "progress": min(stats['followers'], 100), "goal": 100},
+            {"id": "networker", "name": "Networker", "desc": "Follow 10 people", "icon": "link", "category": "Social", "unlocked": stats['following'] >= 10, "progress": min(stats['following'], 10), "goal": 10},
+            {"id": "liked", "name": "Liked", "desc": "Receive 10 upvotes", "icon": "thumbs-up", "category": "Social", "unlocked": stats['upvotes_received'] >= 10, "progress": min(stats['upvotes_received'], 10), "goal": 10},
+            {"id": "popular", "name": "Popular", "desc": "Receive 100 upvotes", "icon": "heart", "category": "Social", "unlocked": stats['upvotes_received'] >= 100, "progress": min(stats['upvotes_received'], 100), "goal": 100},
+            {"id": "commenter", "name": "Commenter", "desc": "Leave 10 comments", "icon": "chat", "category": "Social", "unlocked": stats['comments_made'] >= 10, "progress": min(stats['comments_made'], 10), "goal": 10},
 
             # AI & Learning
             {"id": "curious_mind", "name": "Curious Mind", "desc": "Ask AI 10 questions", "icon": "brain", "category": "AI & Learning", "unlocked": stats['ai_messages'] >= 10, "progress": min(stats['ai_messages'], 10), "goal": 10},
