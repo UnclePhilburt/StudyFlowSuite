@@ -5724,8 +5724,18 @@ def download_note_endpoint(note_id):
         except Exception:
             pass
 
-        # Download file from Supabase Storage
-        file_data = supabase.storage.from_('note-files').download(file_path)
+        # Download file - handle both storage paths and full URLs (image-as-note)
+        if file_path.startswith("http://") or file_path.startswith("https://"):
+            try:
+                import requests as _req
+                _resp = _req.get(file_path, timeout=15)
+                _resp.raise_for_status()
+                file_data = _resp.content
+            except Exception as _http_err:
+                debug_log(f"[-] HTTP download failed for {file_path}: {_http_err}")
+                return jsonify({"error": "Could not fetch file"}), 500
+        else:
+            file_data = supabase.storage.from_('note-files').download(file_path)
 
         # Log download transaction
         ip_address = request.headers.get('X-Forwarded-For', request.remote_addr)
@@ -8336,7 +8346,13 @@ def view_note_file(note_id):
 
         # Download original from storage
         try:
-            file_data = supabase.storage.from_('note-files').download(file_path)
+            if file_path.startswith("http://") or file_path.startswith("https://"):
+                import requests as _req
+                _resp = _req.get(file_path, timeout=15)
+                _resp.raise_for_status()
+                file_data = _resp.content
+            else:
+                file_data = supabase.storage.from_('note-files').download(file_path)
         except Exception as e:
             debug_log(f"View file storage error: {e}")
             return jsonify({"error": "Could not load file"}), 500
@@ -8629,8 +8645,18 @@ def download_note_file(note_id):
         except Exception:
             pass
 
-        # Download file from Supabase Storage
-        file_data = supabase.storage.from_('note-files').download(file_path)
+        # Download file - handle both storage paths and full URLs (image-as-note)
+        if file_path.startswith("http://") or file_path.startswith("https://"):
+            try:
+                import requests as _req
+                _resp = _req.get(file_path, timeout=15)
+                _resp.raise_for_status()
+                file_data = _resp.content
+            except Exception as _http_err:
+                debug_log(f"[-] HTTP download failed for {file_path}: {_http_err}")
+                return jsonify({"error": "Could not fetch file"}), 500
+        else:
+            file_data = supabase.storage.from_('note-files').download(file_path)
 
         # Log download transaction
         ip_address = request.headers.get('X-Forwarded-For', request.remote_addr)
