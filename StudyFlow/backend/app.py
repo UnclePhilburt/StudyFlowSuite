@@ -8341,43 +8341,69 @@ def view_note_file(note_id):
             debug_log(f"View file storage error: {e}")
             return jsonify({"error": "Could not load file"}), 500
 
-        # Apply watermark - same flow as download endpoint
-        from StudyFlow.backend.pdf_flatten import flatten_pdf, flatten_image, can_flatten, convert_to_pdf
+        # Apply watermark based on file type
+        from StudyFlow.backend.pdf_flatten import flatten_pdf, flatten_image
         transaction_code = "VIEW-" + uuid.uuid4().hex[:8]
-        flattenable, file_type = can_flatten(original_filename)
+        ext = original_filename.rsplit('.', 1)[-1].lower() if '.' in original_filename else ''
 
-        mimetype = 'application/pdf'
+        # Text files: return as text/plain with embedded watermark (inline preview)
+        if ext in ('txt', 'md', 'csv', 'json', 'xml', 'rtf'):
+            try:
+                original_text = file_data.decode('utf-8', errors='ignore')
+                watermark_header = (
+                    "================================================================\n"
+                    f"  Viewed via StudyFlow Suite\n"
+                    f"  Author: @{username}\n"
+                    f"  https://studyflowsuite.com\n"
+                    "================================================================\n\n"
+                )
+                watermark_footer = (
+                    "\n\n================================================================\n"
+                    f"  Viewed via StudyFlow Suite by @{username}\n"
+                    "================================================================\n"
+                )
+                file_data = (watermark_header + original_text + watermark_footer).encode('utf-8')
+            except Exception as e:
+                debug_log(f"Text watermark embed failed: {e}")
+            from flask import Response
+            return Response(file_data, mimetype='text/plain', headers={'Cache-Control': 'no-store'})
 
-        if flattenable and file_type == 'pdf':
+        # PDFs: rasterize and watermark
+        if ext == 'pdf':
             file_data = flatten_pdf(file_data, username, transaction_code)
-        elif flattenable and file_type == 'image':
-            file_data = flatten_image(file_data, username, transaction_code)
-        else:
-            pdf_data, _ = convert_to_pdf(file_data, original_filename)
-            if pdf_data:
-                file_data = flatten_pdf(pdf_data, username, transaction_code)
-            else:
-                # Conversion failed - embed text watermark in plain text formats
-                ext = original_filename.rsplit('.', 1)[-1].lower() if '.' in original_filename else ''
-                if ext in ('txt', 'md', 'csv', 'json', 'xml', 'rtf'):
-                    try:
-                        original_text = file_data.decode('utf-8', errors='ignore')
-                        watermark_header = (
-                            "================================================================\n"
-                            f"  Viewed via StudyFlow Suite\n"
-                            f"  Author: @{username}\n"
-                            f"  https://studyflowsuite.com\n"
-                            "================================================================\n\n"
-                        )
-                        file_data = (watermark_header + original_text).encode('utf-8')
-                        mimetype = 'text/plain'
-                    except Exception:
-                        mimetype = 'text/plain'
-                else:
-                    mimetype = 'application/octet-stream'
+            from flask import Response
+            return Response(file_data, mimetype='application/pdf', headers={'Cache-Control': 'no-store'})
+
+        # Images: watermark and return as image
+        if ext in ('png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'webp'):
+            try:
+                from PIL import Image as PILImage
+                from StudyFlow.backend.pdf_flatten import _add_watermark
+                import io as _io
+                pil_img = PILImage.open(_io.BytesIO(file_data))
+                if pil_img.mode in ('P',):
+                    pil_img = pil_img.convert('RGBA')
+                wm_img = _add_watermark(pil_img, username, transaction_code)
+                buf = _io.BytesIO()
+                wm_img.save(buf, format='JPEG', quality=90)
+                file_data = buf.getvalue()
+                from flask import Response
+                return Response(file_data, mimetype='image/jpeg', headers={'Cache-Control': 'no-store'})
+            except Exception as e:
+                debug_log(f"Image watermark for view failed: {e}")
+                from flask import Response
+                return Response(file_data, mimetype=f'image/{ext}', headers={'Cache-Control': 'no-store'})
+
+        # DOCX/other: convert to PDF and serve as PDF
+        from StudyFlow.backend.pdf_flatten import convert_to_pdf
+        pdf_data, _ = convert_to_pdf(file_data, original_filename)
+        if pdf_data:
+            file_data = flatten_pdf(pdf_data, username, transaction_code)
+            from flask import Response
+            return Response(file_data, mimetype='application/pdf', headers={'Cache-Control': 'no-store'})
 
         from flask import Response
-        return Response(file_data, mimetype=mimetype, headers={'Cache-Control': 'no-store'})
+        return Response(file_data, mimetype='application/octet-stream', headers={'Cache-Control': 'no-store'})
 
     except Exception as e:
         error_trace = traceback.format_exc()
