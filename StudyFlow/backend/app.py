@@ -8300,46 +8300,89 @@ def get_note_metadata(note_id):
 def view_note_file(note_id):
     """
     Get the file for viewing (PDF, image, document, etc.)
+    Serves the WATERMARKED version, never the raw original.
     No auth required since notes are already public - iframes can't send headers
     """
     try:
         from StudyFlow.backend.supabase_client import supabase
-        from flask import redirect, send_file
-        import os
 
         # Verify note exists and is public
-        note = supabase.table("notes").select("id, file_path, original_filename").eq("id", note_id).eq("is_public", True).single().execute()
+        note = supabase.table("notes").select("id, file_path, original_filename, user_id").eq("id", note_id).eq("is_public", True).single().execute()
 
         if not note.data:
             return jsonify({"error": "Note not found or not public"}), 404
 
-        debug_log(f"View file for note {note_id}: {note.data}")
+        file_path = note.data.get('file_path')
+        original_filename = note.data.get('original_filename') or 'note'
+        if not file_path:
+            return jsonify({"error": "File not found in storage"}), 404
 
-        # Get signed URL from file_path
-        file_url = None
-        if note.data.get('file_path'):
-            try:
-                # Generate signed URL (valid for 1 hour)
-                signed_url_response = supabase.storage.from_("note-files").create_signed_url(
-                    path=note.data['file_path'],
-                    expires_in=3600  # 1 hour
-                )
-                file_url = signed_url_response['signedURL']
-                debug_log(f"Generated signed URL for file_path: {note.data['file_path']}")
-            except Exception as storage_error:
-                debug_log(f"Storage error with file_path: {storage_error}")
+        # If filename missing extension, recover from file_path
+        if '.' not in original_filename and '.' in file_path:
+            recovered_ext = file_path.rsplit('.', 1)[-1].lower()
+            if recovered_ext and len(recovered_ext) <= 5:
+                original_filename = f"{original_filename}.{recovered_ext}"
 
-        if file_url:
-            debug_log(f"Redirecting to file: {file_url}")
-            return redirect(file_url)
+        # Get uploader's username for watermark
+        username = "Anonymous"
+        try:
+            uploader_id = note.data.get('user_id')
+            if uploader_id:
+                profile_result = supabase.table("user_profiles").select("username").eq("id", uploader_id).execute()
+                if profile_result.data and profile_result.data[0].get("username"):
+                    username = profile_result.data[0]["username"]
+        except Exception:
+            pass
+
+        # Download original from storage
+        try:
+            file_data = supabase.storage.from_('note-files').download(file_path)
+        except Exception as e:
+            debug_log(f"View file storage error: {e}")
+            return jsonify({"error": "Could not load file"}), 500
+
+        # Apply watermark - same flow as download endpoint
+        from StudyFlow.backend.pdf_flatten import flatten_pdf, flatten_image, can_flatten, convert_to_pdf
+        transaction_code = "VIEW-" + uuid.uuid4().hex[:8]
+        flattenable, file_type = can_flatten(original_filename)
+
+        mimetype = 'application/pdf'
+
+        if flattenable and file_type == 'pdf':
+            file_data = flatten_pdf(file_data, username, transaction_code)
+        elif flattenable and file_type == 'image':
+            file_data = flatten_image(file_data, username, transaction_code)
         else:
-            debug_log(f"No file URL found for note {note_id}. Available fields: {note.data.keys()}")
-            return jsonify({"error": "File URL not found", "available_fields": list(note.data.keys())}), 404
+            pdf_data, _ = convert_to_pdf(file_data, original_filename)
+            if pdf_data:
+                file_data = flatten_pdf(pdf_data, username, transaction_code)
+            else:
+                # Conversion failed - embed text watermark in plain text formats
+                ext = original_filename.rsplit('.', 1)[-1].lower() if '.' in original_filename else ''
+                if ext in ('txt', 'md', 'csv', 'json', 'xml', 'rtf'):
+                    try:
+                        original_text = file_data.decode('utf-8', errors='ignore')
+                        watermark_header = (
+                            "================================================================\n"
+                            f"  Viewed via StudyFlow Suite\n"
+                            f"  Author: @{username}\n"
+                            f"  https://studyflowsuite.com\n"
+                            "================================================================\n\n"
+                        )
+                        file_data = (watermark_header + original_text).encode('utf-8')
+                        mimetype = 'text/plain'
+                    except Exception:
+                        mimetype = 'text/plain'
+                else:
+                    mimetype = 'application/octet-stream'
+
+        from flask import Response
+        return Response(file_data, mimetype=mimetype, headers={'Cache-Control': 'no-store'})
 
     except Exception as e:
         error_trace = traceback.format_exc()
-        debug_log(f"❌ View file error: {e}\n{error_trace}")
-        return jsonify({"error": str(e), "traceback": error_trace}), 500
+        debug_log(f"View file error: {e}\n{error_trace}")
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/notes/<note_id>/view-as-images", methods=["GET"])
