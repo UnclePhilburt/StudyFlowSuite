@@ -5745,6 +5745,13 @@ def download_note_endpoint(note_id):
         except Exception as tx_err:
             debug_log(f"[-] Failed to log download transaction: {tx_err}")
 
+        # If original_filename is missing an extension, try to recover it from file_path
+        if '.' not in original_filename and file_path and '.' in file_path:
+            recovered_ext = file_path.rsplit('.', 1)[-1].lower()
+            if recovered_ext and len(recovered_ext) <= 5:
+                original_filename = f"{original_filename}.{recovered_ext}"
+                print(f"[DOWNLOAD] Recovered extension from file_path: {original_filename}", flush=True)
+
         # Flatten and watermark -- everything becomes a PDF
         flattenable, file_type = can_flatten(original_filename)
         name_base = original_filename.rsplit('.', 1)[0] if '.' in original_filename else original_filename
@@ -8585,6 +8592,13 @@ def download_note_file(note_id):
             print(f"[HB 2271] Download certification logged for user {request.user_id}", flush=True)
         except Exception as cert_err:
             debug_log(f"[-] Failed to log download certification: {cert_err}")
+
+        # If original_filename is missing an extension, try to recover it from file_path
+        if '.' not in original_filename and file_path and '.' in file_path:
+            recovered_ext = file_path.rsplit('.', 1)[-1].lower()
+            if recovered_ext and len(recovered_ext) <= 5:
+                original_filename = f"{original_filename}.{recovered_ext}"
+                print(f"[DOWNLOAD] Recovered extension from file_path: {original_filename}", flush=True)
 
         # Flatten and watermark -- everything becomes a PDF
         flattenable, file_type = can_flatten(original_filename)
