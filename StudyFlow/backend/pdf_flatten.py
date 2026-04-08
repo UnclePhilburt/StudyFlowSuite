@@ -262,6 +262,8 @@ def image_to_pdf(file_data):
 
 def _safe_insert_text(page, point, text, fontsize, fontname):
     """Insert text with fallback for unsupported characters."""
+    if not text:
+        return  # Skip empty lines (PyMuPDF errors on them)
     try:
         page.insert_text(point, text, fontsize=fontsize, fontname=fontname)
     except Exception:
